@@ -209,7 +209,7 @@ def spr_inter(reactants, wd):
                 del d_3[a][b]
         # print("push_dict: alpha alpha: ")
         # print(d_3)
-
+        print(d_2, d_3)
         return d_2, d_3
     else:
         d_2 = {}
@@ -217,35 +217,8 @@ def spr_inter(reactants, wd):
         return d_2, d_3
 
 
-def rot_vec(v, yaw, pitch):
-    # rotate the vector
-    df_z = np.array([[np.cos(yaw), np.sin(yaw), 0],
-                     [-np.sin(yaw), np.cos(yaw), 0],
-                     [0, 0, 1]], dtype=object)
-    df_y = np.array([[np.cos(pitch), 0, -np.sin(pitch)],
-                     [0, 1, 0],
-                     [np.sin(pitch), 0, np.cos(pitch)]], dtype=object)
-    oldcoord = np.array([v[0], v[1], v[2]])
-    # M = np.dot(df_y,df_z)
-    # newcoord= np.dot(M,oldcoord.T )
-    newcoord = np.dot(df_y, np.dot(df_z, oldcoord.T))
-    return newcoord
-
-
-def rotate(df, yaw, pitch):
-    # rotate the df
-    # clockwise rotation yaw in the xy plane and clockwise rotation pitch in the xz plane
-    for i in range(df.shape[0]):
-        oldcoord = np.array([df.iloc[i, 1], df.iloc[i, 2], df.iloc[i, 3]])
-        newcoord = rot_vec(oldcoord, yaw, pitch)
-        df.iloc[i, 1] = newcoord[0]
-        df.iloc[i, 2] = newcoord[1]
-        df.iloc[i, 3] = newcoord[2]
-    return df
-
-
-def trans(df, aktiv, d):
-    # translate the molecule with aktiv as center to (0,0,d)
+def shift(df, aktiv, d):
+    # shift the molecule with aktiv as center to (0,0,d)
     x = df.iloc[aktiv, 1]
     y = df.iloc[aktiv, 2]
     z = df.iloc[aktiv, 3] - d
@@ -254,7 +227,6 @@ def trans(df, aktiv, d):
         df.iloc[i, 2] = df.iloc[i, 2] - y
         df.iloc[i, 3] = df.iloc[i, 3] - z
     return df
-
 
 def get_principal_moment(coord, aktiv):
     r0 = {'H': 0.32, 'D': 0.32, 'He': 0.46, 'Li': 1.20, 'Be': 0.94, 'B': 0.77, 'C': 0.75, 'N': 0.71, 'O': 0.63,
@@ -302,126 +274,102 @@ def get_principal_moment(coord, aktiv):
     arep = arep + arep.T - np.diag(arep.diagonal())
 
     v, P = np.linalg.eigh(arep)
-    # print(v)
-    # print(P)
+#     print(v.round(3))
+#     print(P.round(3))
     return v, P
 
 
-def angle(v1, v2):
-    # clock
-    norm = np.linalg.norm(v1) * np.linalg.norm(v2)
-    if norm == 0:
-        rho = 0
-        t = 0
+def test_if_right_handed_system(P):
+    cross_p1 = [np.round(j, 3) for j in np.cross(P[0], P[1])]
+    cross_p2 = [np.round(j, 3) for j in np.cross(P[1], P[0])]
+    P_z = [np.round(j, 3) for j in P[2]]
+    #     print(cross_p1)
+    #     print(cross_p2)
+    #     print(P[2])
+
+    i = 0
+    while i < len(cross_p1):
+        if P_z[i] != cross_p1[i]:
+            if cross_p2[i] == P_z[i]:
+                trigger = True
+                i = i + 1
+                pass
+            else:
+                print("error in main axes")
+                break
+        else:
+            trigger = False
+            i = i + 1
+    if trigger:
+        return True
     else:
-        rho = np.arcsin(np.cross(v1, v2) / norm)
-        t = np.arccos(np.dot(v1, v2) / norm)
-    if rho <= 0:
-        return t
-    else:
-        return -t
+        return False
+
+
+def transform(coord, P):
+    for i in range(coord.shape[0]):
+        x, y, z = coord.iloc[i, 1], coord.iloc[i, 2], coord.iloc[i, 3]
+        a = [x, y, z]
+        a_new = np.dot(a, P)
+        coord.iloc[i, 1], coord.iloc[i, 2], coord.iloc[i, 3] = a_new[0], a_new[1], a_new[2]
+    return coord
 
 
 def aligment(smi_a, smi_b, rec, d, wd):
-    coord_a = pd.read_table(f'{wd}/{smi_a}_ml/xtbopt.xyz', header=None, skiprows=2, sep='\s+')
-    coord_b = pd.read_table(f'{wd}/{smi_b}_ml/xtbopt.xyz', header=None, skiprows=2, sep='\s+')
+    """"Diagonalized inertia tensor: P^-1 I P = I'
+            rotate the I: P_new^-1 IQ P_new =I'
+            since P_new = unit matrix
+            Q = P
+            Equivalent to use P as rotation matrix"""
 
-    # Translate both molecules to the origin of the coordinate
-    coord_ta = trans(df=coord_a.copy(deep=True), aktiv=rec[0] - 1, d=0)
-    coord_tb = trans(df=coord_b.copy(deep=True), aktiv=0, d=0)
+    # alignment for first molecule
 
-    # v1, P1 = get_principal_moment(coord=coord_a, aktiv=rec[0] - 1)
-    # v2, P2 = get_principal_moment(coord=coord_b, aktiv=rec[1] - 1)
-    Iy_list_1l = []
-    angle_list_1l = []
-    Iy_list_1r = []
-    angle_list_1r = []
-    Iy_list_2l = []
-    angle_list_2l = []
-    Iy_list_2r = []
-    angle_list_2r = []
-    for yaw in np.linspace(0, 2 * np.pi, 30):
-        for pitch in np.linspace(0, 2 * np.pi, 30):
-            coord_ra = rotate(coord_ta.copy(), yaw, pitch)
-            coord_rb = rotate(coord_tb.copy(), yaw, pitch)
-            v1, P1 = get_principal_moment(coord=coord_ra, aktiv=rec[0] - 1)
-            v2, P2 = get_principal_moment(coord=coord_rb, aktiv=rec[1] - 1)
-            if np.round(np.cross(P1[0], P1[1])[2], 2) == 1:
-                if np.round(P1[1][1], 2) == 1:
-                    # left hand
-                    Iy_list_1l.append(abs(np.cross(P1[0], P1[2])[1]))
-                    angle_list_1l.append([yaw, pitch])
-                else:
-                    # right hand
-                    Iy_list_1r.append(abs(np.cross(P1[0], P1[2])[1]))
-                    angle_list_1r.append([yaw, pitch])
-            if np.round(np.cross(P2[0], P2[1])[2], 2) == 1:
-                if np.round(P2[1][1], 2) == 1:
-                    # left hand
-                    Iy_list_2l.append(abs(np.cross(P2[0], P2[2])[1]))
-                    angle_list_2l.append([yaw, pitch])
-                else:
-                    # right hand
-                    Iy_list_2r.append(abs(np.cross(P2[0], P2[2])[1]))
-                    angle_list_2r.append([yaw, pitch])
-
-    right_1 = False
-    right_2 = False
-
-    if Iy_list_1l:
-        if not Iy_list_1r:
-            yaw_1, pitch_1 = angle_list_1l[Iy_list_1l.index(max(Iy_list_1l))][0], \
-                             angle_list_1l[Iy_list_1l.index(max(Iy_list_1l))][1]
-        else:
-            if min(Iy_list_1l) <= min(Iy_list_1r):
-                right_1 = True
-                yaw_1, pitch_1 = angle_list_1r[Iy_list_1r.index(max(Iy_list_1r))][0], \
-                                 angle_list_1r[Iy_list_1r.index(max(Iy_list_1r))][1]
-            else:
-                yaw_1, pitch_1 = angle_list_1l[Iy_list_1l.index(max(Iy_list_1l))][0], \
-                                 angle_list_1l[Iy_list_1l.index(max(Iy_list_1l))][1]
+    # read coord date
+    if os.path.isfile(f'{wd}/{smi_a}_ml/xtbopt.xyz'):
+        coord_a = pd.read_table(f'{wd}/{smi_a}_ml/xtbopt.xyz', header=None, skiprows=2, sep='\s+')
     else:
-        if not Iy_list_1r:
-            yaw_1, pitch_1 = 0, 0
-        else:
-            right_1 = True
-            yaw_1, pitch_1 = angle_list_1r[Iy_list_1r.index(max(Iy_list_1r))][0], \
-                             angle_list_1r[Iy_list_1r.index(max(Iy_list_1r))][1]
+        coord_a = pd.read_table(f'{wd}/{smi_a}_ml/{smi_a}.xyz', header=None, skiprows=2, sep='\s+')
+    coord_a = coord_a.round(3)
 
-    if Iy_list_2l:
-        if not Iy_list_2r:
-            yaw_2, pitch_2 = angle_list_2l[Iy_list_2l.index(max(Iy_list_2l))][0], \
-                             angle_list_2l[Iy_list_2l.index(max(Iy_list_2l))][1]
-        else:
-            if min(Iy_list_2l) <= min(Iy_list_2r):
-                right_2 = True
-                yaw_2, pitch_2 = angle_list_2r[Iy_list_2r.index(max(Iy_list_2r))][0], \
-                                 angle_list_2r[Iy_list_2r.index(max(Iy_list_2r))][1]
-            else:
-                yaw_2, pitch_2 = angle_list_2l[Iy_list_2l.index(max(Iy_list_2l))][0], \
-                                 angle_list_2l[Iy_list_2l.index(max(Iy_list_2l))][1]
+    # get local moment of inertia and get the eigen vector matrix
+    v1, P1 = get_principal_moment(coord=coord_a, aktiv=rec[0] - 1)
+    # test if eigen vector matrix is right handed
+    if test_if_right_handed_system(P1):
+        coord_temp = transform(coord_a.copy(deep=True), P1)
+        vt, Pt = get_principal_moment(coord=coord_temp, aktiv=rec[0] - 1)
+        P1 = np.dot(P1, Pt.T)
+    coord_a = transform(coord_a, P1)
+    v1, P1 = get_principal_moment(coord=coord_a, aktiv=rec[0] - 1)
+    coord_a = shift(coord_a, rec[0] - 1, 0)
+
+
+    # alignment for second molecule
+    if os.path.isfile(f'{wd}/{smi_b}_ml/xtbopt.xyz'):
+        coord_b = pd.read_table(f'{wd}/{smi_b}_ml/xtbopt.xyz', header=None, skiprows=2, sep='\s+')
     else:
-        if not Iy_list_2r:
-            yaw_2, pitch_2 = 0, 0
-        else:
-            right_2 = True
-            yaw_2, pitch_2 = angle_list_2r[Iy_list_2r.index(max(Iy_list_2r))][0], \
-                             angle_list_2r[Iy_list_2r.index(max(Iy_list_2r))][1]
+        coord_b = pd.read_table(f'{wd}/{smi_b}_ml/{smi_b}.xyz', header=None, skiprows=2, sep='\s+')
+    coord_b = coord_b.round(3)
+    v2, P2 = get_principal_moment(coord=coord_b, aktiv=rec[1] - 1)
+    # test if eigen vector matrix is right handed
+    if test_if_right_handed_system(P2):
+        coord_temp = transform(coord_b.copy(deep=True), P2)
+        vt, Pt = get_principal_moment(coord=coord_temp, aktiv=rec[1] - 1)
+        P2 = np.dot(P2, Pt.T)
 
-    coord_ra = rotate(coord_ta.copy(), yaw_1, pitch_1)
-    coord_rb = rotate(coord_tb.copy(), yaw_2, pitch_2)
-    v1, P1 = get_principal_moment(coord=coord_ra, aktiv=rec[0] - 1)
-    v2, P2 = get_principal_moment(coord=coord_rb, aktiv=rec[1] - 1)
-    if right_1:
-        coord_ra = rotate(coord_ra, angle([P1[1][0], P1[1][1]], [1, 0]), 0)
-        P1 = rot_vec(P1, angle([P1[1][0], P1[1][1]], [1, 0]), 0)
-    if right_2:
-        coord_rb = rotate(coord_rb, angle([P2[1][0], P2[1][1]], [1, 0]), 0)
-        P2 = rot_vec(P2, angle([P2[1][0], P2[1][1]], [1, 0]), 0)
+    # largest main axis point into negativ
+    Q = np.zeros((3, 3))
+    Q[0][0], Q[1][1], Q[2][2] = 1, 1, -1
+    P2 = np.dot(P2, Q.T)
 
-    #
-    coord_b_final = trans(coord_rb, aktiv=rec[1] - 1, d=d)
-    product = pd.concat([coord_ra, coord_b_final])
+
+    coord_b = transform(coord_b, P2)
+    v2, P2 = get_principal_moment(coord=coord_b, aktiv=rec[1] - 1)
+    coord_b = shift(coord_b, rec[1] - 1, d)
+
+
+    # merge two coord files
+
+    product = pd.concat([coord_a, coord_b])
     atomnr_1 = coord_a.shape[0]
     atmonr_2 = coord_b.shape[0]
 
@@ -434,18 +382,19 @@ def aligment(smi_a, smi_b, rec, d, wd):
     with open('cadm.bild', 'w+') as f2:
         f2.write('.color red\n')
         f2.write(f'.arrow 0 0 0 0 0 10 0.05 0.150000\n')
-        f2.write(f'.arrow 0 0 0 {P1[2][0]} {P1[2][1]} {P1[2][2]} 0.05 0.150000\n')
-        f2.write(f'.arrow 0 0 {d} {P2[2][0]} {P2[2][1]} {P2[2][2] + d} 0.05 0.150000\n')
+        f2.write(f'.arrow 0 0 0 {P1[2][0]*4} {P1[2][1]*4} {P1[2][2]*4} 0.05 0.150000\n')
+        f2.write(f'.arrow 0 0 0 {P1[0][0]} {P1[0][1]} {P1[0][2]} 0.05 0.150000\n')
+        f2.write(f'.arrow 0 0 0 {P1[1][0]*2} {P1[1][1]*2} {P1[1][2]*2} 0.05 0.150000\n')
+
 
         f2.write('.color green\n')
         f2.write(f'.arrow 0 0 0 10 0 0 0.05 0.150000\n')
-        f2.write(f'.arrow 0 0 0 {P1[0][0]} {P1[0][1]} {P1[0][2]} 0.05 0.150000\n')
+        f2.write(f'.arrow 0 0 {d} {P2[2][0]*4} {P2[2][1]*4} {(P2[2][2]*4 + d)} 0.05 0.150000\n')
         f2.write(f'.arrow 0 0 {d} {P2[0][0]} {P2[0][1]} {P2[0][2] + d} 0.05 0.150000\n')
+        f2.write(f'.arrow 0 0 {d} {P2[1][0]*2} {P2[1][1]*2} {(P2[1][2]*2 + d)} 0.05 0.150000\n')
 
         f2.write('.color blue\n')
         f2.write(f'.arrow 0 0 0 0 10 0 0.05 0.150000\n')
-        f2.write(f'.arrow 0 0 0 {P1[1][0]} {P1[1][1]} {P1[1][2]} 0.05 0.150000\n')
-        f2.write(f'.arrow 0 0 {d} {P2[1][0]} {P2[1][1]} {P2[1][2] + d} 0.05 0.150000\n')
     return atomnr_1
 
 
@@ -533,45 +482,36 @@ for i in list(d.keys()):
     os.chdir(f'{wd}/{i}_ml')
     os.system(f'xtb {i}.xyz -c {d[i][0]} --uhf {d[i][1]} --opt --ml_feature>xtb.out')
 
+# push_dict_2 only for open shell
 push_dict_1, push_dict_2 = spr_inter(list(d.keys()), wd)
 l1 = list(push_dict_1.keys())
-gap_1 = float('inf')
-gap_2 = float('inf')
-for item in l1:
-    a, b = item.split(",")
-    gap = list(push_dict_1[item].keys())[0]
-    if int(a) < int(b):
-        if gap < gap_1:
-            gap_1 = gap
-            push_smi_a1, push_smi_b1 = a, b
-    else:
-        if gap < gap_2:
-            gap_2 = gap
-            push_smi_a2, push_smi_b2 = a, b
+
+# first two candidates for push_smi_a1 providing HOAO and push_smi_b1 providing LUAO
+push_smi_a1, push_smi_b1 = l1[0].split(",")
+gap_1 = min(sorted(push_dict_1[f'{push_smi_a1},{push_smi_b1}'].keys()))
+gap_2 = sorted(push_dict_1[f'{push_smi_a1},{push_smi_b1}'].keys())[1]
 push_rec_1 = push_dict_1[f'{push_smi_a1},{push_smi_b1}'][gap_1]
-push_rec_2 = push_dict_1[f'{push_smi_a2},{push_smi_b2}'][gap_2]
-l2 = list(push_dict_2.keys())
-gap_3 = float('inf')
-gap_4 = float('inf')
-for item in l2:
-    a, b = item.split(",")
-    gap = list(push_dict_2[item].keys())[0]
-    if int(a) < int(b):
-        if gap < gap_3:
-            gap_3 = gap
-            push_smi_a3, push_smi_b3 = a, b
-    else:
-        if gap < gap_4:
-            gap_4 = gap
-            push_smi_a4, push_smi_b4 = a, b
-push_rec_3 = push_dict_2[f'{push_smi_a3},{push_smi_b3}'][gap_3]
-push_rec_4 = push_dict_2[f'{push_smi_a4},{push_smi_b4}'][gap_4]
+push_rec_2 = push_dict_1[f'{push_smi_a1},{push_smi_b1}'][gap_2]
+
+
+# first two candidates for push_smi_a2 providing HOAO and push_smi_b2 providing LUAO
+push_smi_a2, push_smi_b2 = l1[1].split(",")
+gap_3 = min(sorted(push_dict_1[f'{push_smi_a2},{push_smi_b2}'].keys()))
+gap_4 = sorted(push_dict_1[f'{push_smi_a2},{push_smi_b2}'].keys())[1]
+push_rec_3 = push_dict_1[f'{push_smi_a2},{push_smi_b2}'][gap_3]
+push_rec_4 = push_dict_1[f'{push_smi_a2},{push_smi_b2}'][gap_4]
+
+
 
 push(reactants_temp=list(d.keys()), push_rec=push_rec_1, push_smi_a=push_smi_a1, push_smi_b=push_smi_b1, wd=wd)
 
-# you can also check other candidates: push_dict_2, push_dict_3, push_dict_4
+# you can also check other candidates:
+#e.g. :{'1,2': {10.325000000000001: [[2, 2]], 13.029: [[1, 1]]}, '2,1': {10.653: [[1, 2]], 12.012: [[2, 1]]}}
+# push_dict_2: first molecule provides HOAO and second provides LUAO, [1, 1]
+# push_dict_3: first molecule provides LUAO and second provides HOAO , [1, 2]
+# push_dict_4: first molecule provides LUAO and second provides HOAO , [2, 1]
 # then please change last line to
-# push(reactants_temp=reactants_2, push_rec=push_rec_2, push_smi_a=push_smi_a2, push_smi_b=push_smi_b2, wd=wd)
-# push(reactants_temp=reactants_3, push_rec=push_rec_3, push_smi_a=push_smi_a3, push_smi_b=push_smi_b3, wd=wd)
-# push(reactants_temp=reactants_4, push_rec=push_rec_4, push_smi_a=push_smi_a4, push_smi_b=push_smi_b4, wd=wd)
+# push(reactants_temp=list(d.keys()), push_rec=push_rec_2, push_smi_a=push_smi_a1, push_smi_b=push_smi_b1, wd=wd)
+# push(reactants_temp=list(d.keys()), push_rec=push_rec_3, push_smi_a=push_smi_a2, push_smi_b=push_smi_b2, wd=wd)
+# push(reactants_temp=list(d.keys()), push_rec=push_rec_4, push_smi_a=push_smi_a2, push_smi_b=push_smi_b2, wd=wd)
 
