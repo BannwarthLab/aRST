@@ -1,0 +1,44 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+.vscode
+.DS_Store
+# C extensions
+*.so
+
+# xyz/xtb
+*.xyz
+*_ml/
+
+# Distribution / packaging
+build/
+scan/
+*xtb*
+wbo
+venv*/
+structures/
+develop-eggs/
+dist/
+eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+.tox/
+.coverage
+.cache
+nosetests.xml
+coverage.xml
+
+#Other
+.ipynb
