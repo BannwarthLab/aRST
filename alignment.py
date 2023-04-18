@@ -61,160 +61,76 @@ def spr_inter(reactants, wd):
                 h.append(df['HOAO (eV)'].tolist())
                 l.append(df['LUAO (eV)'].tolist())
                 l.append(df['LUAO (eV)'].tolist())
-        d = {}
-        d_1 = {}
-        d_2 = {}
+        d_ss = {}
+        d_os = {}
         for i in range(len(h)):
-            if i % 2 == 0:
-                start = 1
-            else:
-                start = 0
-            for j in range(*{'start': start, 'stop': len(l), 'step': 2}.values()):
-                if int(i / 2) != int(j / 2):
-                    h_i = h[i]
-                    l_j = l[j]
-                    # print(h_i)
-                    # print(l_j)
-                    d[f'{int(i / 2) + 1},{int(j / 2) + 1}'] = {}
-                    d_2[f'{int(i / 2) + 1},{int(j / 2) + 1}'] = {}
+            for j in range(len(l)):
+                struc_1_nr = int(i / 2) + 1
+                struc_2_nr = int(j / 2) + 1
+                if struc_1_nr != struc_2_nr:
+                    h_i = sorted(h[i])[:5]
+                    l_j = sorted(l[j])[:5]
+
+                    # Setting up the iterative dictionary
+                    if f'{struc_1_nr},{struc_2_nr}' not in d_ss.keys():
+                        d_ss[f'{struc_1_nr},{struc_2_nr}'] = {}
+                    if f'{struc_1_nr},{struc_2_nr}' not in d_os.keys():
+                        d_os[f'{struc_1_nr},{struc_2_nr}'] = {}
+
                     for one in range(len(h_i)):
                         for two in range(len(l_j)):
+                            # Exclusion of hydrogen ions
                             try:
                                 h_i[one] = float(h_i[one])
-                            except ValueError:
-                                h_i[one] = float('inf')
-                            try:
                                 l_j[two] = float(l_j[two])
                             except ValueError:
-                                l_j[two] = float('inf')
-
-                            key = np.round(abs(float(h_i[one]) - float(l_j[two])), 3)
-                            if key in d[f'{int(i / 2) + 1},{int(j / 2) + 1}'].keys():
-                                d[f'{int(i / 2) + 1},{int(j / 2) + 1}'][key].append([one + 1, two + 1])
-                            else:
-                                d[f'{int(i / 2) + 1},{int(j / 2) + 1}'][key] = [[one + 1, two + 1]]
-
-                            for item_2 in list(d[f'{int(i / 2) + 1},{int(j / 2) + 1}'].keys()):
-                                if 0 < abs(key - item_2) < 0.01:
-                                    temp = list(d[f'{int(i / 2) + 1},{int(j / 2) + 1}'][item_2])
-                                    temp[0].append('*')
-                                    d[f'{int(i / 2) + 1},{int(j / 2) + 1}'][key] = \
-                                        d[f'{int(i / 2) + 1},{int(j / 2) + 1}'][
-                                            key] + temp
-                                    del d[f'{int(i / 2) + 1},{int(j / 2) + 1}'][item_2]
-                    # print(d[f'{int(i/2)+1},{int(j/2)+1}'])
-                    # print(int(i/2)+1, int(j/2)+1)
-                    # Discard excess data and organize it
-                    if f'{int(i / 2) + 1},{int(j / 2) + 1}' in d_1.keys():
-                        d_1[f'{int(i / 2) + 1},{int(j / 2) + 1}'] = d_1[f'{int(i / 2) + 1},{int(j / 2) + 1}'] + sorted(
-                            d[f'{int(i / 2) + 1},{int(j / 2) + 1}'].items())
-                    else:
-                        d_1[f'{int(i / 2) + 1},{int(j / 2) + 1}'] = sorted(
-                            d[f'{int(i / 2) + 1},{int(j / 2) + 1}'].items())
-                    # print(d_1[f'{int(i / 2) + 1},{int(j / 2) + 1}'])
-                    if len(d_1[f'{int(i / 2) + 1},{int(j / 2) + 1}']) > 1:
-                        if d_1[f'{int(i / 2) + 1},{int(j / 2) + 1}'][0][0] < \
-                                d_1[f'{int(i / 2) + 1},{int(j / 2) + 1}'][1][
-                                    0]:
-                            d_1[f'{int(i / 2) + 1},{int(j / 2) + 1}'].remove(
-                                d_1[f'{int(i / 2) + 1},{int(j / 2) + 1}'][1])
-                        else:
-                            d_1[f'{int(i / 2) + 1},{int(j / 2) + 1}'].remove(
-                                d_1[f'{int(i / 2) + 1},{int(j / 2) + 1}'][0])
-                    for u in list(dict(d_1[f'{int(i / 2) + 1},{int(j / 2) + 1}']).keys()):
-                        l_1 = []
-                        l_2 = []
-                        for item in list(dict(d_1[f'{int(i / 2) + 1},{int(j / 2) + 1}'])[u]):
-                            if (item[0] not in l_2) and (item[1] not in l_2):
-                                l_2.append(item[0])
-                                l_2.append(item[1])
-                                l_1.append(item)
-                                d_2[f'{int(i / 2) + 1},{int(j / 2) + 1}'][u] = l_1
-                                # dict(d_1[f'{i + 1},{j + 1}'])[u] = l_1
-        for a in d_2.keys():
-            for b in list(d_2[a].keys())[2:]:
-                del d_2[a][b]
-        # print("push_dict: alpha beta: ")
-        # print(d_2)
-
-        d = {}
-        d_1 = {}
-        d_3 = {}
-        for i in range(len(h)):
-            if i % 2 != 0:
-                start = 1
-            else:
-                start = 0
-            for j in range(*{'start': start, 'stop': len(l), 'step': 2}.values()):
-                if int(i / 2) != int(j / 2):
-                    h_i = h[i]
-                    l_j = l[j]
-                    # print(h_i)
-                    # print(l_j)
-                    d[f'{int(i / 2) + 1},{int(j / 2) + 1}'] = {}
-                    d_3[f'{int(i / 2) + 1},{int(j / 2) + 1}'] = {}
-                    for one in range(len(h_i)):
-                        for two in range(len(l_j)):
-                            try:
-                                h_i[one] = float(h_i[one])
-                            except ValueError:
                                 h_i[one] = float('inf')
-                            try:
-                                l_j[two] = float(l_j[two])
-                            except ValueError:
                                 l_j[two] = float('inf')
-                            key = np.round(abs(float(h_i[one]) - float(l_j[two])), 3)
-                            if key in d[f'{int(i / 2) + 1},{int(j / 2) + 1}'].keys():
-                                d[f'{int(i / 2) + 1},{int(j / 2) + 1}'][key].append([one + 1, two + 1])
+
+                            key = np.round(float(l_j[two])-float(h_i[one]), 3)
+                            at_nr_origial_1 = h[i].index(h_i[one]) + 1
+                            at_nr_origial_2 = l[j].index(l_j[two]) + 1
+
+                            if (i % 2 == 0 and j % 2 == 0) or (i % 2 != 0 and j % 2 != 0):
+                                if key in d_ss[f'{struc_1_nr},{struc_2_nr}'].keys() \
+                                        and [at_nr_origial_1, at_nr_origial_2] not in d_ss[f'{struc_1_nr},{struc_2_nr}'][key]:
+                                    d_ss[f'{struc_1_nr},{struc_2_nr}'][key].append([at_nr_origial_1, at_nr_origial_2])
+                                else:
+                                    d_ss[f'{struc_1_nr},{struc_2_nr}'][key] = [[at_nr_origial_1, at_nr_origial_2]]
                             else:
-                                d[f'{int(i / 2) + 1},{int(j / 2) + 1}'][key] = [[one + 1, two + 1]]
+                                if key in d_os[f'{struc_1_nr},{struc_2_nr}'].keys() \
+                                        and [at_nr_origial_1, at_nr_origial_2] not in d_os[f'{struc_1_nr},{struc_2_nr}'][key]:
+                                    d_os[f'{struc_1_nr},{struc_2_nr}'][key].append([at_nr_origial_1, at_nr_origial_2])
+                                else:
+                                    d_os[f'{struc_1_nr},{struc_2_nr}'][key] = [[at_nr_origial_1, at_nr_origial_2]]
+                            # First filtering of degenerate pairs
+                            for g_1 in list(d_ss[f'{struc_1_nr},{struc_2_nr}'].keys()):
+                                if 0 < abs(key - g_1) < 0.01:
+                                    temp_pair = list(d_ss[f'{struc_1_nr},{struc_2_nr}'][g_1])
+                                    temp_pair[0].append('*')
+                                    d_ss[f'{struc_1_nr},{struc_2_nr}'][key] = d_ss[f'{struc_1_nr},{struc_2_nr}'][key] + temp_pair
+                                    del d_ss[f'{struc_1_nr},{struc_2_nr}'][g_1]
 
-                            for item_2 in list(d[f'{int(i / 2) + 1},{int(j / 2) + 1}'].keys()):
-                                if 0 < abs(key - item_2) < 0.01:
-                                    temp = list(d[f'{int(i / 2) + 1},{int(j / 2) + 1}'][item_2])
-                                    temp[0].append('*')
-                                    d[f'{int(i / 2) + 1},{int(j / 2) + 1}'][key] = \
-                                        d[f'{int(i / 2) + 1},{int(j / 2) + 1}'][
-                                            key] + temp
-                                    del d[f'{int(i / 2) + 1},{int(j / 2) + 1}'][item_2]
+                            for g_2 in list(d_os[f'{struc_1_nr},{struc_2_nr}'].keys()):
+                                if 0 < abs(key - g_2) < 0.01:
+                                    temp_pair = list(d_os[f'{struc_1_nr},{struc_2_nr}'][g_2])
+                                    temp_pair[0].append('*')
+                                    d_os[f'{struc_1_nr},{struc_2_nr}'][key] = d_os[f'{struc_1_nr},{struc_2_nr}'][key] + temp_pair
+                                    del d_os[f'{struc_1_nr},{struc_2_nr}'][g_2]
+        # print(d_ss)
+        # print(d_os)
+        # delete excuss data
+        for k_1 in list(d_ss.keys()):
+            gap_list = sorted(list(d_ss[k_1].keys()))[2:]
+            for l_1 in gap_list:
+                del d_ss[k_1][l_1]
+        for k_2 in list(d_os.keys()):
+            gap_list = sorted(list(d_os[k_2].keys()))[2:]
+            for l_2 in gap_list:
+                del d_os[k_2][l_2]
 
-                    if f'{int(i / 2) + 1},{int(j / 2) + 1}' in d_1.keys():
-                        d_1[f'{int(i / 2) + 1},{int(j / 2) + 1}'] = d_1[f'{int(i / 2) + 1},{int(j / 2) + 1}'] + sorted(
-                            d[f'{int(i / 2) + 1},{int(j / 2) + 1}'].items())
-                    else:
-                        d_1[f'{int(i / 2) + 1},{int(j / 2) + 1}'] = sorted(
-                            d[f'{int(i / 2) + 1},{int(j / 2) + 1}'].items())
-                    # print(d_1[f'{int(i / 2) + 1},{int(j / 2) + 1}'])
-                    if len(d_1[f'{int(i / 2) + 1},{int(j / 2) + 1}']) > 1:
-                        if d_1[f'{int(i / 2) + 1},{int(j / 2) + 1}'][0][0] < \
-                                d_1[f'{int(i / 2) + 1},{int(j / 2) + 1}'][1][
-                                    0]:
-                            d_1[f'{int(i / 2) + 1},{int(j / 2) + 1}'].remove(
-                                d_1[f'{int(i / 2) + 1},{int(j / 2) + 1}'][1])
-                        else:
-                            d_1[f'{int(i / 2) + 1},{int(j / 2) + 1}'].remove(
-                                d_1[f'{int(i / 2) + 1},{int(j / 2) + 1}'][0])
-                    for u in list(dict(d_1[f'{int(i / 2) + 1},{int(j / 2) + 1}']).keys()):
-                        l_1 = []
-                        l_2 = []
-                        for item in list(dict(d_1[f'{int(i / 2) + 1},{int(j / 2) + 1}'])[u]):
-                            if (item[0] not in l_2) and (item[1] not in l_2):
-                                l_2.append(item[0])
-                                l_2.append(item[1])
-                                l_1.append(item)
-                                d_3[f'{int(i / 2) + 1},{int(j / 2) + 1}'][u] = l_1
-                                # dict(d_1[f'{i + 1},{j + 1}'])[u] = l_1
-        for a in d_3.keys():
-            for b in list(d_3[a].keys())[2:]:
-                del d_3[a][b]
-        # print("push_dict: alpha alpha: ")
-        # print(d_3)
-        print(d_2, d_3)
-        return d_2, d_3
-    else:
-        d_2 = {}
-        d_3 = {}
-        return d_2, d_3
+    print(d_ss)
+    return d_ss,d_os
 
 
 def shift(df, aktiv, d):
@@ -480,7 +396,7 @@ for i in list(d.keys()):
     os.makedirs(f'{wd}/{i}_ml')
     os.system(f'cp {wd}/{i}.xyz {wd}/{i}_ml')
     os.chdir(f'{wd}/{i}_ml')
-    os.system(f'xtb {i}.xyz -c {d[i][0]} --uhf {d[i][1]} --opt --ml_feature>xtb.out')
+    os.system(f'xtb {i}.xyz -c {d[i][0]} --uhf {d[i][1]} --ml_feature>xtb.out')
 
 # push_dict_2 only for open shell
 push_dict_1, push_dict_2 = spr_inter(list(d.keys()), wd)
@@ -503,15 +419,15 @@ push_rec_4 = push_dict_1[f'{push_smi_a2},{push_smi_b2}'][gap_4]
 
 
 
-push(reactants_temp=list(d.keys()), push_rec=push_rec_1, push_smi_a=push_smi_a1, push_smi_b=push_smi_b1, wd=wd)
+#push(reactants_temp=list(d.keys()), push_rec=push_rec_1, push_smi_a=push_smi_a1, push_smi_b=push_smi_b1, wd=wd)
 
 # you can also check other candidates:
-#e.g. :{'1,2': {10.325000000000001: [[2, 2]], 13.029: [[1, 1]]}, '2,1': {10.653: [[1, 2]], 12.012: [[2, 1]]}}
-# push_dict_2: first molecule provides HOAO and second provides LUAO, [1, 1]
-# push_dict_3: first molecule provides LUAO and second provides HOAO , [1, 2]
-# push_dict_4: first molecule provides LUAO and second provides HOAO , [2, 1]
+#e.g. :{'1,2': {11.003: [[2, 1]], 18.058: [[2, 2]]}, '2,1': {9.774000000000001: [[2, 2]], 11.34: [[1, 1]]}}
+# push_dict_2: first molecule provides HOAO and second provides LUAO, [2, 1]
+# push_dict_3: first molecule provides LUAO and second provides HOAO , [2, 2]
+# push_dict_4: first molecule provides LUAO and second provides HOAO , [1, 1]
 # then please change last line to
-# push(reactants_temp=list(d.keys()), push_rec=push_rec_2, push_smi_a=push_smi_a1, push_smi_b=push_smi_b1, wd=wd)
-# push(reactants_temp=list(d.keys()), push_rec=push_rec_3, push_smi_a=push_smi_a2, push_smi_b=push_smi_b2, wd=wd)
-# push(reactants_temp=list(d.keys()), push_rec=push_rec_4, push_smi_a=push_smi_a2, push_smi_b=push_smi_b2, wd=wd)
+#push(reactants_temp=list(d.keys()), push_rec=push_rec_2, push_smi_a=push_smi_a1, push_smi_b=push_smi_b1, wd=wd)
+#push(reactants_temp=list(d.keys()), push_rec=push_rec_3, push_smi_a=push_smi_a2, push_smi_b=push_smi_b2, wd=wd)
+push(reactants_temp=list(d.keys()), push_rec=push_rec_4, push_smi_a=push_smi_a2, push_smi_b=push_smi_b2, wd=wd)
 
