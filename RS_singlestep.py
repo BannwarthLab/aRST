@@ -537,7 +537,22 @@ def intermolecular_reaction(target_name_1:str, target_name_2:str, c_1:int, c_2:i
     push(reactants_temp=list(d.keys()), push_rec=push_rec_1, push_smi_a=push_smi_a1, push_smi_b=push_smi_b1, wd=wd)
 
 if __name__ == '__main__':
+
+    target_name_1 = "a"
+
+    target_name_2 = "b"
+
+    c_1 = 0
+
+    c_2 = 0
+
+    u_1 = 0
+
+    u_2 = 0
+
+    reaction_type = 0
+
     if reaction_type == 1:
-        call_dissociation()
+        call_dissociation(target_name_1, c_1, u_1)
     if reaction_type == 0:
-        intermolecular_reaction()
+        intermolecular_reaction(target_name_1, target_name_2, c_1, c_2,  u_1, u_2)
