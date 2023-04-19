@@ -14,14 +14,8 @@ To execute this script:
 """
 
 ####################### Reaction parameters #########################
-target_name_1 = str("a")  # here file in the filename of first reactant
-c_1 = 0  # charge of first reactant
-u_1 = 0  # multiplicity of first reactant
-target_name_2 = str("b")  # here file in the filename of second reactant
-c_2 = 0  # charge of second reactant
-u_2 = 0  # multiplicity of second reactant
 
-reaction_type = 1  # here fill in the reaction type, 0: intermolecular reaction; 1: dissociation
+#reaction_type = 1  # here fill in the reaction type, 0: intermolecular reaction; 1: dissociation
 
 ####################### Functions #########################
 
@@ -482,8 +476,30 @@ def pull(reactants_temp, pull_rec, pull_smi_a, wd):
 
 #########################################################
 
-wd = os.getcwd()
-if reaction_type == 0:
+
+def call_dissociation(target_name_1:str, c_1:int, u_1:int):
+    wd = os.getcwd()
+    d = {}
+    d[target_name_1] = [c_1, u_1]
+    #if target_name_2:
+        # d[target_name_2] = [c_2, u_2]
+
+    #call xTB
+    #os.system('module load xtb/ml-hessian')
+
+    for i in list(d.keys()):
+        if os.path.isdir(f'{wd}/{i}_ml'):
+                shutil.rmtree(f'{wd}/{i}_ml')
+        os.makedirs(f'{wd}/{i}_ml')
+        os.system(f'cp {wd}/{i}.xyz {wd}/{i}_ml')
+        os.chdir(f'{wd}/{i}_ml')
+        os.system(f'xtb {i}.xyz -c {d[i][0]} --uhf {d[i][1]} --opt --ml_feature>xtb.out')
+
+    dis_gap, dis_pair = spr_intra(smi=list(d.keys())[0],wd=wd,disso=True)
+    pull(reactants_temp=list(d.keys()),pull_rec=dis_pair,pull_smi_a=1,wd=wd)
+
+def intermolecular_reaction(target_name_1:str, target_name_2:str, c_1:int, c_2:int, u_1:int, u_2:int):
+    wd = os.getcwd()
     d = {}
     d[target_name_1] = [c_1, u_1]
     if target_name_2:
@@ -520,37 +536,8 @@ if reaction_type == 0:
 
     push(reactants_temp=list(d.keys()), push_rec=push_rec_1, push_smi_a=push_smi_a1, push_smi_b=push_smi_b1, wd=wd)
 
-    # you can also check other candidates:
-    # e.g. :{'1,2': {10.325000000000001: [[2, 2]], 13.029: [[1, 1]]}, '2,1': {10.653: [[1, 2]], 12.012: [[2, 1]]}}
-    # push_dict_2: first molecule provides HOAO and second provides LUAO, [1, 1]
-    # push_dict_3: first molecule provides LUAO and second provides HOAO , [1, 2]
-    # push_dict_4: first molecule provides LUAO and second provides HOAO , [2, 1]
-    # then please change last line to
-    # push(reactants_temp=list(d.keys()), push_rec=push_rec_2, push_smi_a=push_smi_a1, push_smi_b=push_smi_b1, wd=wd)
-    # push(reactants_temp=list(d.keys()), push_rec=push_rec_3, push_smi_a=push_smi_a2, push_smi_b=push_smi_b2, wd=wd)
-    # push(reactants_temp=list(d.keys()), push_rec=push_rec_4, push_smi_a=push_smi_a2, push_smi_b=push_smi_b2, wd=wd)
-else:
+if __name__ == '__main__':
     if reaction_type == 1:
-        d = {}
-        d[target_name_1] = [c_1, u_1]
-        if target_name_2:
-            d[target_name_2] = [c_2, u_2]
-
-        # call xTB
-        # os.system('module load xtb/ml-hessian')
-
-        for i in list(d.keys()):
-            if os.path.isdir(f'{wd}/{i}_ml'):
-                shutil.rmtree(f'{wd}/{i}_ml')
-            os.makedirs(f'{wd}/{i}_ml')
-            os.system(f'cp {wd}/{i}.xyz {wd}/{i}_ml')
-            os.chdir(f'{wd}/{i}_ml')
-            os.system(f'xtb {i}.xyz -c {d[i][0]} --uhf {d[i][1]} --opt --ml_feature>xtb.out')
-
-        dis_gap, dis_pair = spr_intra(smi=list(d.keys())[0],wd=wd,disso=True)
-        pull(reactants_temp=list(d.keys()),pull_rec=dis_pair,pull_smi_a=1,wd=wd)
-    else:
-        print("reaction type wrong")
-
-
-
+        call_dissociation()
+    if reaction_type == 0:
+        intermolecular_reaction()
