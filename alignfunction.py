@@ -4,6 +4,7 @@ import shutil
 import numpy as np
 import pandas as pd
 
+
 r0 = {'H': 0.32, 'D': 0.32, 'He': 0.46, 'Li': 1.20, 'Be': 0.94, 'B': 0.77, 'C': 0.75, 'N': 0.71, 'O': 0.63,
       'F': 0.64,
       'Ne': 0.67, 'Na': 1.40, 'Mg': 1.25, 'Al': 1.13, 'Si': 1.04, 'P': 1.10, 'S': 1.02, 'CL': 0.99, 'Ar': 0.96,
@@ -422,7 +423,7 @@ def push(reactants_temp, push_rec, push_smi_a, push_smi_b, wd):
         distance_rec = [start_distance, end_distance]
 
     push_process(push_rec_p, distance_rec)
-
+    os.chdir(f'{wd}')
     return
 
 
@@ -486,7 +487,3 @@ def align(target_name_1:str, target_name_2:str, c_1:int, c_2:int, u_1:int, u_2:i
 
 
     push(reactants_temp=list(d.keys()), push_rec=push_rec_1, push_smi_a=push_smi_a1, push_smi_b=push_smi_b1, wd=wd)
-
-
-if __name__ == "__main__":
-    align('Halogenalkan', 'Hydroxid', 0, -1, 0, 0)
