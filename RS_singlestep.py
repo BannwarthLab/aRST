@@ -1,6 +1,5 @@
 import copy
 import os
-import shutil
 import time
 import traceback
 
@@ -18,8 +17,8 @@ To execute this script:
 ################################################
 # reactantes setting
 reactants = {}
-reactants['a'] = [0,0] # reactants name = [charge, uhf]
-reactants['b'] = [0,0]
+reactants['a'] = [0, 0]  # reactants name = [charge, uhf]
+reactants['b'] = [0, 0]
 
 reaction_type = 0  # here fill in the reaction type, 0: intermolecular reaction; 1: dissociation
 
@@ -43,42 +42,44 @@ r0 = {'H': 0.32, 'D': 0.32, 'He': 0.46, 'Li': 1.20, 'Be': 0.94, 'B': 0.77, 'C': 
 
 
 # find the active sites
-def find_value(dict,fvalue):
+def find_value(dict, fvalue):
     result = False
     for key in dict.keys():
-        if(dict[key] == fvalue):
+        if dict[key] == fvalue:
             result = True
             break
     return result
 
+
 def get_key(dict, value):
     return [k for k, v in dict.items() if v == value][0]
+
 
 def build_gap_d(react_d, h_df, l_df):
     for i in list(h_df.columns):
         for j in list(l_df.columns):
             if i != j:
-                struc1 = i+1
-                struc2 = j+1
-                h_l = h_df.iloc[:,i].tolist()
-                l_l = l_df.iloc[:,j].tolist()
+                struc1 = i + 1
+                struc2 = j + 1
+                h_l = h_df.iloc[:, i].tolist()
+                l_l = l_df.iloc[:, j].tolist()
                 for k in h_l:
                     for g in l_l:
-                        at1 = h_l.index(k) +1
+                        at1 = h_l.index(k) + 1
                         at2 = l_l.index(g) + 1
-                        gap = g-k
+                        gap = g - k
                         value1 = [f'{struc1},{struc2}', f'{at1},{at2}']
                         value2 = [f'{struc2},{struc1}', f'{at2},{at1}']
-                        if gap not in list(react_d.keys()) and not find_value(react_d,value1) and not find_value(react_d,value2) and not np.isnan(gap) :
+                        if gap not in list(react_d.keys()) and not find_value(react_d, value1) and not find_value(
+                                react_d, value2) and not np.isnan(gap):
                             react_d[gap] = [f'{struc1},{struc2}', f'{at1},{at2}']
-                        elif find_value(react_d,value1) and get_key(react_d,value1) > gap:
-                            del react_d[get_key(react_d,value1)]
+                        elif find_value(react_d, value1) and get_key(react_d, value1) > gap:
+                            del react_d[get_key(react_d, value1)]
                             react_d[gap] = [f'{struc1},{struc2}', f'{at1},{at2}']
-                        elif find_value(react_d,value2) and get_key(react_d,value2) > gap:
-                            del react_d[get_key(react_d,value2)]
+                        elif find_value(react_d, value2) and get_key(react_d, value2) > gap:
+                            del react_d[get_key(react_d, value2)]
                             react_d[gap] = [f'{struc1},{struc2}', f'{at1},{at2}']
     return react_d
-
 
 
 def spr_inter_new(reactants, wd_pre, radical_trigger):
@@ -92,9 +93,11 @@ def spr_inter_new(reactants, wd_pre, radical_trigger):
     luaob_d = {}
     at_l4 = []
     for i in range(len(reactants)):
-        hoaoa_d[i]={}
+        hoaoa_d[i] = {}
         hoaob_d[i] = {}
         smi = reactants[i]
+        if '_' in smi:
+            smi = smi.split('_')[0]
         ml_feature = pd.read_csv(f'{wd_pre}/{smi}_ml/ml_feature.csv')
         if 'HOAO_a (eV)' in ml_feature.columns:
             hoaoa_l = list(ml_feature['HOAO_a (eV)'])
@@ -142,15 +145,13 @@ def spr_inter_new(reactants, wd_pre, radical_trigger):
     luaoa_df = pd.DataFrame(luaoa_d, index=[i for i in at_l3], columns=[i for i in range(len(reactants))])
     luaob_df = pd.DataFrame(luaob_d, index=[i for i in at_l4], columns=[i for i in range(len(reactants))])
 
-
     react_ss = {}
-    react_ss = build_gap_d(react_ss,hoaoa_df,luaoa_df)
+    react_ss = build_gap_d(react_ss, hoaoa_df, luaoa_df)
     react_ss = build_gap_d(react_ss, hoaob_df, luaob_df)
 
     react_os = {}
     react_os = build_gap_d(react_os, hoaoa_df, luaob_df)
     react_os = build_gap_d(react_os, hoaob_df, luaoa_df)
-
 
     if radical_trigger:
         gap_l1 = sorted(list(react_os.keys()))[2:]
@@ -172,7 +173,8 @@ def spr_intra(smi, wd, disso):
     # if disso ==ture: dissociate possibility, otherweis intramolecular connection
     # hoao [[h_a],[h_b]]
     # luau [[l_a],[l_b]]
-
+    if '_' in smi:
+        smi = smi.split('_')[0]
     hl_df = pd.read_csv(f'{wd}/{smi}_ml/ml_feature.csv', index_col=0)
     if 'HOAO_a (eV)' in hl_df.columns:
         hoao_l = [hl_df.loc[:, 'HOAO_a (eV)'].tolist(), hl_df.loc[:, 'HOAO_b (eV)'].tolist()]
@@ -212,20 +214,21 @@ def spr_intra(smi, wd, disso):
             j += 1
         else:
             i += 1
-    if h[a_1] in hoao_l[0]:
-        atom_a = hoao_l[0].index(h[a_1])
-    else:
-        atom_a = hoao_l[1].index(h[a_1])
-    if l[a_2] in luao_l[0]:
-        atom_b = luao_l[0].index(l[a_2])
-    else:
-        atom_b = luao_l[1].index(l[a_2])
-    if not disso:
-        return gap, [atom_a, atom_b]
-    else:
-        return dis_gap, dis_pair
+        if h[a_1] in hoao_l[0]:
+            atom_a = hoao_l[0].index(h[a_1])
+        else:
+            atom_a = hoao_l[1].index(h[a_1])
+        if l[a_2] in luao_l[0]:
+            atom_b = luao_l[0].index(l[a_2])
+        else:
+            atom_b = luao_l[1].index(l[a_2])
+        if not disso:
+            return gap, [atom_a, atom_b]
+        else:
+            return dis_gap, dis_pair
 
-class Coord():
+
+class Coord:
     def __init__(self, coord):
         self.coord = coord
 
@@ -235,7 +238,6 @@ class Coord():
         # *           |   y**2+z**2                         |
         # *           |    -y*x       z**2+x**2             | -i =0
         # *           |    -z*x        -z*y       x**2+y**2 |
-        cn = 0
         xv, yv, zv = 0, 0, 0
         for i in range(self.coord.shape[0]):
             if i != at - 1:
@@ -268,10 +270,10 @@ class Coord():
         #     print(P.round(3))
         return mv, P
 
-    def get_punkt_coord(self,at):
-        a = np.array([self.coord.iloc[at-1, 1],
-                      self.coord.iloc[at-1, 2],
-                      self.coord.iloc[at-1, 3]])
+    def get_punkt_coord(self, at):
+        a = np.array([self.coord.iloc[at - 1, 1],
+                      self.coord.iloc[at - 1, 2],
+                      self.coord.iloc[at - 1, 3]])
         return a
 
     def get_nat(self):
@@ -343,7 +345,7 @@ class Coord():
         gamma = np.deg2rad(180)
         Rz = np.array([[np.cos(gamma), -np.sin(gamma), 0],
                        [np.sin(gamma), np.cos(gamma), 0],
-                       [0, 0,1]])
+                       [0, 0, 1]])
         for i in range(self.coord.shape[0]):
             x, y, z = self.coord.iloc[i, 1], self.coord.iloc[i, 2], self.coord.iloc[i, 3]
             a = [x, y, z]
@@ -368,7 +370,7 @@ class Coord():
         return self.coord
 
 
-def alignment(coord1,coord2,at1,at2):
+def alignment(coord1, coord2, at1, at2):
     C1 = Coord(coord1)
     P1 = C1.get_principal_moment_vec(at=at1)[1]
     rhanded = C1.test_if_right_handed_system(at=at1)
@@ -390,14 +392,15 @@ def alignment(coord1,coord2,at1,at2):
         C2 = Coord(C2).l2r()  # flip y to -y
     if orient:
         C2 = Coord(C2).rot_x()  # rot around x axis 180
-    C2 = Coord(C2).change_cs(P1)
+    C2 = Coord(C2).change_cs(P2)
     name2 = C2.iloc[at2 - 1, 0]
     rr = (r0[name1] + r0[name2])
-    d = np.round(rr* 5,2)
+    d = np.round(rr * 5, 2)
     C2 = Coord(C2).shift(at=at2, d=d)
 
     coord_merge = pd.concat([C1, C2])
     return coord_merge, rr
+
 
 def creat_folder(wd):
     if not os.path.isdir(f'{wd}'):
@@ -405,7 +408,8 @@ def creat_folder(wd):
     os.chdir(f'{wd}')
     return
 
-def write_xyz(xyz,name):
+
+def write_xyz(xyz, name):
     xyz.to_csv(f'{name}.xyz', sep='\t', index=False, header=None)
     nat = xyz.shape[0]
     with open(f'{name}.xyz', 'r+') as f:
@@ -413,11 +417,15 @@ def write_xyz(xyz,name):
         f.seek(0, 0)
         f.write(str(nat) + '\n' + '\n' + content)
 
+
 def xtb_ml(charg, uhf):
     os.system(f'xtb coord.xyz --ml_feature -c {charg} --uhf {uhf} > xtb.out')
     time.sleep(1)
 
+
 def sel_xtbcoord(wd, react):
+    if '_' in react:
+        react = react.split('_')[0]
     if os.path.isfile(f'{wd}/{react}_ml/xtbopt.xyz'):
         xyz = pd.read_table(f'{wd}/{react}_ml/xtbopt.xyz', header=None, skiprows=2, sep='\s+')
     else:
@@ -427,7 +435,8 @@ def sel_xtbcoord(wd, react):
             xyz = pd.read_table(f'{wd}/{react}_ml/coord.xyz', header=None, skiprows=2, sep='\s+')
     return xyz
 
-def write_scan_input(at1,at2,d1,d2):
+
+def write_scan_input(at1, at2, d1, d2):
     pwd = os.getcwd()
     with open('scan.inp', 'w') as f3:
         f3.write(f'$constrain\n'
@@ -435,25 +444,69 @@ def write_scan_input(at1,at2,d1,d2):
                  f'$scan\n'
                  f'distance: {at1},{at2},{d1};{d1},{d2},30\n$end')
 
+
+def push(push_dict, react_l, wd, wd_2):
+    # input push_dict,reactants_list, working directory(i use it to search xyz file),wd_2: directory you want to place the merged xyz and scan.inp
+    struc_1, struc_2 = push_dict[i][0].split(',')
+    struc_1, struc_2 = react_l[int(struc_1) - 1], react_l[int(struc_2) - 1]
+    at_1, at_2 = push_dict[i][1].split(',')
+    at_1, at_2 = int(at_1), int(at_2)
+
+    coord_1 = sel_xtbcoord(wd, struc_1)
+    coord_2 = sel_xtbcoord(wd, struc_2)
+    nat_1 = Coord(coord_1).get_nat()
+
+    coord_merge, rr = alignment(coord_1, coord_2, at_1, at_2)
+    nreact = str(count)
+    path_l.append(nreact)
+    creat_folder(f'{wd_2}')
+    write_xyz(coord_merge, 'coord')
+    charg = int(rec[struc_1]['charge'] + rec[struc_2]['charge'])
+    uhf = int(rec[struc_1]['uhf'] + rec[struc_2]['uhf'])
+    write_scan_input(at_1, at_2 + nat_1, rr * 5, rr)
+
+
+def pull(dis_dict, wd, wd_2):
+    creat_folder(f'{wd_2}')
+    mdgap = min(dis_dict.keys())
+    react_name = dis_dict[mdgap][0]
+    dis_pair = dis_dict[mdgap][1]
+    coord = sel_xtbcoord(wd, react_name)
+    r1 = Coord(coord).get_punkt_coord(dis_pair[0])
+    r2 = Coord(coord).get_punkt_coord(dis_pair[1])
+    r = np.linalg.norm(r1 - r2)
+    write_xyz(coord, 'coord')
+    write_scan_input(dis_pair[0], dis_pair[1], r, r * 5)
+
+
 ########################################
-rec ={}
-wd = os.getcwd()
+rec = {}
+wd = '/home/guests/ychen/test/test_sp'
 # recording reactants info
 for i in range(len(reactants.keys())):
-    smi = list(reactants.keys())[i]
-    rec[smi] = {}
-
-    rec[smi]['charge'] = reactants[smi][0]
-    rec[smi]['uhf'] = reactants[smi][1]
-
+    if len(list(reactants.keys())[i]) > 1:
+        # duplicate reactants
+        for j in range(int(list(reactants.keys())[i][1])):
+            smi = list(reactants.keys())[i][0]
+            smi_tmp = list(reactants.keys())[i][0] + f'_{j}'
+            rec[smi_tmp] = {}
+            rec[smi_tmp]['charge'] = reactants[list(reactants.keys())[i]][0]
+            rec[smi_tmp]['uhf'] = reactants[list(reactants.keys())[i]][1]
+    else:
+        smi = list(reactants.keys())[i]
+        rec[smi] = {}
+        rec[smi]['charge'] = reactants[smi][0]
+        rec[smi]['uhf'] = reactants[smi][1]
 
 react_l = list(rec.keys())
-reactants_tmp = [react_l[i] for i in range(len(react_l)) if
-                 len(react_l[i].split('/')[0]) == 1]  # reactants for this cycle
-# ml features
-for name in reactants_tmp:
 
-    C = Coord(pd.read_table(f'{wd}/{name}.xyz', header=None, skiprows=2, sep='\s+'))
+# ml features
+for name in react_l:
+    if '_' in name:
+        name_tmp = name.split('_')[0]
+        C = Coord(pd.read_table(f'{wd}/{name_tmp}.xyz', header=None, skiprows=2, sep='\s+'))
+    else:
+        C = Coord(pd.read_table(f'{wd}/{name}.xyz', header=None, skiprows=2, sep='\s+'))
     creat_folder(f'{wd}/{name}_ml')
     write_xyz(C.coord, 'coord')
     charg = rec[name]['charge']
@@ -468,14 +521,13 @@ for name in reactants_tmp:
         cn = ml_feature['coordination number']
 
         at_features = pd.concat([C.coord, c, cn], axis=1)
-        smi = list(reactants.keys())[i]
         rec[name]['at_features'] = at_features
 
 if reaction_type == 0:
     ## inter possibility (no radicals: top 4; radicals: top 2)
     try:
         radical_trigger = False
-        for name in reactants_tmp:
+        for name in react_l:
             if rec[name]['uhf'] != 0:
                 radical_trigger = True
         if not radical_trigger:
@@ -492,7 +544,7 @@ if reaction_type == 0:
         for i in gap_l:
             # get reactants name and active atoms
             struc_1, struc_2 = push_dict_1[i][0].split(',')
-            struc_1, struc_2 = reactants_tmp[int(struc_1) - 1], reactants_tmp[int(struc_2) - 1]
+            struc_1, struc_2 = react_l[int(struc_1) - 1], react_l[int(struc_2) - 1]
             at_1, at_2 = push_dict_1[i][1].split(',')
             at_1, at_2 = int(at_1), int(at_2)
 
@@ -506,31 +558,27 @@ if reaction_type == 0:
             write_xyz(coord_merge, 'coord')
             charg = int(rec[struc_1]['charge'] + rec[struc_2]['charge'])
             uhf = int(rec[struc_1]['uhf'] + rec[struc_2]['uhf'])
-            write_scan_input(at_1,at_2+nat_1,rr*5,rr)
-            count = count + 1
+            write_scan_input(at_1, at_2 + nat_1, rr * 5, rr)
+            count += 1
     except:
         print(traceback.print_exc())
         pass
 else:
     if reaction_type == 1:
-        tmp = {}
+        dis_dict = {}
         for i in react_l:
-            dis_gap, dis_pair = spr_intra(smi=i,wd=wd,disso=True)
-            tmp[dis_gap] = i,dis_pair
+            dis_gap, dis_pair = spr_intra(smi=i, wd=wd, disso=True)
+            dis_dict[dis_gap] = i, dis_pair
+
         creat_folder(f'{wd}/scan')
-        mdgap = min(tmp.keys())
-        react_name = tmp[mdgap][0]
-        dis_pair = tmp[mdgap][1]
-        coord = sel_xtbcoord(wd,react_name)
+        mdgap = min(dis_dict.keys())
+        react_name = dis_dict[mdgap][0]
+        dis_pair = dis_dict[mdgap][1]
+        coord = sel_xtbcoord(wd, react_name)
         r1 = Coord(coord).get_punkt_coord(dis_pair[0])
         r2 = Coord(coord).get_punkt_coord(dis_pair[1])
         r = np.linalg.norm(r1 - r2)
-        write_xyz(coord,'coord')
-        write_scan_input(dis_pair[0],dis_pair[1],r,r*5)
-
-
+        write_xyz(coord, 'coord')
+        write_scan_input(dis_pair[0], dis_pair[1], r, r * 5)
     else:
         print("reaction type wrong")
-
-
-
