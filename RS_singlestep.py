@@ -17,11 +17,11 @@ To execute this script:
 ################################################
 # reactantes setting
 reactants = {}
-reactants['a'] = [0, 0]  # reactants name = [charge, uhf]
+reactants['aa'] = [0, 0]  # reactants name = [charge, uhf]
 reactants['b'] = [0, 0]
-
 reaction_type = 0  # here fill in the reaction type, 0: intermolecular reaction; 1: dissociation
 
+tblite_trigger = True
 ################################################
 
 # covalent radii
@@ -82,7 +82,7 @@ def build_gap_d(react_d, h_df, l_df):
     return react_d
 
 
-def spr_inter_new(reactants, wd_pre, radical_trigger):
+def spr_inter_new(reactants, wd_pre, radical_trigger,tblite):
     hoaoa_d = {}
     at_l1 = []
     hoaob_d = {}
@@ -98,15 +98,25 @@ def spr_inter_new(reactants, wd_pre, radical_trigger):
         smi = reactants[i]
         if '_' in smi:
             smi = smi.split('_')[0]
-        ml_feature = pd.read_csv(f'{wd_pre}/{smi}_ml/ml_feature.csv')
-        if 'HOAO_a (eV)' in ml_feature.columns:
-            hoaoa_l = list(ml_feature['HOAO_a (eV)'])
-            hoaob_l = list(ml_feature['HOAO_b (eV)'])
-            target_hoao_a = list(reversed(sorted(hoaoa_l)))[:5]
-            target_hoao_b = list(reversed(sorted(hoaob_l)))[:5]
+        if not tblite:
+            ml_feature = pd.read_csv(f'{wd_pre}/{smi}_ml/ml_feature.csv')
         else:
-            hoaoa_l = list(ml_feature['HOAO (eV)'])
-            hoaob_l = list(ml_feature['HOAO (eV)'])
+            ml_feature = pd.read_csv(f'{wd_pre}/{smi}_ml/ml_feature_tblite.csv')
+
+        if not tblite:
+            if 'HOAO_a (eV)' in ml_feature.columns:
+                hoaoa_l = list(ml_feature['HOAO_a (eV)'])
+                hoaob_l = list(ml_feature['HOAO_b (eV)'])
+                target_hoao_a = list(reversed(sorted(hoaoa_l)))[:5]
+                target_hoao_b = list(reversed(sorted(hoaob_l)))[:5]
+            else:
+                hoaoa_l = list(ml_feature['HOAO (eV)'])
+                hoaob_l = list(ml_feature['HOAO (eV)'])
+                target_hoao_a = list(reversed(sorted(hoaoa_l)))[:5]
+                target_hoao_b = list(reversed(sorted(hoaob_l)))[:5]
+        else:
+            hoaoa_l = list(ml_feature['HOAO_a'])
+            hoaob_l = list(ml_feature['HOAO_b'])
             target_hoao_a = list(reversed(sorted(hoaoa_l)))[:5]
             target_hoao_b = list(reversed(sorted(hoaob_l)))[:5]
         for x, y in zip(target_hoao_a, target_hoao_b):
@@ -121,16 +131,23 @@ def spr_inter_new(reactants, wd_pre, radical_trigger):
 
         luaoa_d[i] = {}
         luaob_d[i] = {}
-        if 'LUAO_a (eV)' in ml_feature.columns:
-            luaoa_l = list(ml_feature['LUAO_a (eV)'])
-            luaob_l = list(ml_feature['LUAO_b (eV)'])
+        if not tblite:
+            if 'LUAO_a (eV)' in ml_feature.columns:
+                luaoa_l = list(ml_feature['LUAO_a (eV)'])
+                luaob_l = list(ml_feature['LUAO_b (eV)'])
+                target_luao_a = list(reversed(sorted(luaoa_l)))[:5]
+                target_luao_b = list(reversed(sorted(luaob_l)))[:5]
+            else:
+                luaoa_l = list(ml_feature['LUAO (eV)'])
+                luaob_l = list(ml_feature['LUAO (eV)'])
+                target_luao_a = sorted(luaoa_l)[:5]
+                target_luao_b = sorted(luaob_l)[:5]
+        else:
+            luaoa_l = list(ml_feature['LUAO_a'])
+            luaob_l = list(ml_feature['LUAO_b'])
             target_luao_a = list(reversed(sorted(luaoa_l)))[:5]
             target_luao_b = list(reversed(sorted(luaob_l)))[:5]
-        else:
-            luaoa_l = list(ml_feature['LUAO (eV)'])
-            luaob_l = list(ml_feature['LUAO (eV)'])
-            target_luao_a = sorted(luaoa_l)[:5]
-            target_luao_b = sorted(luaob_l)[:5]
+
         for x, y in zip(target_luao_a, target_luao_b):
             at_x = luaoa_l.index(x)
             at_y = luaob_l.index(y)
@@ -169,13 +186,16 @@ def spr_inter_new(reactants, wd_pre, radical_trigger):
         return react_os
 
 
-def spr_intra(smi, wd, disso):
+def spr_intra(smi, wd, disso,tblite):
     # if disso ==ture: dissociate possibility, otherweis intramolecular connection
     # hoao [[h_a],[h_b]]
     # luau [[l_a],[l_b]]
     if '_' in smi:
         smi = smi.split('_')[0]
-    hl_df = pd.read_csv(f'{wd}/{smi}_ml/ml_feature.csv', index_col=0)
+    if not tblite:
+        hl_df = pd.read_csv(f'{wd}/{smi}_ml/ml_feature.csv', index_col=0)
+    else:
+        hl_df = pd.read_csv(f'{wd}/{smi}_ml/ml_feature_tblite.csv', index_col=0)
     if 'HOAO_a (eV)' in hl_df.columns:
         hoao_l = [hl_df.loc[:, 'HOAO_a (eV)'].tolist(), hl_df.loc[:, 'HOAO_b (eV)'].tolist()]
         luao_l = [hl_df.loc[:, 'LUAO_a (eV)'].tolist(), hl_df.loc[:, 'LUAO_b (eV)'].tolist()]
@@ -418,9 +438,7 @@ def write_xyz(xyz, name):
         f.write(str(nat) + '\n' + '\n' + content)
 
 
-def xtb_ml(charg, uhf):
-    os.system(f'xtb coord.xyz --ml_feature -c {charg} --uhf {uhf} > xtb.out')
-    time.sleep(1)
+
 
 
 def sel_xtbcoord(wd, react):
@@ -479,6 +497,18 @@ def pull(dis_dict, wd, wd_2):
     write_scan_input(dis_pair[0], dis_pair[1], r, r * 5)
 
 
+def ml_calculation(tblite_trigger,charg, uhf):
+    if tblite_trigger:
+        os.system(f'tblite run coord.xyz --xtbml_xyz -c {charg} --spin {uhf} > xtb.out')
+    else:
+        os.system(f'xtb coord.xyz --ml_feature -c {charg} --uhf {uhf} > xtb.out')
+    time.sleep(1)
+    return
+
+
+
+
+
 ########################################
 rec = {}
 wd = '/home/guests/ychen/test/test_sp'
@@ -511,17 +541,19 @@ for name in react_l:
     write_xyz(C.coord, 'coord')
     charg = rec[name]['charge']
     uhf = rec[name]['uhf']
-    xtb_ml(charg, uhf)
+    ml_calculation(tblite_trigger,charg,uhf)
     while not os.path.isfile(f'{wd}/{name}_ml/xtb.out'):
         time.sleep(5)
     else:
         C.coord.columns = ['at', 'x', 'y', 'z']
-        ml_feature = pd.read_csv(f'{wd}/{name}_ml/ml_feature.csv')
-        c = ml_feature['atomic partial charges']
-        cn = ml_feature['coordination number']
+        if tblite_trigger:
+            ml_feature = pd.read_csv(f'{wd}/{name}_ml/ml_feature_tblite.csv')
+        else:
+            ml_feature = pd.read_csv(f'{wd}/{name}_ml/ml_feature.csv')
+        rec[name]['coord'] = C.coord
 
-        at_features = pd.concat([C.coord, c, cn], axis=1)
-        rec[name]['at_features'] = at_features
+        # at_features = pd.concat([C.coord, c, cn], axis=1)
+
 
 if reaction_type == 0:
     ## inter possibility (no radicals: top 4; radicals: top 2)
@@ -531,11 +563,11 @@ if reaction_type == 0:
             if rec[name]['uhf'] != 0:
                 radical_trigger = True
         if not radical_trigger:
-            push_dict_1 = spr_inter_new(reactants=react_l, wd_pre=f'{wd}', radical_trigger=False)
+            push_dict_1 = spr_inter_new(reactants=react_l, wd_pre=f'{wd}', radical_trigger=False,tblite=tblite_trigger)
             # {11.11141: ['2,1', '1,2'], 11.3398: ['2,1', '1,1'], 9.774439999999998: ['2,1', '2,2'], 10.00283: ['2,1', '2,1'], 11.00347: ['1,2', '2,1']}
             gap_l = sorted(list(push_dict_1.keys()))[:4]
         else:
-            push_dict_1, push_dict_2 = spr_inter_new(reactants=react_l, wd_pre=f'{wd}', radical_trigger=True)
+            push_dict_1, push_dict_2 = spr_inter_new(reactants=react_l, wd_pre=f'{wd}', radical_trigger=True,tblite=tblite_trigger)
             gap_l = sorted(list(push_dict_1.keys()))[:2] + sorted(list(push_dict_2.keys()))[:2]
             push_dict_1.update(push_dict_2)
 
@@ -567,7 +599,7 @@ else:
     if reaction_type == 1:
         dis_dict = {}
         for i in react_l:
-            dis_gap, dis_pair = spr_intra(smi=i, wd=wd, disso=True)
+            dis_gap, dis_pair = spr_intra(smi=i, wd=wd, disso=True,tblite=tblite_trigger)
             dis_dict[dis_gap] = i, dis_pair
 
         creat_folder(f'{wd}/scan')
