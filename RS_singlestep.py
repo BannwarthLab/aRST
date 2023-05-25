@@ -484,11 +484,11 @@ rec = {}
 wd = '/home/guests/ychen/test/test_sp'
 # recording reactants info
 for i in range(len(reactants.keys())):
-    if len(list(reactants.keys())[i]) > 1:
-        # duplicate reactants
-        for j in range(int(list(reactants.keys())[i][1])):
-            smi = list(reactants.keys())[i][0]
-            smi_tmp = list(reactants.keys())[i][0] + f'_{j}'
+    smi = list(reactants.keys())[i][0]
+    if type(smi) ==tuple: # duplicated reactants
+        for j in range(int(smi[1])):
+            smi = smi[0]
+            smi_tmp = smi + f'_{j}'
             rec[smi_tmp] = {}
             rec[smi_tmp]['charge'] = reactants[list(reactants.keys())[i]][0]
             rec[smi_tmp]['uhf'] = reactants[list(reactants.keys())[i]][1]
@@ -582,3 +582,4 @@ else:
         write_scan_input(dis_pair[0], dis_pair[1], r, r * 5)
     else:
         print("reaction type wrong")
+
