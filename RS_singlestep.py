@@ -85,7 +85,7 @@ def build_gap_d(react_d, h_df, l_df):
     return react_d
 
 
-def spr_inter_new(reactants, wd_pre, radical_trigger):
+def spr_inter_new(reactants, wd_pre, radical_trigger,tblite):
     hoaoa_d = {}
     at_l1 = []
     hoaob_d = {}
@@ -101,15 +101,25 @@ def spr_inter_new(reactants, wd_pre, radical_trigger):
         smi = reactants[i]
         if '_' in smi:
             smi = smi.split('_')[0]
-        ml_feature = pd.read_csv(f'{wd_pre}/{smi}/ml/ml_feature.csv')
-        if 'HOAO_a (eV)' in ml_feature.columns:
-            hoaoa_l = list(ml_feature['HOAO_a (eV)'])
-            hoaob_l = list(ml_feature['HOAO_b (eV)'])
-            target_hoao_a = list(reversed(sorted(hoaoa_l)))[:5]
-            target_hoao_b = list(reversed(sorted(hoaob_l)))[:5]
+        if not tblite:
+            ml_feature = pd.read_csv(f'{wd_pre}/{smi}_ml/ml_feature.csv')
         else:
-            hoaoa_l = list(ml_feature['HOAO (eV)'])
-            hoaob_l = list(ml_feature['HOAO (eV)'])
+            ml_feature = pd.read_csv(f'{wd_pre}/{smi}_ml/ml_feature_tblite.csv')
+
+        if not tblite:
+            if 'HOAO_a (eV)' in ml_feature.columns:
+                hoaoa_l = list(ml_feature['HOAO_a (eV)'])
+                hoaob_l = list(ml_feature['HOAO_b (eV)'])
+                target_hoao_a = list(reversed(sorted(hoaoa_l)))[:5]
+                target_hoao_b = list(reversed(sorted(hoaob_l)))[:5]
+            else:
+                hoaoa_l = list(ml_feature['HOAO (eV)'])
+                hoaob_l = list(ml_feature['HOAO (eV)'])
+                target_hoao_a = list(reversed(sorted(hoaoa_l)))[:5]
+                target_hoao_b = list(reversed(sorted(hoaob_l)))[:5]
+        else:
+            hoaoa_l = list(ml_feature['HOAO_a'])
+            hoaob_l = list(ml_feature['HOAO_b'])
             target_hoao_a = list(reversed(sorted(hoaoa_l)))[:5]
             target_hoao_b = list(reversed(sorted(hoaob_l)))[:5]
         for x, y in zip(target_hoao_a, target_hoao_b):
@@ -124,16 +134,23 @@ def spr_inter_new(reactants, wd_pre, radical_trigger):
 
         luaoa_d[i] = {}
         luaob_d[i] = {}
-        if 'LUAO_a (eV)' in ml_feature.columns:
-            luaoa_l = list(ml_feature['LUAO_a (eV)'])
-            luaob_l = list(ml_feature['LUAO_b (eV)'])
-            target_luao_a = list(sorted(luaoa_l))[:5]
-            target_luao_b = list(sorted(luaob_l))[:5]
+        if not tblite:
+            if 'LUAO_a (eV)' in ml_feature.columns:
+                luaoa_l = list(ml_feature['LUAO_a (eV)'])
+                luaob_l = list(ml_feature['LUAO_b (eV)'])
+                target_luao_a = list(sorted(luaoa_l))[:5]
+                target_luao_b = list(sorted(luaob_l))[:5]
+            else:
+                luaoa_l = list(ml_feature['LUAO (eV)'])
+                luaob_l = list(ml_feature['LUAO (eV)'])
+                target_luao_a = list(sorted(luaoa_l))[:5]
+                target_luao_b = list(sorted(luaob_l))[:5]
         else:
-            luaoa_l = list(ml_feature['LUAO (eV)'])
-            luaob_l = list(ml_feature['LUAO (eV)'])
+            luaoa_l = list(ml_feature['LUAO_a'])
+            luaob_l = list(ml_feature['LUAO_b'])
             target_luao_a = list(sorted(luaoa_l))[:5]
             target_luao_b = list(sorted(luaob_l))[:5]
+
         for x, y in zip(target_luao_a, target_luao_b):
             at_x = luaoa_l.index(x)
             at_y = luaob_l.index(y)
@@ -169,7 +186,7 @@ def spr_inter_new(reactants, wd_pre, radical_trigger):
         gap_l1 = sorted(list(react_os.keys()))[4:]
         for u in gap_l1:
             del react_os[u]
-    return react_os
+        return react_os
 
 
 def spr_intra(smi, wd, disso,tblite):
