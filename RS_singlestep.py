@@ -514,7 +514,7 @@ def ml_calculation(tblite_trigger,charg, uhf):
 
 ########################################
 rec = {}
-wd = '/home/guests/ychen/test/test_sp'
+wd = os.getcwd()
 # recording reactants info
 for i in range(len(reactants.keys())):
     smi = list(reactants.keys())[i][0]
