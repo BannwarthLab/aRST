@@ -441,9 +441,6 @@ def write_xyz(xyz, name):
         f.write(str(nat) + '\n' + '\n' + content)
 
 
-
-
-
 def sel_xtbcoord(wd, react):
     if '_' in react:
         react = react.split('_')[0]
@@ -468,23 +465,23 @@ def write_scan_input(at1, at2, d1, d2):
 
 def push(push_dict, react_l, wd, wd_2):
     # input push_dict,reactants_list, working directory(i use it to search xyz file),wd_2: directory you want to place the merged xyz and scan.inp
-    struc_1, struc_2 = push_dict[i][0].split(',')
-    struc_1, struc_2 = react_l[int(struc_1) - 1], react_l[int(struc_2) - 1]
-    at_1, at_2 = push_dict[i][1].split(',')
-    at_1, at_2 = int(at_1), int(at_2)
-
-    coord_1 = sel_xtbcoord(wd, struc_1)
-    coord_2 = sel_xtbcoord(wd, struc_2)
-    nat_1 = Coord(coord_1).get_nat()
-
-    coord_merge, rr = alignment(coord_1, coord_2, at_1, at_2)
-    nreact = str(count)
-    path_l.append(nreact)
-    creat_folder(f'{wd_2}')
-    write_xyz(coord_merge, 'coord')
-    charg = int(rec[struc_1]['charge'] + rec[struc_2]['charge'])
-    uhf = int(rec[struc_1]['uhf'] + rec[struc_2]['uhf'])
-    write_scan_input(at_1, at_2 + nat_1, rr * 5, rr)
+    gap_l = sorted(list(push_dict.keys()))[:4]
+    count = 1
+    for i in gap_l:
+        struc_1, struc_2 = push_dict[i][0].split(',')
+        struc_1, struc_2 = react_l[int(struc_1) - 1], react_l[int(struc_2) - 1]
+        at_1, at_2 = push_dict[i][1].split(',')
+        at_1, at_2 = int(at_1), int(at_2)
+    
+        coord_1 = sel_xtbcoord(wd, struc_1)
+        coord_2 = sel_xtbcoord(wd, struc_2)
+        nat_1 = Coord(coord_1).get_nat()
+    
+        coord_merge, rr = alignment(coord_1, coord_2, at_1, at_2)
+        creat_folder(f'{wd_2}/{count}')
+        write_xyz(coord_merge, 'coord')
+        write_scan_input(at_1, at_2 + nat_1, rr * 5, rr)
+        count += 1
 
 
 def pull(dis_dict, wd, wd_2):
@@ -513,108 +510,111 @@ def ml_calculation(tblite_trigger,charg, uhf):
 
 
 ########################################
-rec = {}
-wd = os.getcwd()
-# recording reactants info
-for i in range(len(reactants.keys())):
-    smi = list(reactants.keys())[i][0]
-    if type(smi) ==tuple: # duplicated reactants
-        for j in range(int(smi[1])):
-            smi = smi[0]
-            smi_tmp = smi + f'_{j}'
-            rec[smi_tmp] = {}
-            rec[smi_tmp]['charge'] = reactants[list(reactants.keys())[i]][0]
-            rec[smi_tmp]['uhf'] = reactants[list(reactants.keys())[i]][1]
-    else:
-        smi = list(reactants.keys())[i]
-        rec[smi] = {}
-        rec[smi]['charge'] = reactants[smi][0]
-        rec[smi]['uhf'] = reactants[smi][1]
-
-react_l = list(rec.keys())
-
-# ml features
-for name in react_l:
-    if '_' in name:
-        name_tmp = name.split('_')[0]
-        C = Coord(pd.read_table(f'{wd}/{name_tmp}.xyz', header=None, skiprows=2, sep='\s+'))
-    else:
-        C = Coord(pd.read_table(f'{wd}/{name}.xyz', header=None, skiprows=2, sep='\s+'))
-    creat_folder(f'{wd}/{name}_ml')
-    write_xyz(C.coord, 'coord')
-    charg = rec[name]['charge']
-    uhf = rec[name]['uhf']
-    ml_calculation(tblite_trigger,charg,uhf)
-    while not os.path.isfile(f'{wd}/{name}_ml/xtb.out'):
-        time.sleep(5)
-    else:
-        C.coord.columns = ['at', 'x', 'y', 'z']
-        if tblite_trigger:
-            ml_feature = pd.read_csv(f'{wd}/{name}_ml/ml_feature_tblite.csv')
+def main():
+    rec = {}
+    wd = os.getcwd()
+    # recording reactants info
+    for i in range(len(reactants.keys())):
+        smi = list(reactants.keys())[i][0]
+        if type(smi) ==tuple: # duplicated reactants
+            for j in range(int(smi[1])):
+                smi = smi[0]
+                smi_tmp = smi + f'_{j}'
+                rec[smi_tmp] = {}
+                rec[smi_tmp]['charge'] = reactants[list(reactants.keys())[i]][0]
+                rec[smi_tmp]['uhf'] = reactants[list(reactants.keys())[i]][1]
         else:
-            ml_feature = pd.read_csv(f'{wd}/{name}_ml/ml_feature.csv')
-        rec[name]['coord'] = C.coord
+            smi = list(reactants.keys())[i]
+            rec[smi] = {}
+            rec[smi]['charge'] = reactants[smi][0]
+            rec[smi]['uhf'] = reactants[smi][1]
 
-        # at_features = pd.concat([C.coord, c, cn], axis=1)
+    react_l = list(rec.keys())
 
-
-if reaction_type == 0:
-    ## inter possibility (no radicals: top 4; radicals: top 2)
-    try:
-        radical_trigger = False
-        for name in react_l:
-            if rec[name]['uhf'] != 0:
-                radical_trigger = True
-        if not radical_trigger:
-            push_dict_1 = spr_inter_new(reactants=react_l, wd_pre=f'{wd}', radical_trigger=False,tblite=tblite_trigger)
-            # {11.11141: ['2,1', '1,2'], 11.3398: ['2,1', '1,1'], 9.774439999999998: ['2,1', '2,2'], 10.00283: ['2,1', '2,1'], 11.00347: ['1,2', '2,1']}
-            gap_l = sorted(list(push_dict_1.keys()))[:4]
+    # ml features
+    for name in react_l:
+        if '_' in name:
+            name_tmp = name.split('_')[0]
+            C = Coord(pd.read_table(f'{wd}/{name_tmp}.xyz', header=None, skiprows=2, sep='\s+'))
         else:
-            push_dict_1, push_dict_2 = spr_inter_new(reactants=react_l, wd_pre=f'{wd}', radical_trigger=True,tblite=tblite_trigger)
-            gap_l = sorted(list(push_dict_1.keys()))[:2] + sorted(list(push_dict_2.keys()))[:2]
-            push_dict_1.update(push_dict_2)
+            C = Coord(pd.read_table(f'{wd}/{name}.xyz', header=None, skiprows=2, sep='\s+'))
+        creat_folder(f'{wd}/{name}_ml')
+        write_xyz(C.coord, 'coord')
+        charg = rec[name]['charge']
+        uhf = rec[name]['uhf']
+        ml_calculation(tblite_trigger,charg,uhf)
+        while not os.path.isfile(f'{wd}/{name}_ml/xtb.out'):
+            time.sleep(5)
+        else:
+            C.coord.columns = ['at', 'x', 'y', 'z']
+            if tblite_trigger:
+                ml_feature = pd.read_csv(f'{wd}/{name}_ml/ml_feature_tblite.csv')
+            else:
+                ml_feature = pd.read_csv(f'{wd}/{name}_ml/ml_feature.csv')
+            rec[name]['coord'] = C.coord
 
-        path_l = []
-        count = 1
-        for i in gap_l:
-            # get reactants name and active atoms
-            struc_1, struc_2 = push_dict_1[i][0].split(',')
-            struc_1, struc_2 = react_l[int(struc_1) - 1], react_l[int(struc_2) - 1]
-            at_1, at_2 = push_dict_1[i][1].split(',')
-            at_1, at_2 = int(at_1), int(at_2)
+            # at_features = pd.concat([C.coord, c, cn], axis=1)
 
-            coord_1 = (sel_xtbcoord(wd, struc_1))
-            coord_2 = (sel_xtbcoord(wd, struc_2))
-            nat_1 = Coord(coord_1).get_nat()
-            coord_merge, rr = alignment(coord_1, coord_2, at_1, at_2)
-            nreact = str(count)
-            path_l.append(nreact)
-            creat_folder(f'{wd}/{nreact}')
-            write_xyz(coord_merge, 'coord')
-            charg = int(rec[struc_1]['charge'] + rec[struc_2]['charge'])
-            uhf = int(rec[struc_1]['uhf'] + rec[struc_2]['uhf'])
-            write_scan_input(at_1, at_2 + nat_1, rr * 5, rr)
-            count += 1
-    except:
-        print(traceback.print_exc())
-        pass
-else:
-    if reaction_type == 1:
-        dis_dict = {}
-        for i in react_l:
-            dis_gap, dis_pair = spr_intra(smi=i, wd=wd, disso=True,tblite=tblite_trigger)
-            dis_dict[dis_gap] = i, dis_pair
 
-        creat_folder(f'{wd}/scan')
-        mdgap = min(dis_dict.keys())
-        react_name = dis_dict[mdgap][0]
-        dis_pair = dis_dict[mdgap][1]
-        coord = sel_xtbcoord(wd, react_name)
-        r1 = Coord(coord).get_punkt_coord(dis_pair[0])
-        r2 = Coord(coord).get_punkt_coord(dis_pair[1])
-        r = np.linalg.norm(r1 - r2)
-        write_xyz(coord, 'coord')
-        write_scan_input(dis_pair[0], dis_pair[1], r, r * 5)
+    if reaction_type == 0:
+        ## inter possibility (no radicals: top 4; radicals: top 2)
+        try:
+            radical_trigger = False
+            for name in react_l:
+                if rec[name]['uhf'] != 0:
+                    radical_trigger = True
+            if not radical_trigger:
+                push_dict_1 = spr_inter_new(reactants=react_l, wd_pre=f'{wd}', radical_trigger=False,tblite=tblite_trigger)
+                # {11.11141: ['2,1', '1,2'], 11.3398: ['2,1', '1,1'], 9.774439999999998: ['2,1', '2,2'], 10.00283: ['2,1', '2,1'], 11.00347: ['1,2', '2,1']}
+                gap_l = sorted(list(push_dict_1.keys()))[:4]
+            else:
+                push_dict_1, push_dict_2 = spr_inter_new(reactants=react_l, wd_pre=f'{wd}', radical_trigger=True,tblite=tblite_trigger)
+                gap_l = sorted(list(push_dict_1.keys()))[:2] + sorted(list(push_dict_2.keys()))[:2]
+                push_dict_1.update(push_dict_2)
+
+            path_l = []
+            count = 1
+            for i in gap_l:
+                # get reactants name and active atoms
+                struc_1, struc_2 = push_dict_1[i][0].split(',')
+                struc_1, struc_2 = react_l[int(struc_1) - 1], react_l[int(struc_2) - 1]
+                at_1, at_2 = push_dict_1[i][1].split(',')
+                at_1, at_2 = int(at_1), int(at_2)
+
+                coord_1 = (sel_xtbcoord(wd, struc_1))
+                coord_2 = (sel_xtbcoord(wd, struc_2))
+                nat_1 = Coord(coord_1).get_nat()
+                coord_merge, rr = alignment(coord_1, coord_2, at_1, at_2)
+                nreact = str(count)
+                path_l.append(nreact)
+                creat_folder(f'{wd}/{nreact}')
+                write_xyz(coord_merge, 'coord')
+                charg = int(rec[struc_1]['charge'] + rec[struc_2]['charge'])
+                uhf = int(rec[struc_1]['uhf'] + rec[struc_2]['uhf'])
+                write_scan_input(at_1, at_2 + nat_1, rr * 5, rr)
+                count += 1
+        except:
+            print(traceback.print_exc())
+            pass
     else:
-        print("reaction type wrong")
+        if reaction_type == 1:
+            dis_dict = {}
+            for i in react_l:
+                dis_gap, dis_pair = spr_intra(smi=i, wd=wd, disso=True,tblite=tblite_trigger)
+                dis_dict[dis_gap] = i, dis_pair
 
+            creat_folder(f'{wd}/scan')
+            mdgap = min(dis_dict.keys())
+            react_name = dis_dict[mdgap][0]
+            dis_pair = dis_dict[mdgap][1]
+            coord = sel_xtbcoord(wd, react_name)
+            r1 = Coord(coord).get_punkt_coord(dis_pair[0])
+            r2 = Coord(coord).get_punkt_coord(dis_pair[1])
+            r = np.linalg.norm(r1 - r2)
+            write_xyz(coord, 'coord')
+            write_scan_input(dis_pair[0], dis_pair[1], r, r * 5)
+        else:
+            print("reaction type wrong")
+
+if __name__ == "__main__":
+    main()
