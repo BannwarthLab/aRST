@@ -188,8 +188,42 @@ def spr_inter_new(reactants, wd_pre, radical_trigger,tblite):
             del react_os[u]
         return react_os
 
+def tblite_cal():
+    import faulthandler
+    faulthandler.enable()
+    # Use ase to read in coordinates
+    from ase.io import read
+    mol = read(filename='coord.xyz')
+    # create a ase calculator instance
+    from tblite.ase import TBLite
+    # xtbml value is used to compute the features
+    # 0 = compute no xtbml features
+    # 1 = all multipoles are given as norms
+    # 2 = multipoles are exported as vectors
+    mol.calc = TBLite(method='GFN2-xTB', xtbml=0)
 
-def spr_intra(smi, wd, disso,tblite):
+    # optional geometry optimization
+    from ase.optimize import BFGS
+    opt = BFGS(mol, trajectory='opt.traj', logfile='opt.log')
+    opt.run(fmax=0.05)
+
+    # final single point with xtbml features
+    mol.calc = TBLite(method='GFN2-xTB', xtbml=1)
+    mol.calc.calculate(mol)
+
+    # from the results type various properties can be retrived
+    # "xtbml" = xtbml fetaures as a numpy array (natoms, nfeatures)
+    # "xtbml weights" = get Mulliken-based partitioning weights
+    # "xtbml labels" = get the labels corresponding to the features
+
+    # X = mol.calc.results["xtbml"]
+    # w = mol.calc.results["xtbml weights"]
+    # labels = mol.calc.results["xtbml labels"]
+    # bo = mol.calc.results["bond-orders"]
+    return mol.calc.results
+
+
+def spr_intra(smi, wd, disso, tblite):
     # if disso ==ture: dissociate possibility, otherweis intramolecular connection
     # hoao [[h_a],[h_b]]
     # luau [[l_a],[l_b]]
@@ -202,6 +236,9 @@ def spr_intra(smi, wd, disso,tblite):
     if 'HOAO_a (eV)' in hl_df.columns:
         hoao_l = [hl_df.loc[:, 'HOAO_a (eV)'].tolist(), hl_df.loc[:, 'HOAO_b (eV)'].tolist()]
         luao_l = [hl_df.loc[:, 'LUAO_a (eV)'].tolist(), hl_df.loc[:, 'LUAO_b (eV)'].tolist()]
+    elif 'HOAO_a' in hl_df.columns:
+        hoao_l = [hl_df.loc[:, 'HOAO_a'].tolist(), hl_df.loc[:, 'HOAO_b'].tolist()]
+        luao_l = [hl_df.loc[:, 'LUAO_a'].tolist(), hl_df.loc[:, 'LUAO_b'].tolist()]
     else:
         hoao_l = [hl_df.loc[:, 'HOAO (eV)'].tolist(), hl_df.loc[:, 'HOAO (eV)'].tolist()]
         luao_l = [hl_df.loc[:, 'LUAO (eV)'].tolist(), hl_df.loc[:, 'LUAO (eV)'].tolist()]
@@ -209,8 +246,17 @@ def spr_intra(smi, wd, disso,tblite):
     # dissociate possibility
     # read wbo of structure and fine the pair with the lowest pair
     # can also returen dis_dirct for the complete information of dissociation
-    wbo_df = pd.read_csv(f'{wd}/{smi}_ml/wbo', header=None, sep='\\s+')
-    target_pair = [[wbo_df.loc[i, 0], wbo_df.loc[i, 1]] for i in range(wbo_df.shape[0]) if 0.3 < wbo_df.loc[i, 2] < 1.1]
+    if tblite:
+        bo_l = tblite_cal()["bond-orders"]
+        target_pair = []
+        for at1 in range(len(bo_l)):
+            for at2 in range(len(bo_l[at1])):
+                if 0.3 < bo_l[at1][at2] < 1.1:
+                    target_pair.append([at1+1,at2+1])
+    else:
+        wbo_df = pd.read_csv(f'{wd}/{smi}_ml/wbo', header=None, sep='\\s+')
+        target_pair = [[wbo_df.loc[i, 0], wbo_df.loc[i, 1]] for i in range(wbo_df.shape[0]) if 0.3 < wbo_df.loc[i, 2] < 1.1]
+    # print(target_pair)
     dis_dirct = {}
     for i in target_pair:
         atom_1 = i[0]
@@ -472,11 +518,11 @@ def push(push_dict, react_l, wd, wd_2):
         struc_1, struc_2 = react_l[int(struc_1) - 1], react_l[int(struc_2) - 1]
         at_1, at_2 = push_dict[i][1].split(',')
         at_1, at_2 = int(at_1), int(at_2)
-    
+
         coord_1 = sel_xtbcoord(wd, struc_1)
         coord_2 = sel_xtbcoord(wd, struc_2)
         nat_1 = Coord(coord_1).get_nat()
-    
+
         coord_merge, rr = alignment(coord_1, coord_2, at_1, at_2)
         creat_folder(f'{wd_2}/{count}')
         write_xyz(coord_merge, 'coord')
@@ -615,6 +661,7 @@ def main():
             write_scan_input(dis_pair[0], dis_pair[1], r, r * 5)
         else:
             print("reaction type wrong")
+
 
 if __name__ == "__main__":
     main()
