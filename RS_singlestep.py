@@ -21,7 +21,7 @@ reactants['aa'] = [0, 0]  # reactants name = [charge, uhf]
 reactants['b'] = [0, 0]
 reaction_type = 0  # here fill in the reaction type, 0: intermolecular reaction; 1: dissociation
 
-tblite_trigger = True
+tblite_trigger = False
 ################################################
 
 # covalent radii
@@ -65,8 +65,14 @@ def build_gap_d(react_d, h_df, l_df):
                     for l_index in l_df.iterrows():
                         at1 = h_index[0]
                         at2 = l_index[0]
-                        e1 = h_df.loc[at1][i]
-                        e2 = l_df.loc[at2][j]
+                        try:
+                            e1 = float(h_df.loc[at1][i])
+                        except:
+                            e1 = float('inf')
+                        try:
+                            e2 = float(h_df.loc[at1][i])
+                        except:
+                            e2 = float('inf')
                         gap = e2-e1
                         at1 = at1 +1 # index to atom number
                         at2 = at2 + 1
@@ -550,7 +556,6 @@ def ml_calculation(tblite_trigger,charg, uhf):
         os.system(f'xtb coord.xyz --ml_feature -c {charg} --uhf {uhf} > xtb.out')
     time.sleep(1)
     return
-
 
 
 
