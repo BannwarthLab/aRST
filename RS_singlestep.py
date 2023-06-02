@@ -70,7 +70,7 @@ def build_gap_d(react_d, h_df, l_df):
                         except:
                             e1 = float('inf')
                         try:
-                            e2 = float(h_df.loc[at1][i])
+                            e2 = float(l_df.loc[at2][j])
                         except:
                             e2 = float('inf')
                         gap = e2-e1
