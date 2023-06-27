@@ -183,8 +183,8 @@ def spr_inter_new(reactants, wd_pre, radical_trigger,tblite):
     react_os = build_gap_d(react_os, hoaob_df, luaoa_df)
 
     if radical_trigger:
-        gap_l1 = sorted(list(react_os.keys()))[2:]
-        gap_l2 = sorted(list(react_ss.keys()))[2:]
+        gap_l1 = sorted(list(react_os.keys()))[5:]
+        gap_l2 = sorted(list(react_ss.keys()))[5:]
         for u in gap_l1:
             del react_os[u]
         for u in gap_l2:
@@ -192,7 +192,7 @@ def spr_inter_new(reactants, wd_pre, radical_trigger,tblite):
         return react_os, react_ss
 
     else:
-        gap_l1 = sorted(list(react_os.keys()))[4:]
+        gap_l1 = sorted(list(react_os.keys()))[10:]
         for u in gap_l1:
             del react_os[u]
         return react_os
