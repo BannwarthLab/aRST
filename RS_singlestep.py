@@ -19,9 +19,12 @@ To execute this script:
 reactants = {}
 reactants['aa'] = [0, 0]  # reactants name = [charge, uhf]
 reactants['b'] = [0, 0]
-reaction_type = 0  # here fill in the reaction type, 0: intermolecular reaction; 1: dissociation
-
+reaction_type = 0  # here fill in the reaction type, 0: intermolecular reaction; 1: dissociation; 2: Manual pushing
 tblite_trigger = False
+# if Manual pushing
+at1 = 0
+at2 = 0
+
 ################################################
 
 # covalent radii
@@ -647,25 +650,57 @@ def main():
         except:
             print(traceback.print_exc())
             pass
-    else:
-        if reaction_type == 1:
-            dis_dict = {}
-            for i in react_l:
-                dis_gap, dis_pair = spr_intra(smi=i, wd=wd, disso=True,tblite=tblite_trigger)
-                dis_dict[dis_gap] = i, dis_pair
+    elif reaction_type == 1:
+        dis_dict = {}
+        for i in react_l:
+            dis_gap, dis_pair = spr_intra(smi=i, wd=wd, disso=True,tblite=tblite_trigger)
+            dis_dict[dis_gap] = i, dis_pair
 
-            creat_folder(f'{wd}/scan')
-            mdgap = min(dis_dict.keys())
-            react_name = dis_dict[mdgap][0]
-            dis_pair = dis_dict[mdgap][1]
-            coord = sel_xtbcoord(wd, react_name)
-            r1 = Coord(coord).get_punkt_coord(dis_pair[0])
-            r2 = Coord(coord).get_punkt_coord(dis_pair[1])
-            r = np.linalg.norm(r1 - r2)
-            write_xyz(coord, 'coord')
-            write_scan_input(dis_pair[0], dis_pair[1], r, r * 5)
-        else:
-            print("reaction type wrong")
+        creat_folder(f'{wd}/scan')
+        mdgap = min(dis_dict.keys())
+        react_name = dis_dict[mdgap][0]
+        dis_pair = dis_dict[mdgap][1]
+        coord = sel_xtbcoord(wd, react_name)
+        r1 = Coord(coord).get_punkt_coord(dis_pair[0])
+        r2 = Coord(coord).get_punkt_coord(dis_pair[1])
+        r = np.linalg.norm(r1 - r2)
+        write_xyz(coord, 'coord')
+        write_scan_input(dis_pair[0], dis_pair[1], r, r * 5)
+    elif reaction_type == 2:
+        try:
+            radical_trigger = False
+            for name in react_l:
+                if rec[name]['uhf'] != 0:
+                    radical_trigger = True
+            if not radical_trigger:
+                push_dict_1 = spr_inter_new(reactants=react_l, wd_pre=f'{wd}', radical_trigger=False,tblite=tblite_trigger)
+                print(push_dict_1)
+            else:
+                push_dict_1, push_dict_2 = spr_inter_new(reactants=react_l, wd_pre=f'{wd}', radical_trigger=True,tblite=tblite_trigger)
+                gap_l = sorted(list(push_dict_1.keys()))[:2] + sorted(list(push_dict_2.keys()))[:2]
+                push_dict_1.update(push_dict_2)
+                print(push_dict_1)
+
+            # get reactants name and active atoms
+            struc_1, struc_2 = react_l[0], react_l[1]
+            # at_1, at_2 = push_dict_1[i][1].split(',')
+            at_1, at_2 = int(at1), int(at2)
+
+            coord_1 = (sel_xtbcoord(wd, struc_1))
+            coord_2 = (sel_xtbcoord(wd, struc_2))
+            nat_1 = Coord(coord_1).get_nat()
+            coord_merge, rr = alignment(coord_1, coord_2, at_1, at_2)
+            creat_folder(f'{wd}/manual')
+            write_xyz(coord_merge, 'coord')
+            charg = int(rec[struc_1]['charge'] + rec[struc_2]['charge'])
+            uhf = int(rec[struc_1]['uhf'] + rec[struc_2]['uhf'])
+            write_scan_input(at_1, at_2 + nat_1, rr * 5, rr)
+        except:
+            print(traceback.print_exc())
+            pass
+
+    else:
+        print("reaction type wrong")
 
 
 if __name__ == "__main__":
