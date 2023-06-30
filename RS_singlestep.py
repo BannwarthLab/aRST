@@ -9,6 +9,7 @@ import pandas as pd
 """This script is design to simulate the single-step reactions.
 To execute this script:
 1. Load module xtb/ml-hessian if the reaction doesn't involve radicals, otherwise you need to pull the xtb version Ying_ml_output from gitlab/Bannwarth
+(Addition to the first point) now this script supports also tblite just turn tblite_trigger to True
 2. Put this script with your already OPTIMIZED reactants geometry files in the same folder.
 3. Check if line (15-20) to make sure the calculating parameters are correct (name, charge and multiplicity).
 4. Execute the script with command: python3 RS_singlestep.py
@@ -17,10 +18,14 @@ To execute this script:
 ################################################
 # reactantes setting
 reactants = {}
-reactants['aa'] = [0, 0]  # reactants name = [charge, uhf]
+reactants['coord'] = [0, 0]  # reactants name = [charge, uhf]
 reactants['b'] = [0, 0]
-reaction_type = 0  # here fill in the reaction type, 0: intermolecular reaction; 1: dissociation; 2: Manual pushing
+reaction_type = 1  # here fill in the reaction type, 0: intermolecular reaction; 1: dissociation; 2: Manual pushing
 tblite_trigger = False
+
+bde_trigger = True # use BDE measurement to do the dissociation step, it will exclude all H-bond to
+                    # choose bonde with lowest BDE
+
 # if Manual pushing
 at1 = 0
 at2 = 0
@@ -196,6 +201,7 @@ def spr_inter_new(reactants, wd_pre, radical_trigger,tblite):
         for u in gap_l1:
             del react_os[u]
         return react_os
+
 
 def tblite_cal():
     import faulthandler
@@ -552,15 +558,60 @@ def pull(dis_dict, wd, wd_2):
     write_scan_input(dis_pair[0], dis_pair[1], r, r * 5)
 
 
-def ml_calculation(tblite_trigger,charg, uhf):
+def ml_calculation(tblite_trigger,xtbml,charg, uhf):
     if tblite_trigger:
         os.system(f'tblite run coord.xyz --xtbml_xyz -c {charg} --spin {uhf} > xtb.out')
     else:
-        os.system(f'xtb coord.xyz --ml_feature -c {charg} --uhf {uhf} > xtb.out')
+        if xtbml:
+            os.system(
+                f'/home/guests/ychen/xtb_mloutput/_build/xtb coord.xyz --ml_feature -c {charg} --uhf {uhf} > xtb.out')
+        else:
+            os.system(f'xtb coord.xyz --ml_feature -c {charg} --uhf {uhf} > xtb.out')
     time.sleep(1)
     return
 
 
+def spr_intra_new(mlfeatures, terminalbond, hbond):
+    pwd = os.getcwd()
+    wboe = pd.read_csv(f'{pwd}/wboe', header=None, sep='\s+')
+    e = float('inf')
+    a1, a2 = 0, 0
+    for i in range(wboe.shape[0]):
+        dagp = wboe.iloc[i, 2]
+        at_1, at_2 = wboe.iloc[i, 0], wboe.iloc[i, 1]
+        try:
+            cn_1 = int(mlfeatures.loc[at_1 - 1, 'coordination number'])
+        except:
+            cn_1 = 0
+        try:
+            cn_2 = int(mlfeatures.loc[at_2 - 1, 'coordination number'])
+        except:
+            cn_2 = 0
+        ele_1 = mlfeatures.loc[at_1 - 1, 'Atom']
+        ele_2 = mlfeatures.loc[at_2 - 1, 'Atom']
+        if dagp < e:
+            if terminalbond and hbond:
+                e = dagp
+                a1, a2 = at_1, at_2
+            else:
+                if not hbond:
+                    if int(ele_1) == 1 or int(ele_2) == 1:
+                        pass
+                    else:
+                        if not terminalbond:
+                            if cn_1 < 2 or cn_2 < 2:
+                                pass
+                            else:
+                                e = dagp
+                                a1, a2 = at_1, at_2
+                else:
+                    if cn_1 < 2 or cn_2 < 2:
+                        pass
+                    else:
+                        e = dagp
+                        a1, a2 = at_1, at_2
+    print(a1,a2,e)
+    return a1, a2, e
 
 
 ########################################
@@ -596,7 +647,10 @@ def main():
         write_xyz(C.coord, 'coord')
         charg = rec[name]['charge']
         uhf = rec[name]['uhf']
-        ml_calculation(tblite_trigger,charg,uhf)
+        if not bde_trigger:
+            ml_calculation(tblite_trigger,False,charg,uhf)
+        else:
+            ml_calculation(tblite_trigger,True, charg, uhf)
         while not os.path.isfile(f'{wd}/{name}_ml/xtb.out'):
             time.sleep(5)
         else:
@@ -651,21 +705,41 @@ def main():
             print(traceback.print_exc())
             pass
     elif reaction_type == 1:
-        dis_dict = {}
-        for i in react_l:
-            dis_gap, dis_pair = spr_intra(smi=i, wd=wd, disso=True,tblite=tblite_trigger)
-            dis_dict[dis_gap] = i, dis_pair
+        if not bde_trigger:
+            dis_dict = {}
+            for i in react_l:
+                dis_gap, dis_pair = spr_intra(smi=i, wd=wd, disso=True,tblite=tblite_trigger)
+                dis_dict[dis_gap] = i, dis_pair
 
-        creat_folder(f'{wd}/scan')
-        mdgap = min(dis_dict.keys())
-        react_name = dis_dict[mdgap][0]
-        dis_pair = dis_dict[mdgap][1]
-        coord = sel_xtbcoord(wd, react_name)
-        r1 = Coord(coord).get_punkt_coord(dis_pair[0])
-        r2 = Coord(coord).get_punkt_coord(dis_pair[1])
-        r = np.linalg.norm(r1 - r2)
-        write_xyz(coord, 'coord')
-        write_scan_input(dis_pair[0], dis_pair[1], r, r * 5)
+            creat_folder(f'{wd}/scan')
+            mdgap = min(dis_dict.keys())
+            react_name = dis_dict[mdgap][0]
+            dis_pair = dis_dict[mdgap][1]
+            coord = sel_xtbcoord(wd, react_name)
+            r1 = Coord(coord).get_punkt_coord(dis_pair[0])
+            r2 = Coord(coord).get_punkt_coord(dis_pair[1])
+            r = np.linalg.norm(r1 - r2)
+            write_xyz(coord, 'coord')
+            write_scan_input(dis_pair[0], dis_pair[1], r, r * 5)
+        else:
+            dis_dict = {}
+            for i in react_l:
+                os.chdir(f'{wd}/{i}_ml')
+                ml_feature = pd.read_csv(f'{wd}/{i}_ml/ml_feature.csv')
+                at_1, at_2, egap = spr_intra_new(ml_feature, True, False)
+                dis_dict[egap] = [i, at_1, at_2]
+            creat_folder(f'{wd}/scan')
+            mdgap = min(list(dis_dict.keys()))
+            react_name = dis_dict[mdgap][0]
+            dis_at_1 = dis_dict[mdgap][1]
+            dis_at_2 = dis_dict[mdgap][2]
+            coord = sel_xtbcoord(wd, react_name)
+            r1 = Coord(coord).get_punkt_coord(dis_at_1)
+            r2 = Coord(coord).get_punkt_coord(dis_at_2)
+            r = np.linalg.norm(r1 - r2)
+            write_xyz(coord, 'coord')
+            write_scan_input(dis_at_1, dis_at_2, r, r * 5)
+
     elif reaction_type == 2:
         try:
             radical_trigger = False
