@@ -1,0 +1,15 @@
+coord1	h2o.xyz,0,1
+coord2	ch4.xyz,0,1
+coord3	nh3.xyz,0,1
+coord4	h2.xyz,0,1
+coord5	co.xyz,0,1
+
+intercands	2
+initial_opt	False
+dft_level	r2scan-3c
+xtbwd		/home/guests/ychen/xtb_mloutput/_build/xtb
+alpb		h2o
+cycle	150
+molbar	True
+reactor_like	True
+elim	100

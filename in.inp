@@ -1,0 +1,10 @@
+coord1          a.xyz,0,1
+coord2		b.xyz,0,1
+coord3		c.xyz,0,1
+
+intercands		4
+initial_opt		false
+dft_opt		r2SCAN-3c
+crest		False
+energy_limit		300
+
