@@ -9,11 +9,10 @@ import time
 
 import numpy as np
 import pandas as pd
-from tempfile import mkstemp, mkdtemp
+from tempfile import mkdtemp
 
 
 def remove_file(old_path, new_path):
-
     filelist = os.listdir(old_path)
 
     for file in filelist:
@@ -21,6 +20,7 @@ def remove_file(old_path, new_path):
         dst = os.path.join(new_path, file)
 
         shutil.move(src, dst)
+
 
 def submit_xtb_sp(wd, charg, alpb=None):
     if alpb:
@@ -30,13 +30,13 @@ def submit_xtb_sp(wd, charg, alpb=None):
         command = f'xtb coord.xyz -c {charg} --etemp 1000  > xtb.out && ' \
                   f'tac xtb.out | grep -m 1 \'TOTAL ENERGY\' |awk \'{{print $4}}\' > ENERGY \n'
     tmpd = mkdtemp()
-    remove_file(wd,tmpd)
+    remove_file(wd, tmpd)
     os.chdir(tmpd)
     subprocess.run(command, shell=True)
     while not os.path.isfile(f"{tmpd}/xtb.out"):
         time.sleep(1)
     else:
-        remove_file(tmpd,wd)
+        remove_file(tmpd, wd)
         os.chdir(wd)
         if os.path.isdir(tmpd):
             shutil.rmtree(tmpd)
@@ -50,7 +50,7 @@ def submit_xtb_opt(wd, charg, alpb=None):
         command = f'xtb coord.xyz --opt -c {charg} --etemp 1000  > xtb.out && ' \
                   f'tac xtb.out | grep -a \'TOTAL ENERGY\' |awk \'{{print $4}}\' > ENERGY \n'
     tmpd = mkdtemp()
-    remove_file(wd,tmpd)
+    remove_file(wd, tmpd)
     os.chdir(tmpd)
     subprocess.run(command, shell=True)
     while not os.path.isfile(f"{tmpd}/xtb.out"):
@@ -93,7 +93,7 @@ def submit_scan(wd, charg, alpb=None, **kw):
     else:
         command = f'xtb coord.xyz --opt  -c {charg} --etemp 1000 --input scan.inp > xtb.out\n'
     tmpd = mkdtemp()
-    remove_file(wd,tmpd)
+    remove_file(wd, tmpd)
     os.chdir(tmpd)
     print(command)
     subprocess.run(command, shell=True)
@@ -105,34 +105,38 @@ def submit_scan(wd, charg, alpb=None, **kw):
         if os.path.isdir(tmpd):
             shutil.rmtree(tmpd)
 
-#f" %pal nprocs 8 end \n" \
-def submit_orca_opt(wd, method, charg, m, alpb=None):
-    if alpb:
-        if alpb == "h2o":
-            alpb = "water"
-        if m == 1:
-            cmd = f"! {method} sp OPT RKS CPCM({alpb}) \n" \
-                  f"* xyzfile {charg} {m} coord.xyz "
-        else:
-            cmd = f"! {method} sp OPT UKS CPCM({alpb}) \n" \
-                  f"* xyzfile {charg} {m} coord.xyz "
-    else:
-        if m == 1:
-            cmd = f"! {method} sp OPT RKS \n" \
-                  f"* xyzfile {charg} {m} coord.xyz "
-        else:
-            cmd = f"! {method} sp OPT UKS \n" \
-                  f"* xyzfile {charg} {m} coord.xyz "
 
+# f" %pal nprocs 8 end \n" \
+def submit_orca(wd, method, charg, m, nat, alpb=None):
+    if nat > 1:
+        caltyp = 'sp OPT'
+    else:
+        caltyp = 'sp'
+    solmode = ""
+    if charg:
+        if alpb is None:
+            print(f"please use CPCM mode for {wd}")
+        else:
+            if alpb == "h2o" or "H2O":
+                alpb = "water"
+            solmode = f"CPCM({alpb})"
+    if m == 1:
+        caltyp2 = "RKS"
+    else:
+        caltyp2 = "UKS"
+    cmd = f"! {method} {caltyp} {caltyp2} {solmode}\n" \
+          f"* xyzfile {charg} {m} coord.xyz "
     with open(f'{wd}/orca.inp', 'w') as f:
         f.write(cmd)
+
+    ######## if running in debug hpz107
     tmpd = mkdtemp()
-    remove_file(wd,tmpd)
+    remove_file(wd, tmpd)
     os.chdir(tmpd)
 
     cmd = f'$ORCA orca.inp  > orca.out && tac orca.out | grep -m 1 \'FINAL SINGLE\' |awk \'{{print $5}}\' > ENERGY'
     subprocess.run(cmd, shell=True)
-    while not os.path.isfile(f"{tmpd}/orca.out"):
+    while not os.path.isfile(f"{tmpd}/orca.out"):  # double check if shell returns before finish
         time.sleep(1)
     else:
         remove_file(tmpd, wd)
@@ -141,38 +145,7 @@ def submit_orca_opt(wd, method, charg, m, alpb=None):
             shutil.rmtree(tmpd)
 
 
-def submit_orca_sp(wd, method, charg, m, alpb=None):
-    if alpb:
-        if alpb == "h2o":
-            alpb = "water"
-        if m == 1:
-            cmd = f"! {method} sp RKS CPCM({alpb}) \n" \
-                  f"* xyzfile {charg} {m} coord.xyz "
-        else:
-            cmd = f"! {method} sp UKS CPCM({alpb}) \n" \
-                  f"* xyzfile {charg} {m} coord.xyz "
-    else:
-        if m == 1:
-            cmd = f"! {method} sp RKS \n" \
-                  f"* xyzfile {charg} {m} coord.xyz "
-        else:
-            cmd = f"! {method} sp UKS \n" \
-                  f"* xyzfile {charg} {m} coord.xyz "
-    with open(f'{wd}/orca.inp', 'w') as f:
-        f.write(cmd)
-    tmpd = mkdtemp()
-    remove_file(wd,tmpd)
-    os.chdir(tmpd)
 
-    cmd = f'$ORCA orca.inp  > orca.out && tac orca.out | grep -m 1 \'FINAL SINGLE\' |awk \'{{print $5}}\' > ENERGY'
-    subprocess.run(cmd, shell=True)
-    while not os.path.isfile(f"{tmpd}/orca.out"):
-        time.sleep(1)
-    else:
-        remove_file(tmpd, wd)
-        os.chdir(wd)
-        if os.path.isdir(tmpd):
-            shutil.rmtree(tmpd)
 
 
 def creat_folder(wd):
@@ -183,7 +156,7 @@ def creat_folder(wd):
 
 
 def creat_randomfolder(wd):
-    random_name = "tmp_"+str(random.randint(1, 999))
+    random_name = "tmp_" + str(random.randint(1, 999))
     if not os.path.isdir(f'{wd}/{random_name}'):
         os.makedirs(f'{wd}/{random_name}')
     else:
@@ -214,7 +187,6 @@ def xtb_ml(xtbwd, charg, alpb=None):
         cmd = f'{xtbwd} coord.xyz --ml_feature -c {charg}  > xtb.out'
     print(cmd)
     subprocess.run(cmd, shell=True)
-
 
 
 def seperate():
@@ -313,7 +285,8 @@ def write_rec(rec, td, react_l=None):
             f.write(json.dumps(crec))
             f.write('\n')
 
-def testcrop(wd,coord):
+
+def testcrop(wd, coord):
     pwd = os.getcwd()
     f = creat_randomfolder(wd)
     write_xyz(coord, 'coord')
@@ -321,7 +294,7 @@ def testcrop(wd,coord):
     l = [k for k in os.listdir(f'{wd}/{f}') if os.path.isdir(f'{wd}/{f}/{k}') and str.isdigit(k)]
     os.chdir(pwd)
     shutil.rmtree(f'{wd}/{f}', ignore_errors=True)
-    if len(l) >1:
+    if len(l) > 1:
         return False
     else:
         return True

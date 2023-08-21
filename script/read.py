@@ -1,22 +1,17 @@
 import os
 import re
 import time
-import traceback
-from collections import Counter
-
 import pandas as pd
+from collections import Counter
 from distutils.util import strtobool
-# from callsys import write_xyz, creat_folder, submit_orca_sp, submit_orca_opt, \
-#     submit_xtb_opt, collect_energy, submit_xtb_sp
-from submit_tmp import seperate, get_charge, creat_folder, \
-    write_xyz, submit_xtb_opt, get_nelectron, submit_orca_sp, submit_orca_opt, submit_xtb_sp, collect_energy
 from get_molbar import do_molbar
+from callsys import call_orca_dft, call_xtb
+from operation import creat_folder, write_xyz, collect_energy
 
 
-def read_input(input):
-    pre_wd = os.path.dirname(input)
+def read_input(path):
     # read input content
-    with open(input) as f:
+    with open(path) as f:
         content = f.readlines()
     kwargs = {}
     rec = {}
@@ -26,13 +21,17 @@ def read_input(input):
             kwargs['molbar'] = strtobool([j for j in re.split("\t| |\n", i)
                                           if j != "" and "molbar" not in j][0])
 
+    prefix = os.path.dirname(path)
+    if not os.path.isabs(path):
+        prefix = os.path.join('.', prefix)
+
     for i in content:
         # read reactants
         if "coord" in i:
             con_l = [j for j in re.split("\t| |\n", i) if j != "" and "coord" not in j]
             rec['1/' + str(count)] = {}
             filename, charg, mul = con_l[0].split(',')
-            coord = pd.read_table(f'{pre_wd}/{filename}', header=None, skiprows=2, sep='\s+')
+            coord = pd.read_table(f'{prefix}/{filename}', header=None, skiprows=2, sep='\s+')
             rec['1/' + str(count)]['coord'] = coord
             rec['1/' + str(count)]['charge'] = int(charg)
             rec['1/' + str(count)]['m'] = int(mul)
@@ -70,8 +69,14 @@ def read_input(input):
                                                 if j != "" and "reactor_like" not in j][0])
         if "hydrogen" in i:
             kwargs['hydrogen'] = strtobool([j for j in re.split("\t| |\n", i)
-                                           if j != "" and "hydrogen" not in j][0])  # for disssociation consider H
+                                            if j != "" and "hydrogen" not in j][0])  # for disssociation consider H
             # element
+        if "platform" in i:
+            kwargs['platform'] = int([j for j in re.split("\t| |\n", i)
+                                      if j != "" and "platform" not in j][0])
+            # mode 1 : only run in debbug node: call program with commandline, but doing cal in /tmp
+            # mode 2 : run py script locally and submit each process with slurm
+            # NONE/0: default mode, sbatch this py scrit
 
     return kwargs, rec
 
@@ -81,6 +86,7 @@ def prepare(wd, reactant, rec, **kwargs):
     initial_opt = kwargs.get('initial_opt', True)
     level = kwargs.get('dft_level', 'r2SCAN-3c')
     alpb = kwargs.get('alpb', None)
+    mode = kwargs.get('platform', 0)
 
     # xtb opt
     creat_folder(f'{wd}/{i}/xtbopt')  # forlder xtbopt not only for opt, also sp
@@ -88,37 +94,23 @@ def prepare(wd, reactant, rec, **kwargs):
     nat = coord.shape[0]
     charg, m = rec[i]['charge'], rec[i]['m']
     write_xyz(coord, 'coord')
-    if nat > 1:
-        submit_xtb_opt(f'{wd}/{i}/xtbopt', charg, alpb)
-        while not os.path.isfile(f'{wd}/{i}/xtbopt/xtb.out'):
-            time.sleep(5)
-        else:
-            rec = collect_energy(rec, f'{wd}/{i}/xtbopt', f'{i}', "gfn2")
-            if os.path.isfile(f'{wd}/{i}/xtbopt/xtbopt.xyz'):
-                coord = pd.read_table(f'{wd}/{i}/xtbopt/xtbopt.xyz', header=None,
-                                      skiprows=2, sep='\s+')
-                rec[i]['coord'] = coord
-
+    call_xtb(f'{wd}/{i}/xtbopt', charg, nat, alpb=alpb, mode=mode)
+    while not os.path.isfile(f'{wd}/{i}/xtbopt/xtb.out'):
+        time.sleep(2)
     else:
-        submit_xtb_sp(f'{wd}/{i}/xtbopt', charg, alpb)
-        while not os.path.isfile(f'{wd}/{i}/xtbopt/xtb.out'):
-            time.sleep(2)
-        else:
-            rec = collect_energy(rec, f'{wd}/{i}/xtbopt', f'{i}', "gfn2")
+        rec = collect_energy(rec, f'{wd}/{i}/xtbopt', f'{i}', "gfn2")
+        if os.path.isfile(f'{wd}/{i}/xtbopt/xtbopt.xyz'):
+            coord = pd.read_table(f'{wd}/{i}/xtbopt/xtbopt.xyz', header=None,
+                                  skiprows=2, sep='\s+')
+            rec[i]['coord'] = coord
 
     # dft
     creat_folder(f'{wd}/{i}/orca')
     write_xyz(coord, 'coord')
-    if initial_opt and nat > 1:
-        if charg != 0:
-            submit_orca_opt(f'{wd}/{i}/orca', level, charg, m, alpb)
-        else:
-            submit_orca_opt(f'{wd}/{i}/orca', level, charg, m)
+    if not initial_opt:
+        call_orca_dft(f'{wd}/{i}/orca', level, charg, m, nat, opt=False, alpb=alpb, mode=mode)
     else:
-        if charg != 0:
-            submit_orca_sp(f'{wd}/{i}/orca', level, charg, m, alpb)
-        else:
-            submit_orca_sp(f'{wd}/{i}/orca', level, charg, m)
+        call_orca_dft(f'{wd}/{i}/orca', level, charg, m, nat, alpb=alpb, mode=mode)
 
     # molbar
     rec[i]['mb'] = do_molbar(coord, wd)

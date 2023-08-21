@@ -37,6 +37,7 @@ def do_reaction(wd, rec, react_l, step=0, **kwargs):
     alpb = kwargs.get('alpb', None)
     reactor = kwargs.get('reactor_like', False)
     level = kwargs.get('dft_level', 'r2SCAN-3c')
+    mode = kwargs.get('platform', 0)
 
     # ml features
     ml(rec, react_l, wd, xtbwd, alpb)
@@ -63,7 +64,7 @@ def do_reaction(wd, rec, react_l, step=0, **kwargs):
         results = []
         for i in path_l:
             results.append(pool.apply_async(subprocess,
-                                            (wd, i, react_l, reactants_inter_dict, rec, level, alpb, reactor)))
+                                            (wd, i, react_l, reactants_inter_dict, rec, level, alpb, reactor,mode)))
         pool.close()
         pool.join()
 
@@ -82,4 +83,5 @@ def do_reaction(wd, rec, react_l, step=0, **kwargs):
     pool.join()
     for res in results:
         rec = update_dict(rec, res.get())
+
     return reactants_inter_dict, rec  # inter_dict = total dict
