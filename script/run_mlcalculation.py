@@ -1,5 +1,5 @@
 import pandas as pd
-from callsys import creat_folder, write_xyz, xtb_ml
+from operation import creat_folder, write_xyz, xtb_ml
 import time
 import os
 
@@ -15,7 +15,7 @@ def ml(rec, reactants, pre_wd, xtbwd, alpb=None):
             charg = rec[name]['charge']
             xtb_ml(xtbwd, charg, alpb)
             # fouble ml for H anion
-            if coord.shape[0] == 1 and coord.iloc[0,0] == 'H' and charg ==-1:
+            if coord.shape[0] == 1 and coord.iloc[0, 0] == 'H' and charg == -1:
                 xtb_ml(xtbwd, charg, alpb)
 
     return rec
@@ -24,7 +24,7 @@ def ml(rec, reactants, pre_wd, xtbwd, alpb=None):
 def collect_ml(rec, reactants, pre_wd):
     for name in reactants:
         while not os.path.isfile(f'{pre_wd}/{name}/ml/xtb.out'):
-            time.sleep(2)
+            time.sleep(1)
         else:
             ml_feature = pd.read_csv(f'{pre_wd}/{name}/ml/ml_feature.csv')
             df = {}

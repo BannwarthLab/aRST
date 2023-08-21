@@ -1,9 +1,8 @@
 import os
 import shutil
-import traceback
 import billiard as multiprocessing
 from Assign_reaction import do_assign_reactor, do_reaction
-from callsys import write_rec
+from operation import write_rec
 from read import update_dict
 from Subprocess import elvauate_reaction
 
@@ -63,7 +62,7 @@ def reactionnetwork(rec, wd, **kwargs):
             del_l = []
             for path_i in path_l:
                 reaction_rec_tmp, del_l_tmp = elvauate_reaction(path_i, wd, rec, energy_lim, reactants_total_dict,
-                                                                reaction_rec,reactor)
+                                                                reaction_rec, reactor)
                 reaction_rec = update_dict(reaction_rec, reaction_rec_tmp)
                 del_l = del_l + del_l_tmp
 
@@ -92,7 +91,7 @@ def reactionnetwork(rec, wd, **kwargs):
                         rec_valid[i] = rec[i]
             # write document
             if reactor:
-                if path_l and [s for s in path_l if "_1" in s]:  # step +1 only if there is association
+                if path_l:  # step +1 only if there is association [s for s in path_l if "_1" in s]
                     write_rec(rec_valid, wd, 'molecules')
                     write_rec(reaction_rec, wd, 'reaction')
                     step += 1

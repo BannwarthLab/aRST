@@ -8,40 +8,48 @@ import time
 import billiard as multiprocessing
 
 if __name__ == "__main__":
-    # parser = ArgumentParser(
-    #     # name of program
-    #     prog="MEOW",
-    #     # description
-    #     description="CHECK CHECK.",
-    #     # bottom text
-    #     epilog="By Ying"
-    # )
-    # parser.parse_args()
-    #
-    # # add arguments
-    #
-    # parser.add_argument(
-    #     "in_file",
-    #     help="The input coord file"
-    # )
-    #
-    #
+    parser = ArgumentParser(
+        # name of program
+        prog="MEOW",
+        # description
+        description="mode 1: module load excstda/ orca/ xtb/; source ~/mb/env/bin/activate",
+        # bottom text
+        epilog="By Ying"
+    )
+
+    # add arguments
+
+    parser.add_argument("in_file", type=str, help="The input file")
+
     # parser.add_argument(
     #     "-c", "--charg",
     #     default=",",
     #     dest="charg",
     #     help="The separator to change to"
     # )
-    #
-    # args = parser.parse_args()
+
+    args = parser.parse_args()
+
     import warnings
 
     warnings.filterwarnings("ignore")
 
-    # wd = "/home/guests/ychen/meow/test3"
-    wd = os.getcwd()
+    kwargs, rec = read_input(args.in_file)
+    if not rec:
+        print("Failed to read input")
+        sys.exit()
 
-    ## clean up
+    # determine the working folder
+    wd = os.path.abspath(os.path.dirname(args.in_file))
+    # if not os.path.isabs(wd):
+    #     wd = os.path.abspath(args.in_file)
+    #     if not wd:
+    #         wd = "."
+    #     else:
+    #         wd = os.path.join('.', wd)
+    print(f" working folder is {wd}")
+
+    # clean up old resultes
     l = os.listdir(wd)
     for i in l:
         if os.path.isdir(f'{wd}/{i}'):
@@ -50,19 +58,12 @@ if __name__ == "__main__":
             if i.endswith('json'):
                 os.remove(f'{wd}/{i}')
 
-    # recoring running time
+    # recording starting time
     t1 = time.time()
 
-    # read input setting
-    kwargs, rec = read_input(f'{wd}/in.inp')
-    if not rec:
-        print("Failed to read input")
-        sys.exit()
-
-    # do opt and sp and get basic propoties for each reactant
+    # prepare reactants before cycle: do opt and sp and get basic propoties for each reactant
     pool = multiprocessing.Pool(len(rec.keys()))
     results = []
-
     for i in list(rec.keys()):
         results.append(pool.apply_async(prepare, (wd, i, rec), kwargs))
     pool.close()
@@ -71,6 +72,10 @@ if __name__ == "__main__":
     for res in results:
         rec = update_dict(rec, res.get())
 
+    # begin cycle
     rec = reactionnetwork(rec, wd, kwargs=kwargs)
+
+    # recording finishing time
     t2 = time.time()
     print(f"finished with {t2 - t1}")
+    sys.exit()

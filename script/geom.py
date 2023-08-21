@@ -1,4 +1,3 @@
-import os
 import numpy as np
 import pandas as pd
 
@@ -29,7 +28,6 @@ class Coord:
         # *           |   y**2+z**2                         |
         # *           |    -y*x       z**2+x**2             | -i =0
         # *           |    -z*x        -z*y       x**2+y**2 |
-        cn = 0
         xv, yv, zv = 0, 0, 0
         for i in range(self.coord.shape[0]):
             if i != at - 1:
@@ -60,7 +58,7 @@ class Coord:
         v, P = np.linalg.eigh(arep)
         #     print(v.round(3))
         #     print(P.round(3))
-        return mv,P
+        return mv, P
 
     def get_punkt_coord(self, at):
         a = np.array([self.coord.iloc[at - 1, 1],
@@ -156,7 +154,7 @@ class Coord:
     def l2r(self):
         for i in range(self.coord.shape[0]):
             x, y, z = self.coord.iloc[i, 1], self.coord.iloc[i, 2], self.coord.iloc[i, 3]
-            a = [x, y, z]
+            # a = [x, y, z]
             a_new = [x, -y, z]
             self.coord.iloc[i, 1], self.coord.iloc[i, 2], self.coord.iloc[i, 3] = a_new[0], a_new[1], a_new[2]
         return self.coord
@@ -186,7 +184,7 @@ def alignment(coord1, coord2, at1, at2, **kwargs):
     if not rhanded:
         C1 = Coord(C1).l2r()  # flip y to -y
     if orient:
-        C1 = Coord(C1).rot_x()  # rot around x axis 180
+        C1 = Coord(C1).rot_x()  # rot around x-axis 180
     C1 = Coord(C1).change_cs(P1)
     name1 = C1.iloc[at1 - 1, 0]
 
@@ -198,7 +196,7 @@ def alignment(coord1, coord2, at1, at2, **kwargs):
     if not rhanded:
         C2 = Coord(C2).l2r()  # flip y to -y
     if not orient:  # Pz point into together
-        C2 = Coord(C2).rot_x()  # rot around x axis 180
+        C2 = Coord(C2).rot_x()  # rot around x-axis 180
     C2 = Coord(C2).change_cs(P2)
     name2 = C2.iloc[at2 - 1, 0]
     rr = (r0[name1] + r0[name2])

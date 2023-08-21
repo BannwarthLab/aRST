@@ -1,5 +1,4 @@
 import os
-import traceback
 import numpy as np
 import pandas as pd
 import ast
@@ -241,7 +240,7 @@ def spr_inter_new(reactants, wd_pre):
     return react_os, react_ss
 
 
-def spr_intra_new(reactants, wd_pre,hydrogen=True):
+def spr_intra_new(reactants, wd_pre, hydrogen=True):
     dis_d = {}
     # use bo as measurement
     for smi in reactants:
