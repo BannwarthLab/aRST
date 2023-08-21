@@ -1,29 +1,20 @@
-import os
-import traceback
-import numpy as np
-import pandas as pd
-import ast
-import random
-import math
+import re
+keyw = 'FINAL SINGLE'
 
-hydrogen = True
-wboe = pd.read_csv(f'/Users/cy/jtc/Meow/test4/1/1/ml/wboe', header=None, sep='\s+')
-if os.path.getsize(f'/Users/cy/jtc/Meow/test4/1/1/ml/wboe') != 0:
-    mlfeatures = pd.read_csv(f'/Users/cy/jtc/Meow/test4/1/1/ml/ml_feature.csv')
-    tmp = {}
-    for i in range(wboe.shape[0]):
-        dagp = wboe.iloc[i, 3]
-        at_1, at_2 = wboe.iloc[i, 0], wboe.iloc[i, 1]
-        ele_1 = mlfeatures.loc[at_1 - 1, 'Atom']
-        ele_2 = mlfeatures.loc[at_2 - 1, 'Atom']
-        if not hydrogen and (int(ele_1) == 1 or int(ele_2) == 1):
-            pass
-        else:
-            tmp[dagp] = [ at_1, at_2]
-    if not tmp:  # only h-bonds in struc
-        for i in range(wboe.shape[0]):
-            dagp = wboe.iloc[i, 3]
-            at_1, at_2 = wboe.iloc[i, 0], wboe.iloc[i, 1]
-
-            tmp[dagp] = [at_1, at_2]
-    print(tmp)
+with open(f'orca.out', 'r') as f:
+    lines = f.readlines()
+    line = re.findall(r'\-?\d+\.?\d*', [k for k in lines if keyw in k][0])
+    if line and line[0].isdigit():
+        print("yeyeee")
+        e = line[0]
+    else:
+        if line:
+            print("a")
+        if str.isnumeric(line[0]):
+            print('b')
+        print("nonono")
+        e = 'inf'
+print(line,line[0])
+print('e= ',e)
+with open('ENERGY', 'w') as f:
+    f.write(e)
