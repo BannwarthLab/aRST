@@ -1,4 +1,6 @@
 import os
+import traceback
+import copy
 import numpy as np
 import pandas as pd
 import ast
@@ -19,6 +21,20 @@ def get_key(dict, value):
     return [k for k, v in dict.items() if v == value][0]
 
 
+def litgap(react_d, hoao_df, luao_df):
+    tmp1 = luao_df.min().tolist()
+    tmp2 = hoao_df.max().tolist()
+    tmp2c = copy.deepcopy(tmp2)
+    tmp2c.pop(tmp1.index(min(tmp1)))
+    lit1 = min(tmp1) - max(tmp2c)
+
+    tmp1c = copy.deepcopy(tmp1)
+    tmp1c.pop(tmp2.index(max(tmp2)))
+    lit2 = min(tmp1c) - max(tmp2c)
+    del_l = [i for i in react_d.keys() if i < min(lit1, lit2)]
+    for i in del_l:
+        del react_d[i]
+    return react_d
 def build_gap_d(react_d, h_df, l_df):
     # {6.826: ['[1, 2]', '[[1, 1]]'], 8.268: ['[1, 2]', '[[3, 1]]'], 7.477: ['[2, 1]', '[[1, 2]]'], 7.878: ['[1, 2]',
     # '[[1, 2]]']}
@@ -32,28 +48,11 @@ def build_gap_d(react_d, h_df, l_df):
                     for l_index in l_df.iterrows():
                         at1 = h_index[0]
                         at2 = l_index[0]
+                        a = [1]
 
                         e1 = float(h_df.loc[at1][i])
                         e2 = float(l_df.loc[at2][j])
-                        # if pd.isna(h_df.loc[at1][i]) or (
-                        #         type(h_df.loc[at1][i]) == str and not h_df.loc[at1][i].isdigit()):
-                        #     e1 = h_df.to_numpy().max() + 1
-                        # else:
-                        #
-                        # if pd.isna(l_df.loc[at2][j]) or (
-                        #         type(l_df.loc[at2][j]) == str and not l_df.loc[at2][j].isdigit()):
-                        #     e2 = l_df.to_numpy().max() + 1
-                        # else:
-
-                        # try:  # for hydrogen kation anion
-                        #     e1 = float(h_df.loc[at1][i])
-                        # except ValueError:
-                        #     e1 = h_df.to_numpy().max() + 1
-                        # try:
-                        #     e2 = float(l_df.loc[at2][j])
-                        # except ValueError:
-                        #     e2 = l_df.to_numpy().min()-1
-                        gap = e2 - e1
+                        gap = np.round(e2 - e1,4)
                         at1 += 1  # index to atom number
                         at2 += 1
                         value1 = [f'{[struc1, struc2]}', f'{[[at1, at2]]}']
@@ -84,7 +83,7 @@ def build_gap_d(react_d, h_df, l_df):
     for gap in react_d.keys():
         value = react_d[gap]
         # print(f'gap = {gap}, value = {value}')
-        gap_appoxi = np.round(gap, 3)
+        gap_appoxi = np.round(gap, 4)
         if gap_appoxi not in result_dict.keys():
             result_dict[gap_appoxi] = value
         else:
@@ -109,7 +108,7 @@ def build_gap_d(react_d, h_df, l_df):
     return result_dict
 
 
-def spr_inter_new(reactants, wd_pre):
+def spr_inter_new(reactants, rec):
     hoaoa_d = {}
     at_l1 = []
     hoaob_d = {}
@@ -122,20 +121,21 @@ def spr_inter_new(reactants, wd_pre):
     for i in range(len(reactants)):
         hoaoa_d[i] = {}
         hoaob_d[i] = {}
-        smi = reactants[i]
+        name = reactants[i]
         # if '_' in smi:
         #     smi = smi.split('_')[0]
-        ml_feature = pd.read_csv(f'{wd_pre}/{smi}/ml/ml_feature.csv')
-        if 'HOAO_a (eV)' in ml_feature.columns:
-            hoaoa_l = list(ml_feature['HOAO_a (eV)'])
-            hoaob_l = list(ml_feature['HOAO_b (eV)'])
-            target_hoao_a = list(reversed(sorted(hoaoa_l)))[:5]
-            target_hoao_b = list(reversed(sorted(hoaob_l)))[:5]
+        ml_feature = rec[name]['ml_feature']
+        if 'hoao_a' in list(ml_feature.columns):
+            hoaoa_l = list(ml_feature['hoao_a'])
+            hoaob_l = list(ml_feature['hoao_b'])
+
         else:
-            hoaoa_l = list(ml_feature['HOAO (eV)'])
-            hoaob_l = list(ml_feature['HOAO (eV)'])
-            target_hoao_a = list(reversed(sorted(hoaoa_l)))[:5]
-            target_hoao_b = list(reversed(sorted(hoaob_l)))[:5]
+            hoaoa_l = list(ml_feature['hoao'])
+            hoaob_l = list(ml_feature['hoao'])
+        max1 = max(hoaoa_l)
+        target_hoao_a = list(reversed(sorted([k for k in hoaoa_l if max1 - k < 2.5])))
+        max2 = max(hoaob_l)
+        target_hoao_b = list(reversed(sorted([k for k in hoaob_l if max2 - k < 2.5])))
         for x, y in zip(target_hoao_a, target_hoao_b):
             if hoaoa_l.count(x) > 1:
                 at_x = -1
@@ -162,16 +162,17 @@ def spr_inter_new(reactants, wd_pre):
 
         luaoa_d[i] = {}
         luaob_d[i] = {}
-        if 'LUAO_a (eV)' in ml_feature.columns:
-            luaoa_l = list(ml_feature['LUAO_a (eV)'])
-            luaob_l = list(ml_feature['LUAO_b (eV)'])
-            target_luao_a = list(sorted(luaoa_l))[:5]
-            target_luao_b = list(sorted(luaob_l))[:5]
+        if 'luao_a' in ml_feature.columns:
+            luaoa_l = list(ml_feature['luao_a'])
+            luaob_l = list(ml_feature['luao_b'])
+
         else:
-            luaoa_l = list(ml_feature['LUAO (eV)'])
-            luaob_l = list(ml_feature['LUAO (eV)'])
-            target_luao_a = list(sorted(luaoa_l))[:5]
-            target_luao_b = list(sorted(luaob_l))[:5]
+            luaoa_l = list(ml_feature['luao'])
+            luaob_l = list(ml_feature['luao'])
+        min1 = min(luaoa_l)
+        target_luao_a = list(sorted([k for k in luaoa_l if k - min1 < 2.5]))
+        min2 = min(luaob_l)
+        target_luao_b = list(sorted([k for k in luaob_l if k - min2 < 2.5]))
         for x, y in zip(target_luao_a, target_luao_b):
             if luaoa_l.count(x) > 1:
                 at_x = -1
@@ -232,22 +233,31 @@ def spr_inter_new(reactants, wd_pre):
 
     react_ss = {}
     react_ss = build_gap_d(react_ss, hoaoa_df, luaoa_df)
+    react_ss = litgap(react_ss, hoaoa_df, luaoa_df)
+
     react_ss = build_gap_d(react_ss, hoaob_df, luaob_df)
+    react_ss = litgap(react_ss, hoaob_df, luaob_df)
+
 
     react_os = {}
     react_os = build_gap_d(react_os, hoaoa_df, luaob_df)
+    react_os = litgap(react_os, hoaoa_df, luaob_df)
     react_os = build_gap_d(react_os, hoaob_df, luaoa_df)
+    react_os = litgap(react_os, hoaob_df, luaoa_df)
     return react_os, react_ss
 
 
-def spr_intra_new(reactants, wd_pre, hydrogen=True):
+def spr_intra_new(reactants, rec, hydrogen=True):
     dis_d = {}
     # use bo as measurement
     for smi in reactants:
         try:
-            wboe = pd.read_csv(f'{wd_pre}/{smi}/ml/wboe', header=None, sep='\s+')
-            if os.path.getsize(f'{wd_pre}/{smi}/ml/wboe') != 0:
-                mlfeatures = pd.read_csv(f'{wd_pre}/{smi}/ml/ml_feature.csv')
+            wboe = rec[smi]['wboe']
+            mlfeatures = rec[smi]['ml_feature']
+            if isinstance(wboe, pd.DataFrame):
+            # wboe = pd.read_csv(f'{wd_pre}/{smi}/ml/wboe', header=None, sep='\s+')
+            # if os.path.getsize(f'{wd_pre}/{smi}/ml/wboe') != 0:
+            #     mlfeatures = pd.read_csv(f'{wd_pre}/{smi}/ml/ml_feature.csv')
                 tmp = {}
                 for i in range(wboe.shape[0]):
                     dagp = wboe.iloc[i, 3]
@@ -275,6 +285,6 @@ def spr_intra_new(reactants, wd_pre, hydrogen=True):
                 dis_d.update(tmp)
         except:
             pass
-            # traceback.print_exc()
+            traceback.print_exc()
             # print(f'{wd_pre}/{smi}')
     return dis_d
