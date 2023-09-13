@@ -177,33 +177,34 @@ class Coord:
 
 def alignment(coord1, coord2, at1, at2, **kwargs):
     C1 = Coord(coord1)
-    P1 = C1.get_principal_moment_vec(at=at1)[1]
+    coord1 = C1.shift(at=at1, d=0)
+    name1 = coord1.iloc[at1 - 1, 0]
     rhanded = C1.test_if_right_handed_system(at=at1)
     orient = C1.geom_orientation(at=at1)
-    C1 = C1.shift(at=at1, d=0)
+    P1 = C1.get_principal_moment_vec(at=at1)[1]
     if not rhanded:
-        C1 = Coord(C1).l2r()  # flip y to -y
-    if orient:
-        C1 = Coord(C1).rot_x()  # rot around x-axis 180
-    C1 = Coord(C1).change_cs(P1)
-    name1 = C1.iloc[at1 - 1, 0]
+        coord1 = C1.l2r()  # flip y to -y
+    if not orient:
+        coord1 = C1.rot_x()  # rot around x-axis 180
+    coord1 = Coord(coord1).change_cs(P1).copy(deep=True)  # for the bug if cood1=cood2, the class will be inherited
 
     C2 = Coord(coord2)
-    P2 = C2.get_principal_moment_vec(at=at2)[1]
+    coord2 = C2.shift(at=at2, d=0)
+    name2 = coord2.iloc[at2 - 1, 0]
     rhanded = C2.test_if_right_handed_system(at=at2)
     orient = C2.geom_orientation(at=at2)
-    C2 = C2.shift(at=at2, d=0)
+    P2 = C2.get_principal_moment_vec(at=at2)[1]
     if not rhanded:
-        C2 = Coord(C2).l2r()  # flip y to -y
+        coord2 = C2.l2r()  # flip y to -y
     if not orient:  # Pz point into together
-        C2 = Coord(C2).rot_x()  # rot around x-axis 180
-    C2 = Coord(C2).change_cs(P2)
-    name2 = C2.iloc[at2 - 1, 0]
+        coord2 = C2.rot_x()  # rot around x-axis 180
+    coord2 = Coord(coord2).change_cs(P2)
+
     rr = (r0[name1] + r0[name2])
     relativ_r = kwargs.get('aligning_distance', 5)  # 5 times of rr by default
-    d_pre = kwargs.get('aligning_direction', 1)  # 1 by default, 0: opposite alignment
+    d_pre = kwargs.get('aligning_direction', 1)  # 1 by default, -1: opposite alignment
     d = d_pre * np.round(rr * relativ_r, 2)
-    C2 = Coord(C2).shift(at=at2, d=d)
+    coord2 = Coord(coord2).shift(at=at2, d=d).copy(deep=True)
 
-    coord_merge = pd.concat([C1, C2])
+    coord_merge = pd.concat([coord1, coord2])
     return coord_merge, rr
