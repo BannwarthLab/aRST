@@ -16,7 +16,7 @@
 
 ### beginning of executable commands
 # Note: the OMP_NUM_THREADS envvar is set automatically - do not overwrite!
-export MKL_NUM_THREADS=10
+#export MKL_NUM_THREADS=10
 #export OMP_NUM_THREADS=10
 
 your_cleanup_function() {
@@ -45,6 +45,7 @@ module load xtb
 
 
 
+&& tac xtb.out | grep -a 'TOTAL ENERGY' |awk '{print $4}' > ENERGY &
 ### include your command lines here! conclude your command line with a "&"
 
 wait

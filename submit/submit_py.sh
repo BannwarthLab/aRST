@@ -4,11 +4,11 @@
 
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=1
-#SBATCH --ntasks=4
+#SBATCH --ntasks=1
 #SBATCH --time=48:00:00
 #SBATCH --signal=B:USR1@120
 
-#SBATCH --mem-per-cpu=1G   #M is the default and can therefore be omitted, but could also be K(ilo)|G(iga)|T(era)
+#SBATCH --mem-per-cpu=2G   #M is the default and can therefore be omitted, but could also be K(ilo)|G(iga)|T(era)
 
 # name the job
 #SBATCH --job-name=react_search
@@ -17,7 +17,7 @@
 
 ### beginning of executable commands
 # Note: the OMP_NUM_THREADS envvar is set automatically - do not overwrite!
-export MKL_NUM_THREADS=10
+#export MKL_NUM_THREADS=10
 #export OMP_NUM_THREADS=10
 
 your_cleanup_function() {
@@ -35,7 +35,7 @@ tdir=$(mktemp -d $TMPDIR/XXXXXXXXXXXXXXXXXX)
 
 echo 'temporary directory were computations are run:' $tdir
 
-script_path="/home/guests/ychen/meow/autoreact"
+script_path="/home/guests/ychen/meow/1.0_alpha/script"
 
 # clean up old results
 for file in $(ls $SLURM_SUBMIT_DIR);do
@@ -57,7 +57,7 @@ done
 cd $tdir
 
 module load openmpi/4.1.1
-module load orca/5.0.2
+module load orca/5.0.4
 module load xtb/6.5.1
 module load excstda/1.2
 module load libraries/libgfortran/5
@@ -65,26 +65,22 @@ module load libraries/libgfortran/5
 
 source "/home/guests/ychen/mb/env/bin/activate"
 
-python3 main.py > py.out 2>&1 &
+python3 -u main.py in.inp > a.log 2>&1 &
+
 wait
 
 shopt -s extglob
 rm output*
 
-for file in $(ls $tdir/*) ; do
-  if [[ -d $file ]];then
-    cp -r $file $SLURM_SUBMIT_DIR
-  elif [[ "$file" == *.json ]]; then
-    cp $file $SLURM_SUBMIT_DIR
-  fi
-done
+cp -r ./!(*tmp*)  $SLURM_SUBMIT_DIR/ && rm -rf $tdir
 
-rm -rf $tdir
 cd  $SLURM_SUBMIT_DIR
+rm *.py
 
 
 
-      
+
+
 
 
 

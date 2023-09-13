@@ -16,7 +16,7 @@
 
 ### beginning of executable commands
 # Note: the OMP_NUM_THREADS envvar is set automatically - do not overwrite!
-export MKL_NUM_THREADS=10
+#export MKL_NUM_THREADS=10
 #export OMP_NUM_THREADS=10
 
 your_cleanup_function() {
