@@ -6,7 +6,7 @@ import json
 import copy
 import random
 import traceback
-
+import math
 import numpy as np
 import pandas as pd
 
@@ -23,7 +23,11 @@ def creat_randomfolder(wd):
     if not os.path.isdir(f'{wd}/{random_name}'):
         os.makedirs(f'{wd}/{random_name}')
     else:
-        shutil.rmtree(f'{wd}/{random_name}', ignore_errors=True)
+        try:
+            shutil.rmtree(f'{wd}/{random_name}', ignore_errors=True)
+            os.rmdir(f'{wd}/{random_name}')
+        except:
+            pass
         os.makedirs(f'{wd}/{random_name}')
     os.chdir(f'{wd}/{random_name}')
     return random_name
@@ -42,13 +46,13 @@ def write_xyz(xyz, name):
         f.write('\n')
 
 
-def xtb_ml(xtbwd, charg, alpb=None):
+def xtb_ml(xtbwd, charg,uhf, alpb=None):
     if alpb is not None:
         alpb = [alpb][0]
-        cmd = f'{xtbwd} coord.xyz --ml_feature -c {charg} --alpb {alpb}  > xtb.out'
+        cmd = f'{xtbwd} coord.xyz --ml_feature -c {charg} --uhf {uhf} --alpb {alpb}  > xtb.out'
     else:
-        cmd = f'{xtbwd} coord.xyz --ml_feature -c {charg}  > xtb.out'
-    print(cmd)
+        cmd = f'{xtbwd} coord.xyz --ml_feature -c {charg} --uhf {uhf}   > xtb.out'
+    # print(cmd)
     subprocess.run(cmd, shell=True)
 
 
@@ -71,9 +75,27 @@ def get_charge(coord_new, coord_old, chargfile):
     charg = 0
     for i in nat_l:
         charg += float(chargfile.iloc[i, 0])
-    charg = int(np.round(charg))
 
-    return charg
+    # tmp set homogeneous dissociation
+    a = int(math.modf(charg)[1])
+    if abs(charg - a) >= 0.5:
+        return int(np.round(charg))
+    else:
+        return a
+
+
+def get_uhf_from_excprep(excprepoutwd,fnr):
+    uhf = {}
+    with open(f'{excprepoutwd}', 'r+') as f:
+        lines = f.readlines()
+    for i in range(1,fnr+1):
+        for j in lines:
+            if f"{str(i)}:" in j:
+                if "UHF" not in j:
+                    uhf[i] = 0
+                else:
+                    uhf[i] = int(re.findall(r'\-?\d+\.?\d*', str(re.findall(re.compile(r'[(](.*?)[)]', re.S), j)))[0])
+    return uhf
 
 
 def get_nelectron(xtboutwd):
@@ -115,7 +137,7 @@ def collect_energy(rec, wd, name, type):
         except:
             traceback.print_exc()
             print(f"{name}, sp_{type} energy is wrong")
-            rec[f'{name}'][f'sp_{type}'] = 0
+            rec[f'{name}'][f'sp_{type}'] = 'inf'
     else:
         nat = rec[f'{name}']['coord'].shape[0]
         if nat == 1 and rec[f'{name}']['coord'].iloc[0, 0] in ["H", "h"]:
@@ -142,6 +164,7 @@ def write_rec(rec, td, filename):
 
 
 def testcrop(wd, coord):
+    # retrun true if sturc is stable
     pwd = os.getcwd()
     f = creat_randomfolder(wd)
     write_xyz(coord, 'coord')
@@ -153,3 +176,34 @@ def testcrop(wd, coord):
         return False
     else:
         return True
+
+
+def boltzmanp(a):
+    # a: gap or wb(wboe)
+
+    ev2j = 1.602176634 * pow(10, -19)
+    return np.exp(-a * ev2j / (1.38 * pow(10, -23) * 1000))
+
+
+def lowestgeom(infile):
+    # input is .log file
+    with open(infile, 'r') as f:
+        f.seek(0, 0)
+        first = f.readline()
+        atnr = int(first.split('\n')[0])
+        f.seek(0, 0)
+        d = {}
+        test = f.readlines()
+        for i in range(0, len(test), atnr + 2):
+            tmp = [test[j] for j in range(i + 1, i + atnr + 2)]
+            try:
+                energy = float(re.findall(r'\-?\d+\.?\d*', tmp[0].split(':')[1])[0])
+            except:
+                energy = 'inf'
+            d[energy] = tmp
+        a = min(d, key=d.get)
+        outlist = [str(atnr) + '\n'] + d[a]
+        return outlist
+
+
+
