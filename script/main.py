@@ -1,11 +1,15 @@
+import builtins
 import os
 import shutil
-import sys
 from argparse import ArgumentParser
 from read import read_input, prepare, update_dict
 from cycle import reactionnetwork
 import time
 import billiard as multiprocessing
+from multiprocessing import set_start_method
+from functools import partial
+import sys
+
 
 if __name__ == "__main__":
     parser = ArgumentParser(
@@ -21,39 +25,41 @@ if __name__ == "__main__":
 
     parser.add_argument("in_file", type=str, help="The input file")
 
-    # parser.add_argument(
-    #     "-c", "--charg",
-    #     default=",",
-    #     dest="charg",
-    #     help="The separator to change to"
-    # )
-
     args = parser.parse_args()
 
     import warnings
-
     warnings.filterwarnings("ignore")
+    set_start_method('spawn')
+
 
     kwargs, rec = read_input(args.in_file)
+    print(kwargs)
+    if kwargs.get('platform') == 0:
+        num_cores = int(os.getenv('OMP_NUM_THREADS'))
+        kwargs['num_cores'] = num_cores
+
+    else:
+        num_cores = 4
+        kwargs['num_cores'] = 4
     if not rec:
         print("Failed to read input")
         sys.exit()
 
     # determine the working folder
     wd = os.path.abspath(os.path.dirname(args.in_file))
-    # if not os.path.isabs(wd):
-    #     wd = os.path.abspath(args.in_file)
-    #     if not wd:
-    #         wd = "."
-    #     else:
-    #         wd = os.path.join('.', wd)
-    print(f" working folder is {wd}")
+    print(f"working folder is {wd}")
+    print("num_cores: ",num_cores)
+
+    print(sys.version)
+    print(sys.path)
 
     # clean up old resultes
     l = os.listdir(wd)
     for i in l:
         if os.path.isdir(f'{wd}/{i}'):
             shutil.rmtree(f'{wd}/{i}')
+        elif i.endswith('out'):
+            os.remove(f'{wd}/{i}')
         else:
             if i.endswith('json'):
                 os.remove(f'{wd}/{i}')
@@ -62,17 +68,16 @@ if __name__ == "__main__":
     t1 = time.time()
 
     # prepare reactants before cycle: do opt and sp and get basic propoties for each reactant
-    pool = multiprocessing.Pool(len(rec.keys()))
-    results = []
-    for i in list(rec.keys()):
-        results.append(pool.apply_async(prepare, (wd, i, rec), kwargs))
-    pool.close()
-    pool.join()
-
-    for res in results:
-        rec = update_dict(rec, res.get())
+    with multiprocessing.Pool(num_cores) as pool:
+        items = [(wd, i, rec) for i in list(rec.keys())]
+        mapfunc = partial(prepare, **kwargs)
+        for result in pool.starmap(mapfunc, items):
+            rec = update_dict(rec, result)
 
     # begin cycle
+    pid = str(os.getpid())
+    print(pid)
+    kwargs['pid'] = pid
     rec = reactionnetwork(rec, wd, kwargs=kwargs)
 
     # recording finishing time
