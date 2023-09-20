@@ -61,7 +61,7 @@ def read_input(path):
         # read calculation setting
         if "intercands" in i:
             kwargs['intercands'] = int([j for j in re.split("\t| |\n", i)
-                                        if j != "" and "intercands" not in j][0])
+                                        if j != "" and "intercands" not in j][0]) #  intermolecular candidats for each two structures
         if "discands" in i:
             kwargs['discands'] = int([j for j in re.split("\t| |\n", i)
                                       if j != "" and "discands" not in j][0])
@@ -79,6 +79,9 @@ def read_input(path):
         else:
             kwargs['autoscreen'] = False
 
+        if "etemp" in i:
+            kwargs['etemp'] = int([j for j in re.split("\t| |\n", i)
+                                  if j != "" and "etemp" not in j][0])
         if "cycle" in i:
             kwargs['cycle'] = int([j for j in re.split("\t| |\n", i)
                                    if j != "" and "cycle" not in j][0])
@@ -94,6 +97,9 @@ def read_input(path):
         if "hydrogen" in i:
             kwargs['hydrogen'] = Convert([j for j in re.split("\t| |\n", i)
                                           if j != "" and "hydrogen" not in j][0])  # for disssociation consider H
+        if "homogene_dissoziation" in i:
+            kwargs['homogene_dissoziation'] = Convert([j for j in re.split("\t| |\n", i)
+                                          if j != "" and "homogene_dissoziation" not in j][0])  # for disssociation consider H
             # element
         if "platform" in i:
             kwargs['platform'] = int([j for j in re.split("\t| |\n", i)
@@ -104,7 +110,9 @@ def read_input(path):
         if "constrain_strength" in i:
             kwargs['constrain_strength'] = int([j for j in re.split("\t| |\n", i)
                                                 if j != "" and "constrain_strength" not in j][0])
-            # constrain_strength in xtbscan
+            # constrain_strength: strong(constrain_strength in xtbscan = 5, pull dis = 1.5r )
+            # constrain_strength: default(constrain_strength in xtbscan = 2, pull dis = 5r )
+
     return kwargs, rec
 
 
