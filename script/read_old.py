@@ -3,6 +3,7 @@ import os
 import re
 import sys
 import time
+import toml
 import pandas as pd
 from collections import Counter
 from get_molbar import do_molbar
