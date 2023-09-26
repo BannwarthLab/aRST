@@ -24,22 +24,16 @@ def remove_file(old_path, new_path):
         shutil.move(src, dst)
 
 
-def call_orca_dft(wd, method, charg, m, nat, opt=True, alpb=None, mode=0):
+def call_orca_dft(wd, charg, m, caltyp='sp', **kwargs):
     os.chdir(wd)
-    if nat > 1:
-        caltyp = 'sp OPT'
+    pcm = kwargs.get("pcm", None)
+    method = kwargs.get("dft_level", "r2scan-3c")
+    mode = kwargs.get("mode", 0)
+    if pcm is not None:
+        solmode = f"CPCM({pcm})"
     else:
-        caltyp = 'sp'
-    if not opt:  # Manually disable optimization
-        caltyp = 'sp'
-    solmode = ""
-    if charg:
-        if alpb is None:
-            print(f"please use CPCM mode for {wd}")
-        else:
-            if alpb == "h2o" or "H2O":
-                alpb = "water"
-            solmode = f"CPCM({alpb})"
+        solmode = ''
+
     if m == 1:
         caltyp2 = "RKS"
     else:
@@ -47,8 +41,7 @@ def call_orca_dft(wd, method, charg, m, nat, opt=True, alpb=None, mode=0):
     # f"pal nprocs 16 end\n"\
     # f"%SCF MAXITER 200 end\n" \
     cmd = f"! {method} {caltyp} {caltyp2} {solmode}\n" \
-          f"%SCF MAXITER 200 end\n"\
-          f""\
+          f"" \
           f"* xyzfile {charg} {m} coord.xyz "
     with open(f'{wd}/orca.inp', 'w') as f:
         f.write(cmd)
@@ -61,7 +54,7 @@ def call_orca_dft(wd, method, charg, m, nat, opt=True, alpb=None, mode=0):
         os.chdir(tmpd)
         rc = call_subprocess(cmd, 'orca')
         if rc != 0:
-            print("calling orca wrong")
+            print(f"{wd} calling orca wrong")
         remove_file(tmpd, wd)
         os.chdir(wd)
         if os.path.isdir(tmpd):
@@ -78,21 +71,20 @@ def call_orca_dft(wd, method, charg, m, nat, opt=True, alpb=None, mode=0):
     else:  # default
         rc = call_subprocess(cmd, 'orca')
         if rc != 0:
-            print("calling orca wrong")
-        return
+            print(f"{wd} calling orca wrong")
+        return rc
 
 
-def call_xtb(wd, charg, nat, alpb=None, mode=0, uhf=0):
+def call_xtb(wd, charg, caltyp="", uhf=0, **kwargs):
     os.chdir(wd)
-    if nat > 1:
-        caltyp = '--opt vtight'
-    else:
-        caltyp = ' '
+    alpb = kwargs.get("alpb", None)
+    mode = kwargs.get("mode", 0)
+    etemp = kwargs.get("etemp", str(300))
     if alpb is None:
         solmode = ""
     else:
         solmode = f'--alpb {alpb}'
-    command = f'xtb coord.xyz {caltyp} -c {charg} --uhf {uhf} {solmode}'
+    command = f'xtb coord.xyz {caltyp} -c {charg} --uhf {uhf} {solmode} --etemp {etemp}'
 
     # f'&& tac xtb.out | grep -a \'TOTAL ENERGY\' |awk \'{{print $4}}\' > ENERGY &\n'
     # if uhf is not None:
@@ -108,7 +100,7 @@ def call_xtb(wd, charg, nat, alpb=None, mode=0, uhf=0):
         os.chdir(wd)
         if os.path.isdir(tmpd):
             shutil.rmtree(tmpd)
-        return
+        return rc
     elif mode == 2:  # running in master node but submit jobs using slurm
         root_path = os.path.dirname(__file__)
         shutil.copy(f'{root_path}/submit/submit_xtbopt.sh', wd)
@@ -120,25 +112,26 @@ def call_xtb(wd, charg, nat, alpb=None, mode=0, uhf=0):
         rc = call_subprocess(command, 'xtb')
         if rc != 0:
             print("calling xtb wrong")
-        return
+        return rc
 
 
-def call_xtb_scan(wd, charg,uhf, alpb=None, mode=0, **kw):
+def call_xtb_scan(wd, charg, uhf, **kwargs):
     os.chdir(wd)
-    kw = kw.get('kw')
-    at1 = kw['at1']
-    at2 = kw['at2']
-    d1 = kw['d1']
-    d2 = kw['d2']
-    etmp = kw['etmp']
-    concerted_trigger = kw['concerted_trigger']
-    constrain_strength = kw['constrain_strength']
+    at1 = kwargs.get('at1')
+    at2 = kwargs.get('at2')
+    d1 = kwargs.get('d1')
+    d2 = kwargs.get('d2')
+    alpb = kwargs.get("alpb", None)
+    mode = kwargs.get("mode", 0)
+    etemp = kwargs.get("etemp", str(300))
+    concerted_trigger = kwargs.get("concerted_trigger",False)
+    constrain_strength = kwargs.get("constrain_strength", str(1))
+    at3 = kwargs.get('at3',None)
+    at4 = kwargs.get('at4',None)
+    d_34_start = kwargs.get('d_34_start',None)
+    d_34_end = kwargs.get("d_34_end",None)
 
     if concerted_trigger:
-        at3 = kw['at3']
-        at4 = kw['at4']
-        d_34_start = kw['d_34_start']
-        d_34_end = kw['d_34_end']
         with open('scan.inp', 'w') as f3:
             f3.write(f'$constrain\n'
                      f'force constant={constrain_strength}\n'
@@ -157,7 +150,7 @@ def call_xtb_scan(wd, charg,uhf, alpb=None, mode=0, **kw):
         solmode = ""
     else:
         solmode = f'--alpb {alpb}'
-    command = f'xtb coord.xyz --opt  -c {charg} --uhf {uhf} {solmode} --etemp {etmp} --input scan.inp'
+    command = f'xtb coord.xyz --opt  -c {charg} --uhf {uhf} {solmode} --etemp {etemp} --input scan.inp'
 
     if mode == 1:
         tmpd = mkdtemp()
@@ -186,6 +179,23 @@ def call_xtb_scan(wd, charg,uhf, alpb=None, mode=0, **kw):
         if rc != 0:
             print("calling scan wrong")
         return
+
+
+def call_xtb_ml(wd, charg, uhf=0, **kwargs):
+    os.chdir(wd)
+    alpb = kwargs.get("alpb", None)
+    xtbwd = kwargs.get("xtb_wd")
+    etemp = kwargs.get("etemp", str(300))
+    if alpb is not None:
+        cmd = f'{xtbwd} coord.xyz --ml_feature --etemp {etemp} -c {charg} --uhf {uhf} --alpb {alpb}'
+    else:
+        cmd = f'{xtbwd} coord.xyz --ml_feature --etemp {etemp} -c {charg} --uhf {uhf}'
+
+    # run ml
+    # subprocess.run(cmd, shell=True)
+    p = subprocess.Popen(cmd, stdout=open(f'xtb.out', 'w'), stderr=subprocess.PIPE, shell=True)
+    p.wait()
+    return
 
 
 def call_subprocess(cmd, typ):
