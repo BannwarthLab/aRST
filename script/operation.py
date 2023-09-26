@@ -46,16 +46,6 @@ def write_xyz(xyz, name):
         f.write('\n')
 
 
-def xtb_ml(xtbwd, charg,uhf, alpb=None):
-    if alpb is not None:
-        alpb = [alpb][0]
-        cmd = f'{xtbwd} coord.xyz --ml_feature -c {charg} --uhf {uhf} --alpb {alpb}  > xtb.out'
-    else:
-        cmd = f'{xtbwd} coord.xyz --ml_feature -c {charg} --uhf {uhf}   > xtb.out'
-    # print(cmd)
-    subprocess.run(cmd, shell=True)
-
-
 def seperate():
     command = f'excprep coord.xyz > e.out'
     subprocess.run(command, shell=True)
@@ -110,41 +100,6 @@ def get_nelectron(xtboutwd):
         else:
             ne = 0
     return ne
-
-
-def collect_energy(rec, wd, name, type):
-    if os.path.isfile(f'{wd}/ENERGY'):
-        try:
-            with open(f'{wd}/ENERGY', 'r') as f:
-                sp_eh = float(f.readlines()[0])
-            if f'sp_{type}' in rec[f'{name}'].keys() and '_' in wd.split('/')[-1]:  # only for m= 1 or 3
-                old_energy = rec[f'{name}'][f'sp_{type}']
-                if sp_eh < old_energy:
-                    rec[f'{name}'][f'sp_{type}'] = sp_eh
-                    rec[f'{name}']['m'] = wd.split('/')[-1].split('_')[-1]
-                    if os.path.isfile(f'{wd}/orca.xyz'):
-                        rec[f'{name}']['coord'] = pd.read_table(f'{wd}/orca.xyz', header=None, skiprows=2, sep='\s+')
-                    else:
-                        rec[f'{name}']['coord'] = pd.read_table(f'{wd}/coord.xyz', header=None, skiprows=2, sep='\s+')
-            else:
-                rec[f'{name}'][f'sp_{type}'] = sp_eh
-                if isinstance(rec[f'{name}']['m'], list) and '_' in wd.split('/')[-1]:
-                    rec[f'{name}']['m'] = wd.split('/')[-1].split('_')[-1]
-                    if os.path.isfile(f'{wd}/orca.xyz'):
-                        rec[f'{name}']['coord'] = pd.read_table(f'{wd}/orca.xyz', header=None, skiprows=2, sep='\s+')
-                    else:
-                        rec[f'{name}']['coord'] = pd.read_table(f'{wd}/coord.xyz', header=None, skiprows=2, sep='\s+')
-        except:
-            traceback.print_exc()
-            print(f"{name}, sp_{type} energy is wrong")
-            rec[f'{name}'][f'sp_{type}'] = 'inf'
-    else:
-        nat = rec[f'{name}']['coord'].shape[0]
-        if nat == 1 and rec[f'{name}']['coord'].iloc[0, 0] in ["H", "h"]:
-            rec[f'{name}'][f'sp_{type}'] = 0
-        else:
-            rec[f'{name}'][f'sp_{type}'] = float('inf')
-    return rec
 
 
 def write_rec(rec, td, filename):
@@ -204,6 +159,44 @@ def lowestgeom(infile):
         a = min(d, key=d.get)
         outlist = [str(atnr) + '\n'] + d[a]
         return outlist
+
+
+def collect_sp_xyz(rec, reckey, wd, typ):
+    speh = float('inf')
+    if typ == 'gfn2':
+        if os.path.isfile(f'{wd}/ENERGY'):
+            with open(f'{wd}/ENERGY', 'r') as f:
+                speh = float(f.readlines()[0])
+        if 'sp_gfn2' not in rec[reckey].keys() or rec[reckey]['sp_gfn2'] > speh:
+            rec[reckey]['sp_gfn2'] = speh
+            if os.path.isfile(f'{wd}/xtbopt.xyz'):
+                rec[reckey]['coord'] = pd.read_table(f'{wd}/xtbopt.xyz', header=None, skiprows=2, sep='\s+')
+            else:
+                rec[reckey]['coord'] = pd.read_table(f'{wd}/coord.xyz', header=None, skiprows=2, sep='\s+')
+            nat = rec[reckey]['coord'].shape[0]
+            if nat == 1 and rec[reckey]['coord'].iloc[0, 0] in ["H", "h"]:
+                rec[reckey]['sp_gfn2'] = 0
+    else:
+        if os.path.isfile(f'{wd}/ENERGY'):
+            with open(f'{wd}/ENERGY', 'r') as f:
+                speh = float(f.readlines()[0])
+        if 'sp_dft' not in rec[reckey].keys() or rec[reckey]['sp_dft'] > speh:
+            rec[reckey]['sp_dft'] = speh
+            if os.path.isfile(f'{wd}/orca.xyz'):
+                rec[reckey]['coord'] = pd.read_table(f'{wd}/orca.xyz', header=None, skiprows=2, sep='\s+')
+            else:
+                rec[reckey]['coord'] = pd.read_table(f'{wd}/coord.xyz', header=None, skiprows=2, sep='\s+')
+            nat = rec[reckey]['coord'].shape[0]
+            if nat == 1 and rec[reckey]['coord'].iloc[0, 0] in ["H", "h"]:
+                rec[reckey]['sp_dft'] = 0
+
+            with open(f'{wd}/orca.inp', 'r') as f:
+                string = f.read()
+            pattern = r'\* xyzfile \d+ (\d+) coord\.xyz'
+            m = re.search(pattern, string).group(1)
+            rec[reckey]['m'] = int(m)
+    return rec
+
 
 
 
