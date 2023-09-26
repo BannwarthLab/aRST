@@ -1,0 +1,45 @@
+[geom.reactant1]
+name = "13R1.xyz"
+charge = 0
+multiplicity = 1
+
+[geom.reactant2]
+name = "13R2.xyz"
+charge = 0
+multiplicity = 2
+
+# product optional, only used to compare simulation results
+
+[geom.product1]
+name = "13P1.xyz"
+charge = 0
+multiplicity = 2
+
+[geom.product2]
+name = "13P2.xyz"
+charge = 0
+multiplicity = 1
+
+[searching_setting]
+intermolecular_pair = 2 # number of intermolecular pairs to be searched per each two reactants
+dissociation = 2 # number of dissociation possibility per each cycle
+hydrogen = false # disable hydrogen bonds for dissociation
+cycle = 2 # search step
+elim = 300 # energy limitation to kill this reaction path, unit kcal/mol
+molbar = true
+
+[xtb_setting]
+alpb = "h2o" # solvent mode for ml,xtbopt,xtbscan process
+etemp = 1000 # electronic tmp for ml,xtbopt,xtbscan process
+xtb_wd = "/home/guests/ychen/xtb_mloutput/_build/xtb"
+homogene = true # homogene dissociation
+constrain_strength = 8 # force constant for xtb scan
+
+[orca_setting]
+dft_level = "r2scan-3c"
+dft_opt = true
+initial_dftopt = true
+pcm = "water"
+
+
+
