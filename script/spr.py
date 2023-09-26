@@ -21,23 +21,6 @@ def get_key(dict, value):
     return [k for k, v in dict.items() if v == value][0]
 
 
-# def litgap(react_d, hoao_df, luao_df):
-#
-#     tmp1 = luao_df.min().tolist()
-#     tmp2 = hoao_df.max().tolist()
-#     tmp2c = copy.deepcopy(tmp2)
-#     tmp2c.pop(tmp1.index(min(tmp1)))
-#     lit1 = min(tmp1) - max(tmp2c)
-#
-#     tmp1c = copy.deepcopy(tmp1)
-#     tmp1c.pop(tmp2.index(max(tmp2)))
-#     lit2 = min(tmp1c) - max(tmp2c)
-#     del_l = [i for i in react_d.keys() if i < min(lit1, lit2)]
-#     for i in del_l:
-#         del react_d[i]
-#     return react_d
-
-
 def fill_miss_data(l, typ):
     for i in l:
         for j in i:
@@ -54,8 +37,8 @@ def build_gap_d(react_d, h_df, l_df):
     # {6.826: ['[1, 2]', '[[1, 1]]'], 8.268: ['[1, 2]', '[[3, 1]]'], 7.477: ['[2, 1]', '[[1, 2]]'], 7.878: ['[1, 2]',
     # '[[1, 2]]']}
 
-    for i in list(h_df.columns):
-        for j in list(l_df.columns):
+    for i in range(len(h_df.columns)):
+        for j in range(len(l_df.columns)):
             if i != j:
                 struc1 = i + 1
                 struc2 = j + 1
@@ -67,7 +50,7 @@ def build_gap_d(react_d, h_df, l_df):
                         e1 = float(h_df.loc[at1][i])
                         e2 = float(l_df.loc[at2][j])
 
-                        gap = np.round(e2 - e1,4)
+                        gap = np.round(e2 - e1, 4)
                         at1 += 1  # index to atom number
                         at2 += 1
                         value1 = [f'{[struc1, struc2]}', f'{[[at1, at2]]}']
@@ -97,7 +80,7 @@ def build_gap_d(react_d, h_df, l_df):
     for gap in react_d.keys():
         value = react_d[gap]
         # print(f'gap = {gap}, value = {value}')
-        gap_appoxi = round(gap,4)
+        gap_appoxi = round(gap, 4)
         if gap_appoxi not in result_dict.keys():
             result_dict[gap_appoxi] = value
         else:
@@ -122,7 +105,7 @@ def build_gap_d(react_d, h_df, l_df):
                             value_old[1] = str(at_l)
                             result_dict[gap_appoxi] = value_old
 
-#     print("hier",result_dict)
+    #     print("hier",result_dict)
     return result_dict
 
 
@@ -138,16 +121,16 @@ def spr_inter_new(reactants, rec):
     at_l4 = []
 
     # find max in hoao and min in luao
-    if 'hoao_a' in list(rec[reactants[0]]['ml_feature'].columns):
-        HOAO_a = [list(rec[k]['ml_feature']['hoao_a']) for k in reactants]
-        HOAO_b = [list(rec[k]['ml_feature']['hoao_b']) for k in reactants]
-        LUAO_a = [list(rec[k]['ml_feature']['luao_a']) for k in reactants]
-        LUAO_b = [list(rec[k]['ml_feature']['luao_b']) for k in reactants]
+    if 'HOAO_a (eV)' in list(rec[reactants[0]]['ml_feature'].columns):
+        HOAO_a = [list(rec[k]['ml_feature']['HOAO_a (eV)']) for k in reactants]
+        HOAO_b = [list(rec[k]['ml_feature']['HOAO_b (eV)']) for k in reactants]
+        LUAO_a = [list(rec[k]['ml_feature']['LUAO_a (eV)']) for k in reactants]
+        LUAO_b = [list(rec[k]['ml_feature']['LUAO_b (eV)']) for k in reactants]
     else:
-        HOAO_a = [list(rec[k]['ml_feature']['hoao']) for k in reactants]
-        HOAO_b = [list(rec[k]['ml_feature']['hoao']) for k in reactants]
-        LUAO_a = [list(rec[k]['ml_feature']['luao']) for k in reactants]
-        LUAO_b = [list(rec[k]['ml_feature']['luao']) for k in reactants]
+        HOAO_a = [list(rec[k]['ml_feature']['HOAO (eV)']) for k in reactants]
+        HOAO_b = [list(rec[k]['ml_feature']['HOAO (eV)']) for k in reactants]
+        LUAO_a = [list(rec[k]['ml_feature']['LUAO (eV)']) for k in reactants]
+        LUAO_b = [list(rec[k]['ml_feature']['LUAO (eV)']) for k in reactants]
     # replace the missing data
     HOAO_a = fill_miss_data(HOAO_a, 'h')
     HOAO_b = fill_miss_data(HOAO_b, 'h')
@@ -233,10 +216,6 @@ def spr_inter_new(reactants, rec):
     luaoa_df = pd.DataFrame(luaoa_d, index=[i for i in at_l3], columns=[i for i in range(len(reactants))])
     luaob_df = pd.DataFrame(luaob_d, index=[i for i in at_l4], columns=[i for i in range(len(reactants))])
 
-    print(hoaoa_df)
-    print(hoaob_df)
-    print(luaoa_df)
-    print(luaob_df)
     react_ss = {}
     react_ss = build_gap_d(react_ss, hoaoa_df, luaoa_df)
     # react_ss = litgap(react_ss, hoaoa_df, luaoa_df)
@@ -245,14 +224,20 @@ def spr_inter_new(reactants, rec):
 
     # react_ss = litgap(react_ss, hoaob_df, luaob_df)
 
-
     react_os = {}
     react_os = build_gap_d(react_os, hoaoa_df, luaob_df)
     # react_os = litgap(react_os, hoaoa_df, luaob_df)
     react_os = build_gap_d(react_os, hoaob_df, luaoa_df)
     # react_os = litgap(react_os, hoaob_df, luaoa_df)
 
-    return react_os, react_ss
+    # for print out
+    for i in [hoaoa_df, hoaob_df, luaoa_df, luaob_df]:
+        i.columns = [rec[reactants[i]]['mb'].split('|')[2] for i in range(len(reactants))]
+    hoaoa_df.index.name = 'HOAO_a'
+    hoaob_df.index.name = 'HOAO_b'
+    luaoa_df.index.name = 'LUAO_a'
+    luaob_df.index.name = 'LUAO_b'
+    return react_os, react_ss, hoaoa_df, hoaob_df, luaoa_df, luaob_df
 
 
 def spr_intra_new(reactants, rec, hydrogen=True):
@@ -263,12 +248,9 @@ def spr_intra_new(reactants, rec, hydrogen=True):
             wboe = rec[smi]['wboe']
             mlfeatures = rec[smi]['ml_feature']
             if isinstance(wboe, pd.DataFrame):
-                # wboe = pd.read_csv(f'{wd_pre}/{smi}/ml/wboe', header=None, sep='\s+')
-                # if os.path.getsize(f'{wd_pre}/{smi}/ml/wboe') != 0:
-                #     mlfeatures = pd.read_csv(f'{wd_pre}/{smi}/ml/ml_feature.csv')
                 tmp = {}
                 for i in range(wboe.shape[0]):
-                    dagp = wboe.iloc[i, 3]
+                    dagp = wboe.iloc[i, 2]
                     at_1, at_2 = wboe.iloc[i, 0], wboe.iloc[i, 1]
                     # try:
                     #     cn_1 = int(mlfeatures.loc[at_1 - 1, 'coordination number'])
