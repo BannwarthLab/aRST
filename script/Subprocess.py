@@ -6,11 +6,11 @@ import time
 import traceback
 import copy
 import pandas as pd
-from read import existreaction
 from get_molbar import do_molbar
-from callsys import call_xtb, call_orca_dft
 from operation import seperate, get_charge, creat_folder, write_xyz, \
-    collect_energy, get_nelectron, testcrop, lowestgeom, get_uhf_from_excprep
+    get_nelectron, testcrop, lowestgeom, get_uhf_from_excprep, collect_sp_xyz
+from collections import Counter
+from struc import Struc
 
 
 def print(text):
@@ -18,12 +18,8 @@ def print(text):
     os.fsync(sys.stdout)
 
 
-def subprocess(wd, path_i, reactants, total_dict, rec, method, alpb=None, reactor=False, mode=0):
-    if alpb is not None:
-        alpb = [alpb][0]
-
+def check_xtb_scan(wd, path_i):
     del_l = []
-
     if not os.path.exists(f'{wd}/{path_i}/scan/xtb.out'):
         print(f'{wd}/{path_i}/scan/ failed')
         shutil.rmtree(f'{wd}/{path_i}', ignore_errors=True)
@@ -39,16 +35,24 @@ def subprocess(wd, path_i, reactants, total_dict, rec, method, alpb=None, reacto
             #         f.write(i)
             shutil.copy(f'{wd}/{path_i}/scan/xtbopt.xyz', f'{wd}/{path_i}/coord.xyz')
         elif os.path.isfile(f'{wd}/{path_i}/scan/NOT_CONVERGED'):
-            print(f'{path_i}/scan not converging, check etmp setting')
+            print(f'{path_i}/scan not converging, check etemp setting')
             shutil.rmtree(f'{wd}/{path_i}', ignore_errors=True)
             del_l.append(path_i)
         else:
             print(f'{path_i}/scan failed')
             shutil.move(f'{wd}/{path_i}', f'{wd}/{path_i}_check')
             del_l.append(path_i)
+    return del_l
+
+
+def subprocess(wd, path_i, reactants, total_dict, rec, reactor, **kwargs):
+    del_l = []
+    xtb_setting = kwargs.get("xtb_setting")
+    orca_setting = kwargs.get("orca_setting")
+    homogene_dissoziation = kwargs.get("searching_setting").get('homogene', False)
 
     # seperate product for sucsses scan path
-    if not del_l and os.path.isdir(f'{wd}/{path_i}'):
+    if os.path.isdir(f'{wd}/{path_i}'):
         os.chdir(f'{wd}/{path_i}')
         seperate()
 
@@ -63,7 +67,8 @@ def subprocess(wd, path_i, reactants, total_dict, rec, method, alpb=None, reacto
             for j in reactants:
                 if j not in reactants_tmp and j in rec.keys():
                     rec[f'{path_i}/{str(count + nproduct)}'] = copy.deepcopy(rec[j])
-                    rec[f'{path_i}/{str(count + nproduct)}']['name'] = f'{path_i}/{str(count + nproduct)}'
+                    rec[f'{path_i}/{str(count + nproduct)}']['name'] = \
+                        rec[f'{path_i}/{str(count + nproduct)}']['mb'].split('|')[2]
                     # shutil.copytree(f'{wd}/{j}',f'{wd}/{path_i}/{str(count + nproduct)}')
                     count += 1
 
@@ -82,131 +87,98 @@ def subprocess(wd, path_i, reactants, total_dict, rec, method, alpb=None, reacto
             # assign uhf
             uhf_j = uhf_d[int(j)]
 
-            # xtb opt
-            creat_folder(f'{wd}/{path_i}/{j}/xtbopt')  # not only for opt, also sp
-            write_xyz(xyz_j, 'coord')
-            call_xtb(f'{wd}/{path_i}/{j}/xtbopt', charg_j, nat_j, uhf=uhf_j, alpb=alpb, mode=mode)
+            # xtb opt, try to calculate only with charge
+            Struc(xyz_j, 1, charg_j).runxtb(f'{wd}/{path_i}/{j}/xtbopt', **xtb_setting)
 
-            if os.path.isfile(f'{wd}/{path_i}/{j}/xtbopt/xtb.out'):
-                nel = get_nelectron(f'{wd}/{path_i}/{j}/xtbopt/xtb.out')
-                if nel % 2 == 0 and uhf_j % 2 != 0:  # even nel with open-shell
-                    tmp_charg = charg_j
-                    if len(fragment_l) ==1: # determined with charge equilibrium
-                        charg_j = sum([rec[k]['charge'] for k in reactants])
-                        uhf_j = 0
-                    else: # excrop Priority
-                        charg_j = 0
-                    # try to redo xtbopt
-                    call_xtb(f'{wd}/{path_i}/{j}/xtbopt', charg_j, nat_j, uhf=uhf_j, alpb=alpb, mode=mode)
-                    if os.path.isfile(f'{wd}/{path_i}/{j}/xtbopt/xtb.out'):
-                        nel = get_nelectron(f'{wd}/{path_i}/{j}/xtbopt/xtb.out')
-                        if os.path.isfile(f'{wd}/{path_i}/{j}/xtbopt/xtbopt.xyz'):
-                            xyz_j = pd.read_table(f'{wd}/{path_i}/{j}/xtbopt/xtbopt.xyz', header=None,
-                                                  skiprows=2, sep='\s+')
-                    else: # if reopt faild, roll back to old charge and uhf = 0
-                        charg_j = tmp_charg
-                        uhf_j = 0
+            # correct uhf and charge (homogene_dissoziation)
+            nel_j = get_nelectron(f'{wd}/{path_i}/{j}/xtbopt/xtb.out')
+            if nel_j % 2 == 0 and uhf_j % 2 != 0:
+                if homogene_dissoziation:
+                    if charg_j > 0:
+                        charg_j -= 1
+                    else:
+                        charg_j += 1
                 else:
-                    if os.path.isfile(f'{wd}/{path_i}/{j}/xtbopt/xtbopt.xyz'):
-                        xyz_j = pd.read_table(f'{wd}/{path_i}/{j}/xtbopt/xtbopt.xyz', header=None,
-                                              skiprows=2, sep='\s+')
-                if testcrop(wd, xyz_j): # if struc stable
-                    m_j = uhf_j+1
+                    uhf_j -= 1
+            elif nel_j % 2 != 0 and uhf_j % 2 == 0:
+                if homogene_dissoziation:
+                    if charg_j > 0:
+                        charg_j -= 1
+                    else:
+                        charg_j += 1
+                else:
+                    uhf_j += 1
 
-                    #
-                    #
-                    # if nel % 2 != 0:
-                    #     m_j = 2  # open shell structure, considerd as dublet
-                    # else:
-                    #     if method is not None:
-                    #         m_j = [1, 3]  # run both option to choose which one more stable
-                    #     else:
-                    #         m_j = 1
+            # try to redo xtbopt
+            rc = Struc(xyz_j, uhf_j + 1, charg_j).runxtb(f'{wd}/{path_i}/{j}/xtbopt', **xtb_setting)
+            if rc != 0 :
+                sys.exit(f'{wd}/{path_i}/{j} redo xtbopt wrong')
+            rec = collect_sp_xyz(rec, f'{path_i}/{j}', f'{wd}/{path_i}/{j}/xtbopt', 'gfn2')
+
+            if testcrop(wd, xyz_j):  # if struc stable
+                # consider S and T for uhf = 0
+                if uhf_j == 0:
+                    if orca_setting.get('dft_level', 'r2scan-3c') == 'gfn2':
+                        m_j = 0
+                    else:
+                        m_j = [1, 3]  # run both option to choose which one more stable
                 else:
-                    m_j = 'inf'
+                    m_j = 2  # open shell structure, considerd as dublet
+
             else:
                 m_j = 'inf'
                 print(f'{wd}/{path_i}/{j}/xtbopt call xtb wrong')
 
             # update rec
             rec[f'{path_i}/{j}']['coord'] = xyz_j
-            rec[f'{path_i}/{j}']['charge'] = charg_j
+            rec[f'{path_i}/{j}']['charge'] = int(charg_j)
             rec[f'{path_i}/{j}']['m'] = m_j  # hier m_j could be a list
-            rec[f'{path_i}/{j}']['name'] = f'{path_i}/{j}'
-            rec = collect_energy(rec, f'{wd}/{path_i}/{j}/xtbopt', f'{path_i}/{j}', "gfn2")
+            rec = collect_sp_xyz(rec, f'{path_i}/{j}', f'{wd}/{path_i}/{j}/xtbopt/', 'gfn2')
 
             # do molbar
-            try:
-                rec[f'{path_i}/{j}']['mb'] = do_molbar(xyz_j, wd)
-            except:
-                print("molbar error")
-                traceback.print_exc()
-                pass
+            rec[f'{path_i}/{j}']['mb'], rec[f'{path_i}/{j}']['name'] = do_molbar(xyz_j, wd)
 
-        # dft cal
-        for j in fragment_l:
-            os.chdir(f'{wd}/{path_i}/{j}')
-            charg = rec[f'{path_i}/{j}']['charge']
-            m = rec[f'{path_i}/{j}']['m']  # hier m could be a list
-            xyz_j = rec[f'{path_i}/{j}']['coord']
-            nat_j = xyz_j.shape[0]
-            if isinstance(m, list):
-                for k in m:
-                    creat_folder(f'{wd}/{path_i}/{j}/orca/orca_{str(k)}')
-                    # for m = 3 run xtbopt --uhf 2 again
-                    write_xyz(xyz_j, 'coord')
-                    if nat_j > 1 and k == 3:
-                        call_xtb(f'{wd}/{path_i}/{j}/orca/orca_{str(k)}', 1, nat_j, alpb=alpb, mode=mode,
-                                 uhf=2)  # hier charged is no use
-                        if os.path.isfile(f'{wd}/{path_i}/{j}/orca/orca_{str(k)}/xtbopt.xyz'):
-                            xyz_j = pd.read_table(f'{wd}/{path_i}/{j}/xtbopt/xtbopt.xyz', header=None,
-                                                  skiprows=2, sep='\s+')
-                            write_xyz(xyz_j, 'coord')
-                    print(f"doing dft for {path_i}/{j}/orca/orca_{str(k)}")
-                    if method is not None:
-                        call_orca_dft(f'{wd}/{path_i}/{j}/orca/orca_{str(k)}', method, charg, k, nat_j, alpb=alpb,
-                                      mode=mode)
-            elif m != 'inf':
-                creat_folder(f'{wd}/{path_i}/{j}/orca')
-                write_xyz(xyz_j, 'coord')
-                print(f"doing dft for {path_i}/{j}")
-                if method is not None:
-                    call_orca_dft(f'{wd}/{path_i}/{j}/orca', method, charg, m, nat_j, alpb=alpb, mode=mode)
-            else:
-                del_l.append(path_i)
-                print(f"{path_i} failed due to m=inf (unstable product)")
-                del rec[f'{path_i}/{j}']
-    return rec, del_l
+        # dft sp cal
+        if orca_setting.get('dft_level', 'r2scan-3c') != 'gfn2':
+            for j in fragment_l:
+                os.chdir(f'{wd}/{path_i}/{j}')
+                charg_j = rec[f'{path_i}/{j}']['charge']
+                m_j = rec[f'{path_i}/{j}']['m']  # hier m could be a list
+                xyz_j = rec[f'{path_i}/{j}']['coord']
+                nat_j = xyz_j.shape[0]
+                if isinstance(m_j, list):
+                    for k in m_j:
+                        if nat_j > 1 and k == 3:
+                            # for m = 3 run xtbopt --uhf 2 again
+                            Struc(xyz_j, 3, charg_j).runxtb(f'{wd}/{path_i}/{j}/orca/orca_{str(k)}', **xtb_setting)
+                            rec = collect_sp_xyz(rec, f'{path_i}/{j}', f'{wd}/{path_i}/{j}/orca/orca_{str(k)}/', 'gfn2')
 
-
-def collect_dft(rec, wd):
-    fragment_l = [k for k in list(rec.keys()) if "sp_dft" not in rec[k] and os.path.isdir(f'{wd}/{k}/orca')]
-    if fragment_l:
-        for j in fragment_l:
-            os.chdir(f'{wd}/{j}')
-            tmp_l = ['orca/' + k for k in os.listdir(f'{wd}/{j}/orca')
-                     if os.path.isdir(f'{wd}/{j}/orca/{k}') and "orca" in k]
-            if not tmp_l:
-                tmp_l = ['orca']
-            for k in tmp_l:
-                if os.path.isfile(f'{wd}/{j}/{k}/orca.out'):
-                    xyz_j = pd.read_table(f'{wd}/{j}/{k}/coord.xyz', header=None, skiprows=2, sep='\s+')
-                    nat_j = xyz_j.shape[0]
-                    if nat_j > 1:
-                        if os.path.isfile(f'{wd}/{j}/{k}/orca.xyz'):
-                            xyz_j = pd.read_table(f'{wd}/{j}/{k}/orca.xyz', header=None, skiprows=2, sep='\s+')
-                    rec[f'{j}']['coord'] = xyz_j
-                    # update rec and specify m and xyz
-                    rec = collect_energy(rec, f'{wd}/{j}/{k}', f'{j}', "dft")
+                        # run orca
+                        Struc(xyz_j, k, charg_j).runorcasp(f'{wd}/{path_i}/{j}/orca/orca_{str(k)}',
+                                                           caltyp='sp', **orca_setting)
+                elif m_j != 'inf':
+                    Struc(xyz_j, m_j, charg_j).runorcasp(f'{wd}/{path_i}/{j}/orca', caltyp='sp', **orca_setting)
                 else:
-                    print("calling orca wrong")
-    return rec
+                    del_l.append(path_i)
+                    print(f"{path_i} failed due to m=inf (unstable product)")
+            # collect dft results
+            for j in fragment_l:
+                tmp_l = ['orca/' + k for k in os.listdir(f'{wd}/{path_i}/{j}/orca')
+                         if os.path.isdir(f'{wd}/{path_i}/{j}/orca/{k}') and "orca" in k]
+                if not tmp_l:
+                    tmp_l = ['orca']
+                for k in tmp_l:
+                    rec = collect_sp_xyz(rec, f'{path_i}/{j}', f'{wd}/{path_i}/{j}/{k}', 'dft')
+    return del_l, rec
 
 
-def elvauate_reaction(path_i, wd, rec, energy_lim, reactants_total_dict, reaction_rec, typ, reactor=False):
+
+def elvauate_reaction(path_i, wd, rec, reactants_total_dict, reaction_rec, typ, **searching_setting):
     # reactants_total_dict: all reactaion paths in this cycle
     # del_l : reaction paths that not survior
     del_l = []
+    reactor = searching_setting.get('reactor_like', False)
+    energy_lim = searching_setting.get('elim', 300)
     if reactor:
         reactant_l = reactants_total_dict[path_i]
     else:
@@ -254,3 +226,16 @@ def elvauate_reaction(path_i, wd, rec, energy_lim, reactants_total_dict, reactio
                 del_l.append(f'{path_i}')
                 print(f"{path_i} failed due to recaction energy")
     return reaction_rec, del_l
+
+
+def existreaction(reaction_rec, new_reaction, typ):  # todo Database Quick Search
+    if typ == "r":
+        reactants_l = [reaction_rec[k][0] for k in list(reaction_rec.keys())]
+    else:
+        reactants_l = [reaction_rec[k][1] for k in list(reaction_rec.keys())]
+        reactants_l.remove(new_reaction)
+    trigger = False
+    for i in reactants_l:
+        if Counter(i) == Counter(new_reaction):
+            trigger = True
+    return trigger
