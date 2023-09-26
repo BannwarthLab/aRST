@@ -1,3 +1,4 @@
+import copy
 import sys
 import pandas as pd
 from spr import *
@@ -6,25 +7,15 @@ from geom import Coord
 import random
 from operation import creat_folder, write_xyz, boltzmanp
 from callsys import call_xtb_scan
+from collections import Counter
 
 
-def push(reactants, rec, wd, step=0, **kwargs):
-    if kwargs.get('kwargs'):
-        kwargs = kwargs.get('kwargs')
-    alpb = kwargs.get('alpb', None)
+def association_pairs(reactants, rec, **kwargs):
     reactor = kwargs.get('reactor_like', False)
-    mode = kwargs.get('platform', 0)
-    constrain_strength = kwargs.get('constrain_strength', str(1))
-    reactants_dict = {}
-
-    # radical_trigger = False
-    # for name in reactants:
-    #     if rec[name]['m'] != 1:
-    #         radical_trigger = True
 
     # get all association possibilities
-    push_dict_1, push_dict_2 = spr_inter_new(reactants=reactants, rec=rec)
-
+    push_dict_1, push_dict_2, hoaoa_df, hoaob_df, luaoa_df, luaob_df = spr_inter_new(reactants=reactants, rec=rec)
+    tmp_d = {}
     if reactor:
         # random sample one association
         gap_l = cut_push_dict(push_dict_1, push_dict_2, reactants, 4)
@@ -41,136 +32,108 @@ def push(reactants, rec, wd, step=0, **kwargs):
             if gap is not None:
                 # detemine active molecules and atoms
                 struc_1, struc_2, at_1, at_2, at_l = assign_asite(push_dict_1, push_dict_2, gap, reactants)
-
-                # get molecular info
-                coord_1 = rec[struc_1]['coord']
-                nat_1 = coord_1.shape[0]
-                coord_2 = rec[struc_2]['coord']
-
-                # write reactants xyz Not used, only for checking
-                reactants_dict[f'{str(step + 1)}_1'] = [struc_1, struc_2]
-                creat_folder(f'{wd}/{str(step + 1)}_1/')
-                write_xyz(coord_1, "coord1")
-                write_xyz(coord_2, "coord2")
-
-                # write scan initial xyz
-                coord_merge, rr = alignment(coord_1, coord_2, at_1, at_2)
-                creat_folder(f'{wd}/{str(step + 1)}_1/scan')
-                write_xyz(coord_merge, 'coord')
-                with open("gap",'w') as f:
-                    f.write(str(gap))
-
-                # submit scan job
-                charg = int(rec[struc_1]['charge'] + rec[struc_2]['charge'])
-                if int(rec[struc_1]['m']) == 1 and int(rec[struc_2]['m']) == 1:
-                    uhf = 0
-                else:
-                    uhf = int(rec[struc_1]['m']) + int(rec[struc_2]['m']) - 2
-
-                if len(at_l) > 1:
-                    at_3, at_4 = int(at_l[1][0]), int(at_l[1][1])
-                    r3 = Coord(eval('coord_merge')).get_punkt_coord(at_3)
-                    r4 = Coord(eval('coord_merge')).get_punkt_coord(at_4 + nat_1)
-                    r = np.linalg.norm(r3 - r4)
-                    call_xtb_scan(f'{wd}/{str(step + 1)}_1/scan', charg, uhf, alpb=alpb, mode=mode,
-                                  kw={'at3': at_3, 'at4': at_4 + nat_1, 'concerted_trigger': True,
-                                      'at1': at_1, 'at2': at_2 + nat_1, 'd1': rr * 5, 'd2': rr,
-                                      'd_34_start': r, 'd_34_end': rr, 'constrain_strength': constrain_strength})
-                else:
-                    call_xtb_scan(f'{wd}/{str(step + 1)}_1/scan', charg, uhf, alpb=alpb, mode=mode,
-                                  kw={'concerted_trigger': False, 'at1': at_1, 'at2': at_2 + nat_1,
-                                      'd1': rr * 5, 'd2': rr, 'constrain_strength': constrain_strength})
-        else:
-            print("gap_l wrong: ", reactants, push_dict_1)
+                tmp_d[gap] = [struc_1, struc_2, at_1, at_2, at_l]
     else:
         # full search
-        candidates = kwargs.get('intercands', 1)
-        gap_l = cut_push_dict(push_dict_1, push_dict_2, reactants, candidates)
-        count = 1
+        candidates = kwargs.get('intermolecular_pair', 1)
+        gap_l = cut_push_dict(push_dict_1, push_dict_2, reactants)
+        count_2 = 0  # each 2 reactants in the system
+        tmp_l = []
         if gap_l:
-            for i in gap_l:
+            loop_count = 0
+            while loop_count < len(gap_l) and count_2 < Cn_2(len(reactants)):
+                i = gap_l[loop_count]
+                loop_count += 1
                 # get reactants name and active atoms
                 struc_1, struc_2, at_1, at_2, at_l = assign_asite(push_dict_1, push_dict_2, i, reactants)
+                tmp_c = 0
+                for j in tmp_l:
+                    if Counter([struc_1, struc_2]) == Counter(j):
+                        tmp_c += 1
+                if tmp_c == 1:
+                    count_2 += 1
+                if tmp_c < candidates:
+                    tmp_l.append([struc_1, struc_2])
 
-                # get correspongding molecular info
-                coord_1 = rec[struc_1]['coord']
-                nat_1 = coord_1.shape[0]
-                coord_2 = rec[struc_2]['coord']
-                nreact = struc_1.split('/')[0] + str(count)
-                reactants_dict[nreact] = [struc_1, struc_2]
+                    # get reactants name and active atoms
+                    struc_1, struc_2, at_1, at_2, at_l = assign_asite(push_dict_1, push_dict_2, i, reactants)
+                    tmp_d[i] = struc_1, struc_2, at_1, at_2, at_l
+    return tmp_d, hoaoa_df, hoaob_df, luaoa_df, luaob_df
 
-                print("look hier!! ", nreact, struc_1, struc_2, at_1, at_2, i, coord_1.iloc[at_1 - 1, 0],
-                      coord_2.iloc[at_2 - 1, 0])
 
-                # do alignment and write scan starting .xyz
-                coord_merge, rr = alignment(coord_1, coord_2, at_1, at_2)
-                creat_folder(f'{wd}/{nreact}/scan')
-                write_xyz(coord_merge, 'coord')
+def push(association_d, rec, wd, reactor, step=0, **xtb_setting):
+    reactants_dict = {}
+    count = 1
+    for gap in list(association_d.keys()):
+        struc_1, struc_2, at_1, at_2, at_l = association_d[gap]
 
-                with open("gap",'w') as f:
-                    f.write(str(i))
+        # get molecular info
+        coord_1 = rec[struc_1]['coord']
+        nat_1 = coord_1.shape[0]
+        coord_2 = rec[struc_2]['coord']
 
-                # write candidates posiibility for checking up
-                # df = pd.DataFrame.from_dict(push_dict_1, orient='index')
-                # df.to_csv(f'{wd}/{nreact}/scan/candidates.csv', header=False)
+        # write scan initial xyz
+        coord_merge, rr = alignment(coord_1, coord_2, at_1, at_2)
+        if reactor:
+            creat_folder(f'{wd}/{str(step + 1)}_1/scan')
+            filename = f'{wd}/{str(step + 1)}_1/scan'
+            reactants_dict[f'{str(step + 1)}_1'] = [struc_1, struc_2]  # write reactants xyz Not used, only for checking
 
-                charg = int(rec[struc_1]['charge'] + rec[struc_2]['charge'])
-                if int(rec[struc_1]['m']) == 1 and int(rec[struc_2]['m']) == 1:
-                    uhf = 0
-                else:
-                    uhf = int(rec[struc_1]['m']) + int(rec[struc_2]['m']) - 2
-                    # tmp setting
-                    if uhf == 2:
-                        uhf = 0
+        else:
+            nreact = struc_1.split('/')[0] + str(count)
+            creat_folder(f'{wd}/{nreact}/scan')
+            filename = f'{wd}/{nreact}/scan'
+            reactants_dict[nreact] = [struc_1, struc_2]  # write reactants xyz Not used, only for checking
 
-                if len(at_l) > 1:
-                    at_3, at_4 = int(at_l[1][0]), int(at_l[1][1])
-                    r3 = Coord(eval(f'coord_merge')).get_punkt_coord(at_3)
-                    r4 = Coord(eval(f'coord_merge')).get_punkt_coord(at_4 + nat_1)
-                    r = np.linalg.norm(r3 - r4)
+        write_xyz(coord_1, "coord1")
+        write_xyz(coord_2, "coord2")
+        write_xyz(coord_merge, 'coord')
+        with open("gap", 'w') as f:
+            f.write(str(gap))
 
-                    call_xtb_scan(f'{wd}/{nreact}/scan', charg, uhf, alpb=alpb, mode=mode,
-                                  kw={'at3': at_3, 'at4': at_4 + nat_1, 'concerted_trigger': True,
-                                      'at1': at_1, 'at2': at_2 + nat_1, 'd1': rr * 5, 'd2': rr,
-                                      'd_34_start': r, 'd_34_end': rr, 'constrain_strength': constrain_strength,
-                                      'etmp':kwargs.get('etmp', str(300))})
-                else:
-                    call_xtb_scan(f'{wd}/{nreact}/scan', charg, uhf, alpb=alpb, mode=mode,
-                                  kw={'concerted_trigger': False,
-                                      'at1': at_1, 'at2': at_2 + nat_1, 'd1': rr * 5, 'd2': rr,
-                                      'constrain_strength': constrain_strength,'etmp':kwargs.get('etmp', str(300))})
+        # submit scan job
+        charg = int(rec[struc_1]['charge'] + rec[struc_2]['charge'])
+        if int(rec[struc_1]['m']) == 1 and int(rec[struc_2]['m']) == 1:
+            uhf = 0
+        else:
+            uhf = int(rec[struc_1]['m']) + int(rec[struc_2]['m']) - 2
 
-                count += 1
+        if len(at_l) > 1:
+            at_3, at_4 = int(at_l[1][0]), int(at_l[1][1])
+            r3 = Coord(eval('coord_merge')).get_punkt_coord(at_3)
+            r4 = Coord(eval('coord_merge')).get_punkt_coord(at_4 + nat_1)
+            r = np.linalg.norm(r3 - r4)
+            tmp_d = xtb_setting.deepcopy()
+            tmp_d.update({'at3': at_3, 'at4': at_4 + nat_1, 'concerted_trigger': True,
+                          'at1': at_1, 'at2': at_2 + nat_1, 'd1': rr * 5, 'd2': rr,
+                          'd_34_start': r, 'd_34_end': rr})
+            call_xtb_scan(filename, charg, uhf, **tmp_d)
+        else:
+            tmp_d = copy.deepcopy(xtb_setting)
+            tmp_d.update({'concerted_trigger': False, 'at1': at_1, 'at2': at_2 + nat_1,
+                          'd1': rr * 5, 'd2': rr})
+            call_xtb_scan(filename, charg, uhf, **tmp_d)
+        count += 1
     return reactants_dict
 
 
-def pull(reactants, rec, wd, step=0, **kwargs):
-    if kwargs.get('kwargs'):
-        kwargs = kwargs.get('kwargs')
-    alpb = kwargs.get('alpb', None)
-    reactor = kwargs.get('reactor_like', False)
+def dissociation_pair(reactants, rec, **kwargs):
     hydrogen = kwargs.get('hydrogen', True)
-    mode = kwargs.get('platform', 0)
-    constrain_strength = kwargs.get('constrain_strength', str(1))
-    discands = kwargs.get('discands', 1)
-
-    reactants_dict = {}
+    reactor = kwargs.get('reactor_like', False)
+    candidates = kwargs.get('dissociation', 1)
+    dissociation_d = {}
     if not hydrogen:
         pull_dict = spr_intra_new(reactants, rec, hydrogen=False)
     else:
         pull_dict = spr_intra_new(reactants, rec)
-    if pull_dict:
-        # # add boltzmann sampling
-        # gap_l = sorted(list(pull_dict.keys()))[:5]
-        # boltzp_l = [boltzmanp(k) for k in gap_l]
-        # boltzp_l = [k / sum(boltzp_l) for k in boltzp_l]
-        # z = random.random()
-        # if boltzp_l[0] > z:
-        #     gap = min(list(pull_dict.keys()))
-        # else:
-        #     gap = None
-        # gap = min(list(pull_dict.keys()))
-        gap_l = list(sorted(list(pull_dict.keys())))[:discands]
+    if reactor:
+        gap = sorted(list(pull_dict.keys()))[0]
+        dis_struc = pull_dict[gap][0]
+        dis_at_1 = pull_dict[gap][1]
+        dis_at_2 = pull_dict[gap][2]
+        dissociation_d[gap] = [dis_struc, dis_at_1, dis_at_2]
+    else:
+        gap_l = list(sorted(list(pull_dict.keys())))[:candidates]
         if gap_l:
             for i in range(len(gap_l)):
                 gap = gap_l[i]
@@ -179,42 +142,49 @@ def pull(reactants, rec, wd, step=0, **kwargs):
                 dis_struc = pull_dict[gap][0]
                 dis_at_1 = pull_dict[gap][1]
                 dis_at_2 = pull_dict[gap][2]
-                coord = rec[dis_struc]['coord']
-                C = Coord(coord)
-                r1 = C.get_punkt_coord(dis_at_1)
-                r2 = C.get_punkt_coord(dis_at_2)
-                r = np.linalg.norm(r1 - r2)
-                charg = rec[dis_struc]['charge']
-                m = rec[dis_struc]['m']
-                uhf = m - 1
-                if reactor and i == 0:
-                    # get reactant name and active atoms
-                    reactants_dict[f'{str(step + 1)}_2'] = [dis_struc]
+                dissociation_d[gap] = dis_struc, dis_at_1, dis_at_2
+    return dissociation_d
 
-                    # write reactant xyz
-                    creat_folder(f'{wd}/{str(step + 1)}_2')
-                    dis_struc_tmp = f'{dis_struc}'.replace('/', '_')
-                    write_xyz(coord, f'{dis_struc_tmp}')  # Not used, only for checking
 
-                    # submit scan job
-                    creat_folder(f'{wd}/{str(step + 1)}_2/scan')
-                    write_xyz(coord, 'coord')
+def pull(dissociation_d, rec, wd, reactor, ninter, step=0, **xtb_setting):
+    reactants_dict = {}
+    count = 1
+    for gap in list(dissociation_d.keys()):
+        dis_struc, dis_at_1, dis_at_2 = dissociation_d[gap]
+        coord = rec[dis_struc]['coord']
+        C = Coord(coord)
+        r1 = C.get_punkt_coord(dis_at_1)
+        r2 = C.get_punkt_coord(dis_at_2)
+        r = np.linalg.norm(r1 - r2)
+        charg = rec[dis_struc]['charge']
+        m = rec[dis_struc]['m']
+        uhf = m - 1
+        if reactor:
+            creat_folder(f'{wd}/{str(step + 1)}_2/scan')
+            filename = f'{wd}/{str(step + 1)}_2/scan'
+            reactants_dict[f'{str(step + 1)}_2'] = [dis_struc]
 
-                    call_xtb_scan(f'{wd}/{str(step + 1)}_2/scan', charg, uhf=uhf, alpb=alpb, mode=mode,
-                                  kw={'concerted_trigger': False, 'at1': dis_at_1, 'at2': dis_at_2, 'd1':
-                                      r, 'd2': r * 2, 'constrain_strength': constrain_strength,
-                                      'etmp':kwargs.get('etmp', str(300))})
+        else:
+            nreact_count = str(count + ninter)
+            nreact = dis_struc.split('/')[0] + nreact_count
+            reactants_dict[nreact] = [dis_struc]
+            creat_folder(f'{wd}/{nreact}/scan')
+            filename = f'{wd}/{nreact}/scan'
 
-                else:
-                    nreact_count = str(kwargs.get('association_count', 5) + 1+i)
-                    nreact = dis_struc.split('/')[0] + nreact_count
-                    reactants_dict[nreact] = [dis_struc]
-                    creat_folder(f'{wd}/{nreact}/scan')
-                    write_xyz(coord, 'coord')
-                    call_xtb_scan(f'{wd}/{nreact}/scan', charg, uhf=uhf, alpb=alpb, mode=mode,
-                                  kw={'concerted_trigger': False,
-                                      'at1': dis_at_1, 'at2': dis_at_2, 'd1': r, 'd2': r * 1.5,
-                                      'constrain_strength': constrain_strength,'etmp':kwargs.get('etmp', str(300))})
+        dis_struc_tmp = f'{dis_struc}'.replace('/', '_')
+        write_xyz(coord, f'{dis_struc_tmp}')
+        write_xyz(coord, 'coord')
+        if xtb_setting.get("homogene", False):
+            d = 1.5
+        else:
+            d = 5
+
+        tmp_d = copy.deepcopy(xtb_setting)
+        tmp_d.update({'concerted_trigger': False,
+                      'at1': dis_at_1, 'at2': dis_at_2, 'd1': r, 'd2': r * d})
+        call_xtb_scan(filename, charg, uhf, **tmp_d)
+        count += 1
+
     return reactants_dict
 
 
@@ -236,7 +206,9 @@ def assign_asite(react_dict1, react_dict2, gap_i, reactants):
     return struc_1, struc_2, at_1, at_2, at_l
 
 
-def cut_push_dict(push_dict_1, push_dict_2, reactants, candidates):
+def cut_push_dict(push_dict_1, push_dict_2, reactants, candidates=None):
+    if candidates is None:
+        candidates = len(push_dict_1)
     if candidates > 1:
         gap_l1 = sorted(list(push_dict_1.keys()))
         gap_l1 = [gap_l1[0]] + list(sorted([gap_l1[i] for i in range(len(gap_l1))
@@ -245,7 +217,6 @@ def cut_push_dict(push_dict_1, push_dict_2, reactants, candidates):
         for k in gap_l1:
             struc_1, struc_2, at_1, at_2, at_l = assign_asite(push_dict_1, push_dict_2, k, reactants)
             tmp_l.append([struc_1, struc_2, at_1, at_2])
-
 
         gap_l2 = sorted(list(push_dict_2.keys()))
         tmp_l3 = []
@@ -260,5 +231,13 @@ def cut_push_dict(push_dict_1, push_dict_2, reactants, candidates):
         tmp_l3 = tmp_l3[:int(candidates / 2)]
         gap_l = gap_l1 + tmp_l3
     else:
-        gap_l = [[sorted(list(push_dict_1.keys()))][0]]
+        gap_l = list(sorted(list(push_dict_1.keys()))[0])
     return gap_l
+
+
+def Cn_2(n):
+    out = 1
+    for i in range(1, n + 1):
+        out *= i
+    out /= 2
+    return out
