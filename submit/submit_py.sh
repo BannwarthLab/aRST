@@ -56,6 +56,7 @@ done
 
 cd $tdir
 
+source "/home/guests/ychen/mb/env/bin/activate"
 module load openmpi/4.1.1
 module load orca/5.0.4
 module load xtb/6.5.1
@@ -63,9 +64,9 @@ module load excstda/1.2
 module load libraries/libgfortran/5
 
 
-source "/home/guests/ychen/mb/env/bin/activate"
 
-python3 -u main.py in.inp > a.log 2>&1 &
+
+python3 -u main.py in.toml > a.log 2>&1 &
 
 wait
 
@@ -76,11 +77,4 @@ cp -r ./!(*tmp*)  $SLURM_SUBMIT_DIR/ && rm -rf $tdir
 
 cd  $SLURM_SUBMIT_DIR
 rm *.py
-
-
-
-
-
-
-
 
