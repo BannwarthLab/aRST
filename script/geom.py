@@ -19,10 +19,11 @@ r0 = {'H': 0.32, 'D': 0.32, 'He': 0.46, 'Li': 1.20, 'Be': 0.94, 'B': 0.77, 'C': 
 
 
 class Coord:
-    def __init__(self, coord):
+    def __init__(self, coord, at):
         self.coord = coord
+        self.at = at
 
-    def get_principal_moment_vec(self, at):
+    def get_principal_moment_vec(self):
         t1, t2, t3, t4, t5, t6 = 0, 0, 0, 0, 0, 0
         # matrix for moments of inertia is of form, with CN in mass as weight
         # *           |   y**2+z**2                         |
@@ -30,12 +31,12 @@ class Coord:
         # *           |    -z*x        -z*y       x**2+y**2 |
         xv, yv, zv = 0, 0, 0
         for i in range(self.coord.shape[0]):
-            if i != at - 1:
-                x = self.coord.iloc[i, 1] - self.coord.iloc[at - 1, 1]
-                y = self.coord.iloc[i, 2] - self.coord.iloc[at - 1, 2]
-                z = self.coord.iloc[i, 3] - self.coord.iloc[at - 1, 3]
+            if i != self.at - 1:
+                x = self.coord.iloc[i, 1] - self.coord.iloc[self.at - 1, 1]
+                y = self.coord.iloc[i, 2] - self.coord.iloc[self.at - 1, 2]
+                z = self.coord.iloc[i, 3] - self.coord.iloc[self.at - 1, 3]
                 r = np.linalg.norm(np.array([x, y, z]))
-                rcov_c = float(r0[f'{self.coord.iloc[at - 1, 0]}'])
+                rcov_c = float(r0[f'{self.coord.iloc[self.at - 1, 0]}'])
                 rcov_i = float(r0[f'{self.coord.iloc[i, 0]}'])
                 rr = (rcov_i + rcov_c) / r
                 cn = 1 / (1 + np.exp(- 16 * rr - 1))
@@ -60,7 +61,7 @@ class Coord:
         #     print(P.round(3))
         return mv, P
 
-    def get_punkt_coord(self, at):
+    def get_punkt_coord(self,at):
         a = np.array([self.coord.iloc[at - 1, 1],
                       self.coord.iloc[at - 1, 2],
                       self.coord.iloc[at - 1, 3]])
@@ -69,8 +70,8 @@ class Coord:
     def get_nat(self):
         return self.coord.shape[0]
 
-    def test_if_right_handed_system(self, at):
-        P = Coord.get_principal_moment_vec(self, at)[1]
+    def test_if_right_handed_system(self):
+        P = Coord.get_principal_moment_vec(self)[1]
         a, b, c = P[:, 0], P[:, 1], P[:, 2]
         cross_p = [np.round(j, 3) for j in np.cross(b, c)]
         dot_p = np.dot(a, cross_p)
@@ -79,9 +80,9 @@ class Coord:
         else:
             return False
 
-    def geom_orientation(self, at):
-        P = Coord.get_principal_moment_vec(self, at)[1]
-        mv = Coord.get_principal_moment_vec(self, at)[0]
+    def geom_orientation(self):
+        P = Coord.get_principal_moment_vec(self)[1]
+        mv = Coord.get_principal_moment_vec(self)[0]
         v1 = np.array(P[:, 2])  # pz
         v2 = mv
         r1 = np.round(np.linalg.norm(np.array(v1)), 1)
@@ -93,11 +94,11 @@ class Coord:
         else:
             return False
 
-    def shift(self, at, d):
+    def shift(self, d):
         # shift the molecule with aktiv as center to (0,0,d)
-        x = self.coord.iloc[at - 1, 1]
-        y = self.coord.iloc[at - 1, 2]
-        z = self.coord.iloc[at - 1, 3] - d
+        x = self.coord.iloc[self.at - 1, 1]
+        y = self.coord.iloc[self.at - 1, 2]
+        z = self.coord.iloc[self.at - 1, 3] - d
         for i in range(self.coord.shape[0]):
             self.coord.iloc[i, 1] = self.coord.iloc[i, 1] - x
             self.coord.iloc[i, 2] = self.coord.iloc[i, 2] - y
@@ -159,52 +160,66 @@ class Coord:
             self.coord.iloc[i, 1], self.coord.iloc[i, 2], self.coord.iloc[i, 3] = a_new[0], a_new[1], a_new[2]
         return self.coord
 
-    def get_dihral_angle(self, at1, at2, at3, at4):
-        a = Coord.get_punkt_coord(self, at1)
-        b = Coord.get_punkt_coord(self, at2)
-        c = Coord.get_punkt_coord(self, at3)
-        d = Coord.get_punkt_coord(self, at4)
-        print(a, b, c, d)
-        ra = b - a
-        rb = c - b
-        rc = d - c
-        n1 = np.cross(ra, rb)
-        n2 = np.cross(rb, rc)
-        # arccos（n1·n2）/（|n1|*|n2|)
-        theta = np.rad2deg(np.arccos(np.dot(n1, n2) / (np.linalg.norm(n1) * np.linalg.norm(n2))))
-        return theta
+    def flipz(self):
+        for i in range(self.coord.shape[0]):
+            x, y, z = self.coord.iloc[i, 1], self.coord.iloc[i, 2], self.coord.iloc[i, 3]
+            # a = [x, y, z]
+            a_new = [x, y, -z]
+            self.coord.iloc[i, 1], self.coord.iloc[i, 2], self.coord.iloc[i, 3] = a_new[0], a_new[1], a_new[2]
+        return self.coord
+    # def get_dihral_angle(self, at1, at2, at3, at4):
+    #     a = Coord.get_punkt_coord(self, at1)
+    #     b = Coord.get_punkt_coord(self, at2)
+    #     c = Coord.get_punkt_coord(self, at3)
+    #     d = Coord.get_punkt_coord(self, at4)
+    #     print(a, b, c, d)
+    #     ra = b - a
+    #     rb = c - b
+    #     rc = d - c
+    #     n1 = np.cross(ra, rb)
+    #     n2 = np.cross(rb, rc)
+    #     # arccos（n1·n2）/（|n1|*|n2|)
+    #     theta = np.rad2deg(np.arccos(np.dot(n1, n2) / (np.linalg.norm(n1) * np.linalg.norm(n2))))
+    #     return theta
 
 
 def alignment(coord1, coord2, at1, at2, **kwargs):
-    C1 = Coord(coord1)
-    coord1 = C1.shift(at=at1, d=0)
-    name1 = coord1.iloc[at1 - 1, 0]
-    rhanded = C1.test_if_right_handed_system(at=at1)
-    orient = C1.geom_orientation(at=at1)
-    P1 = C1.get_principal_moment_vec(at=at1)[1]
+    # copy coord so that won't affect global variant
+    stuc1 = coord1.copy(deep=True)
+    stuc2 = coord2.copy(deep=True)
+
+    stuc1 = Coord(stuc1, at1).shift(d=0)
+    rhanded = Coord(stuc1, at1).test_if_right_handed_system()
+    orient = Coord(stuc1, at1).geom_orientation()
     if not rhanded:
-        coord1 = C1.l2r()  # flip y to -y
+        stuc1 = Coord(stuc1, at1).l2r()  # flip y to -y
     if not orient:
-        coord1 = C1.rot_x()  # rot around x-axis 180
-    coord1 = Coord(coord1).change_cs(P1).copy(deep=True)  # for the bug if cood1=cood2, the class will be inherited
+        stuc1 = Coord(stuc1, at1).rot_x()  # rot around x-axis 180
+    P1 = Coord(stuc1, at1).get_principal_moment_vec()[1]
+    stuc1 = Coord(stuc1, at1).change_cs(P1)
+    xyz1 = stuc1.copy(deep=True)  # for the bug if cood1=cood2, the class will be inherited
 
-    C2 = Coord(coord2)
-    coord2 = C2.shift(at=at2, d=0)
-    name2 = coord2.iloc[at2 - 1, 0]
-    rhanded = C2.test_if_right_handed_system(at=at2)
-    orient = C2.geom_orientation(at=at2)
-    P2 = C2.get_principal_moment_vec(at=at2)[1]
+    stuc2 = Coord(stuc2, at2).shift(d=0)
+    rhanded = Coord(stuc2, at2).test_if_right_handed_system()
+    orient = Coord(stuc2, at2).geom_orientation()
     if not rhanded:
-        coord2 = C2.l2r()  # flip y to -y
-    if not orient:  # Pz point into together
-        coord2 = C2.rot_x()  # rot around x-axis 180
-    coord2 = Coord(coord2).change_cs(P2)
+        stuc2 = Coord(stuc2, at2).l2r()  # flip y to -y
+    if not orient:
+        stuc2 = Coord(stuc2, at2).rot_x()  # rot around x-axis 180
 
+    P2 = Coord(stuc2, at2).get_principal_moment_vec()[1]
+    stuc2 = Coord(stuc2, at2).change_cs(P2)
+    stuc2 = Coord(stuc2, at2).flipz()
+
+    name1 = xyz1.iloc[at1 - 1, 0]
+    name2 = stuc2.iloc[at2 - 1, 0]
     rr = (r0[name1] + r0[name2])
     relativ_r = kwargs.get('aligning_distance', 5)  # 5 times of rr by default
     d_pre = kwargs.get('aligning_direction', 1)  # 1 by default, -1: opposite alignment
     d = d_pre * np.round(rr * relativ_r, 2)
-    coord2 = Coord(coord2).shift(at=at2, d=d).copy(deep=True)
 
-    coord_merge = pd.concat([coord1, coord2])
+    stuc2 = Coord(stuc2, at2).shift(d)
+    xyz2 = stuc2.copy(deep=True)  # for the bug if cood1=cood2, the class will be inherited
+
+    coord_merge = pd.concat([xyz1, xyz2])
     return coord_merge, rr
