@@ -35,14 +35,14 @@ def creat_randomfolder(wd):
 
 def write_xyz(xyz, name):
     pwd = os.getcwd()
-    xyz.round(5)
+    # xyz.round(10)
     nat = xyz.shape[0]
     with open(f'{pwd}/{name}.xyz', 'w') as f:
         f.write(f'{nat}\n')
         f.write('\n')
         for i in range(nat):
             at, x, y, z = xyz.iloc[i, 0], xyz.iloc[i, 1], xyz.iloc[i, 2], xyz.iloc[i, 3]
-            f.write('%2s %10.5f %10.5f %10.5f\n' % (at, x, y, z))
+            f.write('%2s %20.12f %20.12f %20.12f\n' % (at, x, y, z))
         f.write('\n')
 
 
@@ -74,11 +74,11 @@ def get_charge(coord_new, coord_old, chargfile):
         return a
 
 
-def get_uhf_from_excprep(excprepoutwd,fnr):
+def get_uhf_from_excprep(excprepoutwd, fnr):
     uhf = {}
     with open(f'{excprepoutwd}', 'r+') as f:
         lines = f.readlines()
-    for i in range(1,fnr+1):
+    for i in range(1, fnr + 1):
         for j in lines:
             if f"{str(i)}:" in j:
                 if "UHF" not in j:
@@ -187,16 +187,29 @@ def collect_sp_xyz(rec, reckey, wd, typ):
             else:
                 rec[reckey]['coord'] = pd.read_table(f'{wd}/coord.xyz', header=None, skiprows=2, sep='\s+')
             nat = rec[reckey]['coord'].shape[0]
-            if nat == 1 and rec[reckey]['coord'].iloc[0, 0] in ["H", "h"]:
+            if nat == 1 and rec[reckey]['coord'].iloc[0, 0] in ["H", "h"] and rec[reckey]['charge'] == 1:
                 rec[reckey]['sp_dft'] = 0
-
-            with open(f'{wd}/orca.inp', 'r') as f:
-                string = f.read()
-            pattern = r'\* xyzfile \d+ (\d+) coord\.xyz'
-            m = re.search(pattern, string).group(1)
-            rec[reckey]['m'] = int(m)
+                rec[reckey]['m'] = 0
+            else:
+                with open(f'{wd}/orca.inp', 'r') as f:
+                    string = f.read()
+                pattern = r'\* xyzfile -?\d+ (\d+) coord\.xyz'
+                m = re.search(pattern, string).group(1)
+                rec[reckey]['m'] = int(m)
     return rec
 
 
-
-
+def collect_g_xyz(rec, reckey, wd):
+    speh1 = 0
+    speh2 = 0
+    if os.path.isfile(f'{wd}/gfn2_trv/GTRV'):
+        with open(f'{wd}/gfn2_trv/GTRV', 'r') as f:
+            speh1 = float(f.readlines()[0])
+    if os.path.isfile(f'{wd}/gfn2_solv/GSOLV'):
+        with open(f'{wd}/gfn2_solv/GSOLV', 'r') as f:
+            speh2 = float(f.readlines()[0])
+    sp = rec[reckey]['sp_dft']
+    rec[reckey]['g'] = sp + speh1 + speh2
+    rec[reckey]['trv'] = speh1
+    rec[reckey]['solv'] = speh2
+    return rec
