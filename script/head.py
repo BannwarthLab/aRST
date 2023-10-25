@@ -26,11 +26,11 @@ def call_header(text, typ="*"):
     print(text.center(90, typ))
 
 
-def printout_cycle_results(path_i, reactants, association_d,
+def printout_cycle_results(path_i, reactants, association_d,dissociation_d,
                            hoaoa_df, hoaob_df, luaoa_df, luaob_df, rec):
     try:
-        call_header("REACTANTS INFO")
-        print(f"Reactants for this path {path_i}: {reactants}\n")
+        call_header(f"REACTANTS INFO FOR PATH {path_i}: 1-{len(association_d.keys()) + len(dissociation_d.keys())} ")
+        # print(f"Reactants for this path {path_i}: {reactants}\n")
         for i in reactants:
             name = rec[i]['name']
             at_df = {}
@@ -45,10 +45,11 @@ def printout_cycle_results(path_i, reactants, association_d,
             print(at_df, '\n')
             call_header("WBOE", " ")
             wboe = rec[i]['wboe']
-            wboe.columns = ['At1', 'AT2', 'BDE', 'BO']
-            print(wboe.to_string(index=False), '\n')
+            if not isinstance(wboe, list):
+                wboe.columns = ['At1', 'AT2', 'BDE', 'BO']
+                print(wboe.to_string(index=False), '\n')
 
-        call_header("ATOMISTIC FEATURES")
+        call_header("ATOMISTIC FEATURES", " ")
 
         # Reset the indices of the dataframes
         df1_reset = hoaoa_df.reset_index()
@@ -66,9 +67,15 @@ def printout_cycle_results(path_i, reactants, association_d,
         # print(luaoa_df.round(3), '\n')
         # print(luaob_df.round(3), '\n')
 
-        call_header("REACTION INFO")
+        call_header("REACTION INFO"," ")
+        print("association:")
         for i in list(association_d.keys()):
             print(f"{i}: {association_d[i]} ")
+        print("dissociation:")
+        for i in list(dissociation_d.keys()):
+            print(f"{i}: {dissociation_d[i]} ")
+
+
         # for i in sorted(push_dict_1.keys())[:5]:
         #     print(f'dict1: gap: {i},at_l: {push_dict_1[i]}\n')
         # for i in sorted(push_dict_2.keys())[:5]:
