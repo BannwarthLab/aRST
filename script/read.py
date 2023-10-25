@@ -8,7 +8,7 @@ import traceback
 
 import toml
 from get_molbar import do_molbar
-from operation import collect_sp_xyz
+from operation import collect_sp_xyz,collect_g_xyz,get_nelectron
 
 import json
 import pandas as pd
@@ -96,10 +96,9 @@ def prepare(wd, i, rec, **kwargs):
         rc = Struc(coord, m, charge).runxtb(f'{wd}/{i}/xtbopt', **xtb_setting)
         if rc != 0:
             sys.exit(f'{wd}/{i}/ xtb error')
-
-
         # collect gfn2 data
         rec = collect_sp_xyz(rec, i, f'{wd}/{i}/xtbopt/', 'gfn2')
+        rec[i]['nel'] = get_nelectron(f'{wd}/{i}/xtbopt/xtb.out')
 
     # molbar
     if "mb" not in rec[i].keys():
@@ -119,6 +118,13 @@ def prepare(wd, i, rec, **kwargs):
 
             # collect dft results
             rec = collect_sp_xyz(rec, i, f'{wd}/{i}/orca', 'dft')
+            # TRV and SOLV
+            if orca_setting.get("reaction_energy", 'sp') == 'g' or orca_setting.get("reaction_energy", 'sp') == 'G':
+                coord = rec[i]['coord']
+                xtb_setting = kwargs.get('xtb_setting')
+                Struc(coord, m, charge).runtrv(f'{wd}/{i}/gfn2_trv', **xtb_setting)
+                Struc(coord, m, charge).runsolv(f'{wd}/{i}/gfn2_solv', **xtb_setting)
+                rec = collect_g_xyz(rec, i, f'{wd}/{i}')
     return rec
 
 
