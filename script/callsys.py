@@ -29,6 +29,7 @@ def call_orca_dft(wd, charg, m, caltyp='sp', **kwargs):
     pcm = kwargs.get("pcm", None)
     method = kwargs.get("dft_level", "r2scan-3c")
     mode = kwargs.get("mode", 0)
+
     if pcm is not None:
         solmode = f"CPCM({pcm})"
     else:
@@ -40,9 +41,15 @@ def call_orca_dft(wd, charg, m, caltyp='sp', **kwargs):
         caltyp2 = "UKS"
     # f"pal nprocs 16 end\n"\
     # f"%SCF MAXITER 200 end\n" \
-    cmd = f"! {method} {caltyp} {caltyp2} {solmode}\n" \
-          f"" \
-          f"* xyzfile {charg} {m} coord.xyz "
+    if caltyp == 'sp':
+        # sp calculation only used for initial evaluation for reaction path
+        cmd = f"! {method} {caltyp} {caltyp2} {solmode}\n" \
+              f"%SCF guess hueckel end\n" \
+              f"* xyzfile {charg} {m} coord.xyz "
+    else:
+        cmd = f"! {method} {caltyp} {caltyp2} {solmode}\n" \
+              f"%SCF guess hueckel end\n" \
+              f"* xyzfile {charg} {m} coord.xyz "
     with open(f'{wd}/orca.inp', 'w') as f:
         f.write(cmd)
     cmd = f'$ORCA orca.inp'
@@ -53,8 +60,14 @@ def call_orca_dft(wd, charg, m, caltyp='sp', **kwargs):
         remove_file(wd, tmpd)
         os.chdir(tmpd)
         rc = call_subprocess(cmd, 'orca')
+        if ".tmp" in os.listdir(tmpd):
+            cmd = f"! {method} sp OPT {caltyp2} {solmode}\n" \
+                  f"" \
+                  f"* xyzfile {charg} {m} coord.xyz "
+            rc = call_subprocess(cmd, 'orca')
         if rc != 0:
             print(f"{wd} calling orca wrong")
+
         remove_file(tmpd, wd)
         os.chdir(wd)
         if os.path.isdir(tmpd):
@@ -124,12 +137,12 @@ def call_xtb_scan(wd, charg, uhf, **kwargs):
     alpb = kwargs.get("alpb", None)
     mode = kwargs.get("mode", 0)
     etemp = kwargs.get("etemp", str(300))
-    concerted_trigger = kwargs.get("concerted_trigger",False)
+    concerted_trigger = kwargs.get("concerted_trigger", False)
     constrain_strength = kwargs.get("constrain_strength", str(1))
-    at3 = kwargs.get('at3',None)
-    at4 = kwargs.get('at4',None)
-    d_34_start = kwargs.get('d_34_start',None)
-    d_34_end = kwargs.get("d_34_end",None)
+    at3 = kwargs.get('at3', None)
+    at4 = kwargs.get('at4', None)
+    d_34_start = kwargs.get('d_34_start', None)
+    d_34_end = kwargs.get("d_34_end", None)
 
     if concerted_trigger:
         with open('scan.inp', 'w') as f3:
@@ -196,6 +209,67 @@ def call_xtb_ml(wd, charg, uhf=0, **kwargs):
     p = subprocess.Popen(cmd, stdout=open(f'xtb.out', 'w'), stderr=subprocess.PIPE, shell=True)
     p.wait()
     return
+
+
+def call_trv(wd, charg, uhf=0, **kwargs):
+    os.chdir(wd)
+    alpb = kwargs.get("alpb", None)
+    mode = kwargs.get("mode", 0)
+    if alpb is None:
+        solmode = ""
+    else:
+        solmode = f'--alpb {alpb}'
+    command1 = f'xtb coord.xyz --gfn 2 --ohess --uhf {uhf} -c {charg} {solmode}'
+    command2 = f'TRVthermo --io xtb --rotthr 50 --fxyz coord.xyz --fvib freq.out --temp 298.15 > thermo.out'
+    rc = 0
+    if mode == 0:
+        p1 = subprocess.Popen(command1, stdout=open(f'freq.out', 'w'), stderr=subprocess.PIPE, shell=True)
+        p1.wait()
+        p2 = subprocess.Popen(command2, shell=True)
+        p2.wait()
+
+        rc = p2.returncode
+    if rc != 0:
+        print("calling trv wrong")
+    return rc
+
+
+def call_solv(wd, charg, uhf=0, **kwargs):
+    os.chdir(wd)
+    alpb = kwargs.get("alpb", None)
+    mode = kwargs.get("mode", 0)
+    esolv = 0
+    egas = 0
+    if alpb is None:
+        solmode = ""
+    else:
+        solmode = f'--alpb {alpb}'
+    command1 = f'xtb coord.xyz --gfn 2 --uhf {uhf} -c {charg} bar1M '
+
+    command2 = f'xtb coord.xyz --gfn 2 {solmode} --grad -- uhf {uhf} -c {charg} '
+    rc = 0
+    if mode == 0:
+        p1 = subprocess.Popen(command1, stdout=open(f'gas.out', 'w'), stderr=subprocess.PIPE, shell=True)
+        p1.wait()
+        with open(f'gas.out', 'r') as f:
+            lines = f.readlines()
+            for line in lines:
+                if 'TOTAL ENERGY' in line:
+                    egas = float(re.findall(r'\-?\d+\.?\d*', line)[0])
+        p2 = subprocess.Popen(command2, stdout=open(f'solv.out', 'w'), stderr=subprocess.PIPE, shell=True)
+        p2.wait()
+        with open(f'solv.out', 'r') as f:
+            lines = f.readlines()
+            for line in lines:
+                if 'TOTAL ENERGY' in line:
+                    esolv = float(re.findall(r'\-?\d+\.?\d*', line)[0])
+        if rc ==0:
+            with open('GSOLV', 'w') as f2:
+                f2.write(str(esolv - egas))
+        rc = p2.returncode
+    if rc != 0:
+        print("calling trv wrong")
+    return rc
 
 
 def call_subprocess(cmd, typ):
