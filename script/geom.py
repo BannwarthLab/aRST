@@ -1,21 +1,6 @@
 import numpy as np
 import pandas as pd
-
-r0 = {'H': 0.32, 'D': 0.32, 'He': 0.46, 'Li': 1.20, 'Be': 0.94, 'B': 0.77, 'C': 0.75, 'N': 0.71, 'O': 0.63,
-      'F': 0.64, 'Ne': 0.67, 'Na': 1.40, 'Mg': 1.25, 'Al': 1.13, 'Si': 1.04, 'P': 1.10, 'S': 1.02,
-      'CL': 0.99, 'Ar': 0.96, 'K': 1.76, 'Ca': 1.54, 'Sc': 1.48, 'Ti': 1.36, 'V': 1.34, 'Cr': 1.22,
-      'Mn': 1.19, 'Fe': 1.16, 'Co': 1.11, 'Ni': 1.10, 'Cu': 1.12, 'Zn': 1.18, 'Ga': 1.24, 'Ge': 1.21,
-      'As': 1.21, 'Se': 1.16, 'Br': 1.14, 'Kr': 1.17, 'Rb': 2.10, 'Sr': 1.85, 'Y': 1.63, 'Zr': 1.54,
-      'Nb': 1.47, 'Mo': 1.38, 'Tc': 1.28, 'Ru': 1.25, 'Rh': 1.25, 'Pd': 1.20, 'Ag': 1.28, 'Cd': 1.36,
-      'In': 1.42, 'Sn': 1.40, 'Sb': 1.40, 'Te': 1.36, 'I': 1.33, 'Xe': 1.31, 'Cs': 2.32, 'Ba': 1.96,
-      'La': 1.80, 'Ce': 1.63, 'Pr': 1.76, 'Nd': 1.74, 'Pm': 1.73, 'Sm': 1.72, 'Eu': 1.68, 'Gd': 1.69,
-      'Tb': 1.68, 'Dy': 1.67, 'Ho': 1.66, 'Er': 1.65, 'Tm': 1.64, 'Yb': 1.70, 'Lu': 1.62, 'Hf': 1.52,
-      'Ta': 1.46, 'W': 0.95 * 1.37, 'Re': 1.31, 'Os': 1.29, 'Ir': 1.22, 'Pt': 1.23, 'Au': 1.24, 'Hg': 1.33,
-      'Tl': 1.44, 'Pb': 1.44, 'Bi': 1.51, 'Po': 1.45, 'At': 1.47, 'Rn': 1.42, 'Fr': 2.23, 'Ra': 2.01,
-      'Ac': 1.86, 'Th': 1.75, 'Pa': 1.69, 'U': 1.70, 'Np': 1.71, 'Pu': 1.72, 'Am': 1.66, 'Cm': 1.66,
-      'Bk': 1.68, 'Cf': 1.68, 'Es': 1.65, 'Fm': 1.67, 'Md': 1.73, 'No': 1.76, 'Lr': 1.61, 'Rf': 1.57,
-      'Db': 1.49, 'Sg': 1.43, 'Bh': 1.41, 'Hs': 1.34, 'Mt': 1.29, 'Ds': 1.21, 'Rg': 1.21, 'Cn': 1.22,
-      'Nh': 1.36, 'Fl': 1.43, 'Mc': 1.62, 'Lv': 1.75, 'Ts': 1.65, 'Og': 1.57, 'Cl': 0.99}
+from Element import r0
 
 
 class Coord:
@@ -30,6 +15,7 @@ class Coord:
         # *           |    -y*x       z**2+x**2             | -i =0
         # *           |    -z*x        -z*y       x**2+y**2 |
         xv, yv, zv = 0, 0, 0
+        neighbor_atl = []
         for i in range(self.coord.shape[0]):
             if i != self.at - 1:
                 x = self.coord.iloc[i, 1] - self.coord.iloc[self.at - 1, 1]
@@ -39,6 +25,10 @@ class Coord:
                 rcov_c = float(r0[f'{self.coord.iloc[self.at - 1, 0]}'])
                 rcov_i = float(r0[f'{self.coord.iloc[i, 0]}'])
                 rr = (rcov_i + rcov_c) / r
+                # add connected at's xyz
+                if rr > 0.8:
+                    neighbor_atl.append([self.coord.iloc[i, 1], self.coord.iloc[i, 2], self.coord.iloc[i, 3]])
+                # add up I
                 cn = 1 / (1 + np.exp(- 16 * rr - 1))
                 atmass = 0.5 * cn / (r ** 2)
                 t1 = t1 + atmass * (y ** 2 + z ** 2)
@@ -47,6 +37,7 @@ class Coord:
                 t4 = t4 + atmass * (-z * x)
                 t5 = t5 + atmass * (-z * y)
                 t6 = t6 + atmass * (x ** 2 + y ** 2)
+                # add up molecular orientation
                 xv = xv + atmass * x
                 yv = yv + atmass * y
                 zv = zv + atmass * z
@@ -59,9 +50,9 @@ class Coord:
         v, P = np.linalg.eigh(arep)
         #     print(v.round(3))
         #     print(P.round(3))
-        return mv, P
+        return mv, P, v, neighbor_atl
 
-    def get_punkt_coord(self,at):
+    def get_punkt_coord(self, at):
         a = np.array([self.coord.iloc[at - 1, 1],
                       self.coord.iloc[at - 1, 2],
                       self.coord.iloc[at - 1, 3]])
@@ -69,30 +60,6 @@ class Coord:
 
     def get_nat(self):
         return self.coord.shape[0]
-
-    def test_if_right_handed_system(self):
-        P = Coord.get_principal_moment_vec(self)[1]
-        a, b, c = P[:, 0], P[:, 1], P[:, 2]
-        cross_p = [np.round(j, 3) for j in np.cross(b, c)]
-        dot_p = np.dot(a, cross_p)
-        if dot_p > 0:
-            return True
-        else:
-            return False
-
-    def geom_orientation(self):
-        P = Coord.get_principal_moment_vec(self)[1]
-        mv = Coord.get_principal_moment_vec(self)[0]
-        v1 = np.array(P[:, 2])  # pz
-        v2 = mv
-        r1 = np.round(np.linalg.norm(np.array(v1)), 1)
-        r2 = np.round(np.linalg.norm(np.array(v2)), 1)
-        dot_p = np.round(np.dot(v1, v2), 1)
-        c = np.round(dot_p / (r1 * r2), 1)
-        if c >= 0:
-            return True
-        else:
-            return False
 
     def shift(self, d):
         # shift the molecule with aktiv as center to (0,0,d)
@@ -105,82 +72,142 @@ class Coord:
             self.coord.iloc[i, 3] = self.coord.iloc[i, 3] - z
         return self.coord
 
-    def rot_y(self):
-        # right-handed cs and rot
-        beta = np.deg2rad(180)
-        Ry = np.array([[np.cos(beta), 0, np.sin(beta)],
-                       [0, 1, 0],
-                       [-np.sin(beta), 0, np.cos(beta)]])
-        for i in range(self.coord.shape[0]):
-            x, y, z = self.coord.iloc[i, 1], self.coord.iloc[i, 2], self.coord.iloc[i, 3]
-            a = [x, y, z]
-            a_new = np.dot(Ry, a)
-            self.coord.iloc[i, 1], self.coord.iloc[i, 2], self.coord.iloc[i, 3] = a_new[0], a_new[1], a_new[2]
-        return self.coord
-
-    def rot_x(self):
-        # right-handed cs and rot
-        alpha = np.deg2rad(180)
-        Rx = np.array([[1, 0, 0],
-                       [0, np.cos(alpha), -np.sin(alpha)],
-                       [0, np.sin(alpha), np.cos(alpha)]])
-        for i in range(self.coord.shape[0]):
-            x, y, z = self.coord.iloc[i, 1], self.coord.iloc[i, 2], self.coord.iloc[i, 3]
-            a = [x, y, z]
-            a_new = np.dot(Rx, a)
-            self.coord.iloc[i, 1], self.coord.iloc[i, 2], self.coord.iloc[i, 3] = a_new[0], a_new[1], a_new[2]
-        return self.coord
-
-    def rot_z(self):
-        # right-handed cs and rot
-        gamma = np.deg2rad(180)
-        Rz = np.array([[np.cos(gamma), -np.sin(gamma), 0],
-                       [np.sin(gamma), np.cos(gamma), 0],
-                       [0, 0, 1]])
-        for i in range(self.coord.shape[0]):
-            x, y, z = self.coord.iloc[i, 1], self.coord.iloc[i, 2], self.coord.iloc[i, 3]
-            a = [x, y, z]
-            a_new = np.dot(Rz, a)
-            self.coord.iloc[i, 1], self.coord.iloc[i, 2], self.coord.iloc[i, 3] = a_new[0], a_new[1], a_new[2]
-        return self.coord
-
     def change_cs(self, P):
         for i in range(self.coord.shape[0]):
             x, y, z = self.coord.iloc[i, 1], self.coord.iloc[i, 2], self.coord.iloc[i, 3]
             a = [x, y, z]
-            a_new = np.dot(P, a)
+            a_new = np.dot(P.T, a)
             self.coord.iloc[i, 1], self.coord.iloc[i, 2], self.coord.iloc[i, 3] = a_new[0], a_new[1], a_new[2]
         return self.coord
 
-    def l2r(self):
-        for i in range(self.coord.shape[0]):
-            x, y, z = self.coord.iloc[i, 1], self.coord.iloc[i, 2], self.coord.iloc[i, 3]
-            # a = [x, y, z]
-            a_new = [x, -y, z]
-            self.coord.iloc[i, 1], self.coord.iloc[i, 2], self.coord.iloc[i, 3] = a_new[0], a_new[1], a_new[2]
-        return self.coord
+    def write_xyz(self, name):
+        xyz = self.coord.round(5)
+        nat = xyz.shape[0]
+        with open(f'{name}.xyz', 'w') as f:
+            f.write(f'{nat}\n')
+            f.write('\n')
+            for i in range(nat):
+                at, x, y, z = xyz.iloc[i, 0], xyz.iloc[i, 1], xyz.iloc[i, 2], xyz.iloc[i, 3]
+                f.write('%2s %10.5f %10.5f %10.5f\n' % (at, x, y, z))
+            f.write('\n')
 
-    def flipz(self):
-        for i in range(self.coord.shape[0]):
-            x, y, z = self.coord.iloc[i, 1], self.coord.iloc[i, 2], self.coord.iloc[i, 3]
-            # a = [x, y, z]
-            a_new = [x, y, -z]
-            self.coord.iloc[i, 1], self.coord.iloc[i, 2], self.coord.iloc[i, 3] = a_new[0], a_new[1], a_new[2]
-        return self.coord
-    # def get_dihral_angle(self, at1, at2, at3, at4):
-    #     a = Coord.get_punkt_coord(self, at1)
-    #     b = Coord.get_punkt_coord(self, at2)
-    #     c = Coord.get_punkt_coord(self, at3)
-    #     d = Coord.get_punkt_coord(self, at4)
-    #     print(a, b, c, d)
-    #     ra = b - a
-    #     rb = c - b
-    #     rc = d - c
-    #     n1 = np.cross(ra, rb)
-    #     n2 = np.cross(rb, rc)
-    #     # arccos（n1·n2）/（|n1|*|n2|)
-    #     theta = np.rad2deg(np.arccos(np.dot(n1, n2) / (np.linalg.norm(n1) * np.linalg.norm(n2))))
-    #     return theta
+    def write_p(self, P, v, name):
+        x, y, z = 0, 0, 0
+        try:
+            a = Coord.get_punkt_coord(self, at=self.at)
+            x, y, z = a[0], a[1], a[2]
+        except:
+            pass
+        if P is not None and v is not None:
+            scale = 0.5
+            with open(f'{name}.bild', 'w+') as f2:
+                f2.write('.color black\n')
+                f2.write(f'.arrow 0 0 0 0 0 6 0.05 0.150000\n')
+                f2.write(f'.arrow 0 0 0 6 0 0 0.05 0.150000\n')
+                f2.write(f'.arrow 0 0 0 0 6 0 0.05 0.150000\n')
+
+                f2.write('.color red\n')
+                f2.write(
+                    f'.arrow {x} {y} {z} {x + P[::, 2][0] / scale} {y + P[::, 2][1] / scale} {z + P[::, 2][2] / scale} 0.05 0.150000\n')
+                f2.write(
+                    f'.arrow {x} {y} {z} {x - P[::, 2][0] / scale} {y - P[::, 2][1] / scale} {z - P[::, 2][2] / scale} 0.05 0.150000\n')
+
+                f2.write('.color green\n')
+                f2.write(
+                    f'.arrow {x} {y} {z} {x + P[::, 0][0] / scale} {y + P[::, 0][1] / scale} {z + P[::, 0][2] / scale} 0.05 0.150000\n')
+                f2.write(
+                    f'.arrow {x} {y} {z} {x - P[::, 0][0] / scale} {y - P[::, 0][1] / scale} {z - P[::, 0][2] / scale} 0.05 0.150000\n')
+
+                f2.write('.color blue\n')
+                f2.write(
+                    f'.arrow {x} {y} {z} {x + P[::, 1][0] / scale} {y + P[::, 1][1] / scale} {z + P[::, 1][2] / scale} 0.05 0.150000\n')
+                f2.write(
+                    f'.arrow {x} {y} {z} {x - P[::, 1][0] / scale} {y - P[::, 1][1] / scale} {z - P[::, 1][2] / scale} 0.05 0.150000\n')
+        else:
+            with open(f'{name}.bild', 'w+') as f2:
+                f2.write('.color black\n')
+                f2.write(f'.arrow 0 0 0 0 0 6 0.05 0.150000\n')
+                f2.write(f'.arrow 0 0 0 6 0 0 0.05 0.150000\n')
+                f2.write(f'.arrow 0 0 0 0 6 0 0.05 0.150000\n')
+        return
+
+
+def get_angle(v1, v2):
+    r1 = np.round(np.linalg.norm(v1), 1)
+    r2 = np.round(np.linalg.norm(v2), 1)
+    dot_product = np.round(np.dot(v1, v2), 1)
+    theta = np.arccos(dot_product / (r1 * r2)) * 180 / np.pi
+    return theta
+
+
+def rerange_P(P, neighbor_atl):
+    # determin which main is the reaction direction
+    angle_l = []
+
+    if len(neighbor_atl) == 1:
+        A = neighbor_atl[0]
+        for i in range(3):
+            p = np.array(P[:, i])
+            angle_l.append(get_angle(p, A))
+    else:
+        neighbor_atl.append([0, 0, 0])
+        A = neighbor_atl[0]
+        B = neighbor_atl[1]
+        C = neighbor_atl[2]
+        AB = np.array(B) - np.array(A)
+        AC = np.array(C) - np.array(A)
+        normal_vector = np.cross(AB, AC)
+        for i in range(3):
+            p = np.array(P[:, i])
+            dot_product = np.dot(p, normal_vector)
+            magnitude_v = np.linalg.norm(p)
+            magnitude_normal = np.linalg.norm(normal_vector)
+            theta = np.arccos(dot_product / (magnitude_v * magnitude_normal)) * 180 / np.pi
+            angle_l.append(np.round(theta, 2))
+
+    tmp_l = (abs(np.array(angle_l) - 90)).tolist()
+    pr_index = tmp_l.index(max(tmp_l))
+    column_order = [0, 1, 2]
+
+    if pr_index < 2:
+        for i in range(2 - pr_index):
+            column_order.insert(0, column_order.pop())
+
+    P = P[:, column_order]
+    return P
+
+
+def check_orient(P, mv):
+    for i in range(3):
+        p = np.array(P[:, i])
+        theta = get_angle(p, mv)
+        if theta < 90:
+            P[:, i] = -p
+    return P
+
+
+def check_rl(P):
+    # retrun true if P is left-handed
+    a, b, c = P[::, 0], P[::, 1], P[::, 2]
+    cross_p = [np.round(j, 3) for j in np.cross(b, c)]
+    dot_p = np.dot(a, cross_p)
+    if dot_p > 0:
+        return True
+    else:
+        return False
+
+
+def l2r(P, mv):
+    # or r2l, it is the same
+    theta_l = []
+    for i in range(3):
+        p = np.array(P[:, i])
+        theta = get_angle(p, mv)
+        theta_l.append(theta)
+    min_index = theta_l.index(min(theta_l))
+    tmp = np.array(P[:, min_index])
+    P[:, min_index] = -tmp
+    return P
 
 
 def alignment(coord1, coord2, at1, at2, **kwargs):
@@ -189,28 +216,42 @@ def alignment(coord1, coord2, at1, at2, **kwargs):
     stuc2 = coord2.copy(deep=True)
 
     stuc1 = Coord(stuc1, at1).shift(d=0)
-    rhanded = Coord(stuc1, at1).test_if_right_handed_system()
-    orient = Coord(stuc1, at1).geom_orientation()
-    if not rhanded:
-        stuc1 = Coord(stuc1, at1).l2r()  # flip y to -y
-    if not orient:
-        stuc1 = Coord(stuc1, at1).rot_x()  # rot around x-axis 180
-    P1 = Coord(stuc1, at1).get_principal_moment_vec()[1]
+    mv1, P1, v1, neighbor_atl1 = Coord(stuc1, at1).get_principal_moment_vec()
+
+    # make sure p point into the direction of the smallest resistance
+    P1 = check_orient(P1, mv1)
+
+    # find main reaction direction
+    if neighbor_atl1:
+        P1 = rerange_P(P1, neighbor_atl1[:3])
+
+    # set P1 left-handed by fliping one main axis to the opposite direction
+    # (the one with the least influence on the main orient)
+    if not check_rl(P1):
+        P1 = l2r(P1, mv1)
+
+    # change coordinante system to main axes system
     stuc1 = Coord(stuc1, at1).change_cs(P1)
-    xyz1 = stuc1.copy(deep=True)  # for the bug if cood1=cood2, the class will be inherited
+    xyz1 = stuc1.copy(deep=True)
 
+    # now do 2. structure
     stuc2 = Coord(stuc2, at2).shift(d=0)
-    rhanded = Coord(stuc2, at2).test_if_right_handed_system()
-    orient = Coord(stuc2, at2).geom_orientation()
-    if not rhanded:
-        stuc2 = Coord(stuc2, at2).l2r()  # flip y to -y
-    if not orient:
-        stuc2 = Coord(stuc2, at2).rot_x()  # rot around x-axis 180
+    mv2, P2, v2, neighbor_atl2 = Coord(stuc2, at2).get_principal_moment_vec()
 
-    P2 = Coord(stuc2, at2).get_principal_moment_vec()[1]
+    P2 = check_orient(P2, mv2)
+
+    # find main reaction direction
+    if neighbor_atl2:
+        P2 = rerange_P(P2, neighbor_atl2[:3])
+
+    # set P2 right-handed by fliping one main axis to the opposite direction
+    if check_rl(P2):
+        P2 = l2r(P2, mv2)
+    P2[:, 2] = -P2[:, 2]
+
     stuc2 = Coord(stuc2, at2).change_cs(P2)
-    stuc2 = Coord(stuc2, at2).flipz()
 
+    # merge two structures
     name1 = xyz1.iloc[at1 - 1, 0]
     name2 = stuc2.iloc[at2 - 1, 0]
     rr = (r0[name1] + r0[name2])
