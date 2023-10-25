@@ -15,7 +15,7 @@ def association_pairs(reactants, rec, **kwargs):
 
     # get all association possibilities
     push_dict_1, push_dict_2, hoaoa_df, hoaob_df, luaoa_df, luaob_df = spr_inter_new(reactants=reactants, rec=rec)
-    tmp_d = {}
+    output_d = {}
     if reactor:
         # random sample one association
         gap_l = cut_push_dict(push_dict_1, push_dict_2, reactants, 4)
@@ -32,11 +32,13 @@ def association_pairs(reactants, rec, **kwargs):
             if gap is not None:
                 # detemine active molecules and atoms
                 struc_1, struc_2, at_1, at_2, at_l = assign_asite(push_dict_1, push_dict_2, gap, reactants)
-                tmp_d[gap] = [struc_1, struc_2, at_1, at_2, at_l]
+                output_d[gap] = [struc_1, struc_2, at_1, at_2, at_l]
     else:
         # full search
         candidates = kwargs.get('intermolecular_pair', 1)
-        gap_l = cut_push_dict(push_dict_1, push_dict_2, reactants)
+
+        gap_l = cut_push_dict(push_dict_1, push_dict_2, reactants, len(push_dict_1))
+
         count_2 = 0  # each 2 reactants in the system
         tmp_l = []
         if gap_l:
@@ -46,19 +48,17 @@ def association_pairs(reactants, rec, **kwargs):
                 loop_count += 1
                 # get reactants name and active atoms
                 struc_1, struc_2, at_1, at_2, at_l = assign_asite(push_dict_1, push_dict_2, i, reactants)
+                # count how many candidates have been selected for struc1 and struct2
                 tmp_c = 0
                 for j in tmp_l:
                     if Counter([struc_1, struc_2]) == Counter(j):
                         tmp_c += 1
-                if tmp_c == 1:
-                    count_2 += 1
+                tmp_l.append([struc_1, struc_2])
                 if tmp_c < candidates:
-                    tmp_l.append([struc_1, struc_2])
-
-                    # get reactants name and active atoms
-                    struc_1, struc_2, at_1, at_2, at_l = assign_asite(push_dict_1, push_dict_2, i, reactants)
-                    tmp_d[i] = struc_1, struc_2, at_1, at_2, at_l
-    return tmp_d, hoaoa_df, hoaob_df, luaoa_df, luaob_df
+                    output_d[i] = struc_1, struc_2, at_1, at_2, at_l
+                elif tmp_c == candidates:
+                    count_2 += 1
+    return output_d, hoaoa_df, hoaob_df, luaoa_df, luaob_df
 
 
 def push(association_d, rec, wd, reactor, step=0, **xtb_setting):
@@ -72,21 +72,22 @@ def push(association_d, rec, wd, reactor, step=0, **xtb_setting):
         nat_1 = coord_1.shape[0]
         coord_2 = rec[struc_2]['coord']
 
-        # write scan initial xyz
-        coord_merge, rr = alignment(coord_1, coord_2, at_1, at_2)
-        if reactor:
+        if reactor:  # todo _ab?
             creat_folder(f'{wd}/{str(step + 1)}_1/scan')
             filename = f'{wd}/{str(step + 1)}_1/scan'
             reactants_dict[f'{str(step + 1)}_1'] = [struc_1, struc_2]  # write reactants xyz Not used, only for checking
 
         else:
-            nreact = struc_1.split('/')[0] + str(count)
+            nreact = struc_1.split('/')[0] + '_' + str(count)
             creat_folder(f'{wd}/{nreact}/scan')
             filename = f'{wd}/{nreact}/scan'
             reactants_dict[nreact] = [struc_1, struc_2]  # write reactants xyz Not used, only for checking
-
+        # write scan initial xyz
+        # test:
         write_xyz(coord_1, "coord1")
         write_xyz(coord_2, "coord2")
+
+        coord_merge, rr = alignment(coord_1, coord_2, at_1, at_2)
         write_xyz(coord_merge, 'coord')
         with open("gap", 'w') as f:
             f.write(str(gap))
@@ -95,23 +96,25 @@ def push(association_d, rec, wd, reactor, step=0, **xtb_setting):
         charg = int(rec[struc_1]['charge'] + rec[struc_2]['charge'])
         if int(rec[struc_1]['m']) == 1 and int(rec[struc_2]['m']) == 1:
             uhf = 0
+        elif int(rec[struc_1]['m']) == 2 and int(rec[struc_2]['m']) == 2:
+            uhf = 0
         else:
             uhf = int(rec[struc_1]['m']) + int(rec[struc_2]['m']) - 2
 
         if len(at_l) > 1:
             at_3, at_4 = int(at_l[1][0]), int(at_l[1][1])
-            r3 = Coord(eval('coord_merge')).get_punkt_coord(at_3)
-            r4 = Coord(eval('coord_merge')).get_punkt_coord(at_4 + nat_1)
+            r3 = Coord(eval('coord_merge'), at=None).get_punkt_coord(at_3)
+            r4 = Coord(eval('coord_merge'), at=None).get_punkt_coord(at_4 + nat_1)
             r = np.linalg.norm(r3 - r4)
-            tmp_d = xtb_setting.deepcopy()
+            tmp_d = copy.deepcopy(xtb_setting)
             tmp_d.update({'at3': at_3, 'at4': at_4 + nat_1, 'concerted_trigger': True,
-                          'at1': at_1, 'at2': at_2 + nat_1, 'd1': rr * 5, 'd2': rr,
-                          'd_34_start': r, 'd_34_end': rr})
+                          'at1': at_1, 'at2': at_2 + nat_1, 'd1': rr * 5, 'd2': rr*0.9,
+                          'd_34_start': r, 'd_34_end': rr*0.9})
             call_xtb_scan(filename, charg, uhf, **tmp_d)
         else:
             tmp_d = copy.deepcopy(xtb_setting)
             tmp_d.update({'concerted_trigger': False, 'at1': at_1, 'at2': at_2 + nat_1,
-                          'd1': rr * 5, 'd2': rr})
+                          'd1': rr * 5, 'd2': rr*0.9})
             call_xtb_scan(filename, charg, uhf, **tmp_d)
         count += 1
     return reactants_dict
@@ -122,8 +125,9 @@ def dissociation_pair(reactants, rec, **kwargs):
     reactor = kwargs.get('reactor_like', False)
     candidates = kwargs.get('dissociation', 1)
     dissociation_d = {}
+    mode = kwargs.get('dissociation_mode', 0)
     if not hydrogen:
-        pull_dict = spr_intra_new(reactants, rec, hydrogen=False)
+        pull_dict = spr_intra_new(reactants, rec, mode=mode, hydrogen=False)
     else:
         pull_dict = spr_intra_new(reactants, rec)
     if reactor:
@@ -133,7 +137,15 @@ def dissociation_pair(reactants, rec, **kwargs):
         dis_at_2 = pull_dict[gap][2]
         dissociation_d[gap] = [dis_struc, dis_at_1, dis_at_2]
     else:
-        gap_l = list(sorted(list(pull_dict.keys())))[:candidates]
+        sortedgap = sorted(list(pull_dict.keys()))
+        gap_l = []
+        prev_key = None
+        for key in sortedgap:
+            if prev_key is None or key - prev_key > 1e-3:
+                gap_l.append(key)
+            if len(gap_l) == candidates:
+                break
+        # gap_l = list(sorted(list(pull_dict.keys())))[:candidates]
         if gap_l:
             for i in range(len(gap_l)):
                 gap = gap_l[i]
@@ -152,7 +164,7 @@ def pull(dissociation_d, rec, wd, reactor, ninter, step=0, **xtb_setting):
     for gap in list(dissociation_d.keys()):
         dis_struc, dis_at_1, dis_at_2 = dissociation_d[gap]
         coord = rec[dis_struc]['coord']
-        C = Coord(coord)
+        C = Coord(coord, at=None)
         r1 = C.get_punkt_coord(dis_at_1)
         r2 = C.get_punkt_coord(dis_at_2)
         r = np.linalg.norm(r1 - r2)
@@ -166,18 +178,15 @@ def pull(dissociation_d, rec, wd, reactor, ninter, step=0, **xtb_setting):
 
         else:
             nreact_count = str(count + ninter)
-            nreact = dis_struc.split('/')[0] + nreact_count
+            nreact = dis_struc.split('/')[0] + "_" + nreact_count
             reactants_dict[nreact] = [dis_struc]
             creat_folder(f'{wd}/{nreact}/scan')
             filename = f'{wd}/{nreact}/scan'
 
-        dis_struc_tmp = f'{dis_struc}'.replace('/', '_')
+        dis_struc_tmp = f'{dis_struc}'.replace('/', '.')
         write_xyz(coord, f'{dis_struc_tmp}')
         write_xyz(coord, 'coord')
-        if xtb_setting.get("homogene", False):
-            d = 1.5
-        else:
-            d = 5
+        d = xtb_setting.get("dissociation_distance", 5)
 
         tmp_d = copy.deepcopy(xtb_setting)
         tmp_d.update({'concerted_trigger': False,
@@ -207,31 +216,34 @@ def assign_asite(react_dict1, react_dict2, gap_i, reactants):
 
 
 def cut_push_dict(push_dict_1, push_dict_2, reactants, candidates=None):
-    if candidates is None:
-        candidates = len(push_dict_1)
     if candidates > 1:
         gap_l1 = sorted(list(push_dict_1.keys()))
         gap_l1 = [gap_l1[0]] + list(sorted([gap_l1[i] for i in range(len(gap_l1))
                                             if i > 0 and gap_l1[i] - gap_l1[i - 1] > 1e-3]))[:int(candidates / 2) - 1]
+
         tmp_l = []
         for k in gap_l1:
             struc_1, struc_2, at_1, at_2, at_l = assign_asite(push_dict_1, push_dict_2, k, reactants)
             tmp_l.append([struc_1, struc_2, at_1, at_2])
 
         gap_l2 = sorted(list(push_dict_2.keys()))
+
         tmp_l3 = []
         struc_1, struc_2, at_1, at_2, at_l = assign_asite(push_dict_1, push_dict_2, gap_l2[0], reactants)
         if [struc_1, struc_2, at_1, at_2] not in tmp_l and [struc_2, struc_1, at_2, at_1] not in tmp_l:
             tmp_l3.append(gap_l2[0])
-        for k in range(1, len(gap_l2) - 1):
+        for k in range(1, len(gap_l2)):
             if gap_l2[k] - gap_l2[k - 1] > 1e-3:
                 struc_1, struc_2, at_1, at_2, at_l = assign_asite(push_dict_1, push_dict_2, gap_l2[k], reactants)
                 if [struc_1, struc_2, at_1, at_2] not in tmp_l and [struc_2, struc_1, at_2, at_1] not in tmp_l:
                     tmp_l3.append(gap_l2[k])
+
         tmp_l3 = tmp_l3[:int(candidates / 2)]
         gap_l = gap_l1 + tmp_l3
+    elif push_dict_1.keys():
+        gap_l = [sorted(list(push_dict_1.keys()))[0]]
     else:
-        gap_l = list(sorted(list(push_dict_1.keys()))[0])
+        gap_l = []
     return gap_l
 
 
@@ -240,4 +252,4 @@ def Cn_2(n):
     for i in range(1, n + 1):
         out *= i
     out /= 2
-    return out
+    return int(out)
