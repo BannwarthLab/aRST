@@ -240,9 +240,13 @@ def spr_inter_new(reactants, rec):
     return react_os, react_ss, hoaoa_df, hoaob_df, luaoa_df, luaob_df
 
 
-def spr_intra_new(reactants, rec, hydrogen=True):
+def spr_intra_new(reactants, rec, mode=0, hydrogen=True):
     dis_d = {}
-    # use bo as measurement
+    if mode == 0: # use bo as measurement
+        colunmnr = 3
+    else:
+        colunmnr = 2 # use bde as measurement
+
     for smi in reactants:
         try:
             wboe = rec[smi]['wboe']
@@ -250,7 +254,7 @@ def spr_intra_new(reactants, rec, hydrogen=True):
             if isinstance(wboe, pd.DataFrame):
                 tmp = {}
                 for i in range(wboe.shape[0]):
-                    dagp = wboe.iloc[i, 2]
+                    dagp = wboe.iloc[i, colunmnr]
                     at_1, at_2 = wboe.iloc[i, 0], wboe.iloc[i, 1]
                     # try:
                     #     cn_1 = int(mlfeatures.loc[at_1 - 1, 'coordination number'])
