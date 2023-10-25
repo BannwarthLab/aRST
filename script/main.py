@@ -1,3 +1,4 @@
+#!/usr/bin/python3.9
 import os
 import shutil
 import sys
@@ -12,6 +13,15 @@ from head import print_header, call_header, printout_cycle_results
 from Assign_reaction import do_assign_reactor, Singlestep
 from operation import write_rec
 from collections import Counter
+import threading
+
+# Define a lock to make the function call thread-safe
+function_lock = threading.Lock()
+
+def do_reaction_single(reactants, step, rec, wd, kwargs):
+    with function_lock:
+        singlestep_instance = Singlestep(wd, **kwargs)
+        return singlestep_instance.do_reaction(reactants, step, rec)
 
 if __name__ == "__main__":
     parser = ArgumentParser(
@@ -36,22 +46,25 @@ if __name__ == "__main__":
 
     # get input
     rec, kwargs = read_input(args.in_file)
-
-    # set cores
-    num_cores = int(os.getenv('OMP_NUM_THREADS', '1'))
-
-    if kwargs.get("searching_setting").get("platform") == 0:
-        num_cores = 4
-    kwargs['searching_setting']['num_cores'] = num_cores
-
+    print(kwargs)
     if not rec:
         print("Failed to read input")
         sys.exit()
 
+    # set cores
+    num_cores = int(os.getenv('OMP_NUM_THREADS', '1'))
+    if kwargs.get("searching_setting").get("platform") == 0:
+        num_cores = 4
+    kwargs['searching_setting']['num_cores'] = num_cores
+
+    # merge "searching_setting" and "xtb_stting"
+    tmp_d = {**kwargs.get("searching_setting"), **kwargs.get("xtb_setting")}
+    kwargs['searching_setting'] = tmp_d
+    kwargs['xtb_setting'] = tmp_d
+
     # determine the working folder
     wd = os.path.abspath(os.path.dirname(args.in_file))
     print(f"working folder is {wd}")
-    print("num_cores: ", kwargs['searching_setting']['num_cores'])
 
     # print(sys.version)
     # print(sys.path)
@@ -88,9 +101,11 @@ if __name__ == "__main__":
         call_header(f"cycle {step}", "=")
         reactants_total_dict = {}
         path_l = list(set([k.split('/')[0] for k in list(rec.keys())
-                           if len(k.split('/')[0]) == step + 1
-                           and os.path.isdir(f'{wd}/{k.split("/")[0]}')]))  # reaction path for this cycle
-        print(f"path for this cycle:{path_l}")
+                           if k.count("_") == step
+                           and os.path.isdir(f'{wd}/{k.split("/")[0]}') and not "refproduct" in k]))  # reaction path for this cycle
+        # path_l = list(set([k.split('/')[0] for k in list(rec.keys())
+        #                    if len(k.split('/')[0]) == step + 1
+        #                    and os.path.isdir(f'{wd}/{k.split("/")[0]}')]))  # reaction path for this cycle
 
         # individually sim each path
         items = []
@@ -101,12 +116,6 @@ if __name__ == "__main__":
             printout_d[path_name] = {}
             printout_d[path_name]['reactants'] = reactants_tmp
 
-
-        def do_reaction_single(reactants, step, rec, wd, kwargs):
-            singlestep_instance = Singlestep(wd, **kwargs)
-            return singlestep_instance.do_reaction(reactants, step, rec)
-
-
         # Use multiprocessing.Pool to parallelize the tasks
         if 0 < len(items) < num_cores:
             nmp = len(items)
@@ -116,22 +125,24 @@ if __name__ == "__main__":
             do_reaction_partial = partial(do_reaction_single, wd=wd, kwargs=kwargs)
             results = pool.starmap(do_reaction_partial,
                                    [(reactants_tmp, step, rec) for reactants_tmp in items])
+        # reactants_total_dict, rec, reaction_rec, \
+        #                (association_d, dissociation_d, hoaoa_df, hoaob_df, luaoa_df, luaob_df)
         for r in range(len(list(results))):
             result = list(results)[r]
             reactants_total_dict = update_dict(reactants_total_dict, result[0])
             rec = update_dict(rec, result[1])
             reaction_rec = update_dict(reaction_rec, result[2])
             # for print out
-            if reactants_total_dict:
-                reactants_tmp = reactants_total_dict[list(reactants_total_dict.keys())[0]]
-                path_i = list(reactants_total_dict.keys())[0].strip()
-                association_d, hoaoa_df, hoaob_df, luaoa_df, luaob_df = result[3]
-                printout_cycle_results(path_i, reactants_tmp, association_d, hoaoa_df, hoaob_df, luaoa_df,
-                                       luaob_df, rec)
+            if result[0]:
+                path_name = list(result[0].keys())[0][:-1]
+                reactants_tmp = [k for k in list(result[1].keys()) if k.split("/")[0] == path_name]
+                association_d, dissociation_d, hoaoa_df, hoaob_df, luaoa_df, luaob_df = result[3]
+                printout_cycle_results(path_name, reactants_tmp, association_d, dissociation_d, hoaoa_df, hoaob_df,
+                                       luaoa_df, luaob_df, rec)
 
         path_l = list(set([k.split('/')[0] for k in list(rec.keys())
-                           if len(k.split('/')[0]) == step + 2
-                           and os.path.isdir(f'{wd}/{k.split("/")[0]}')]))  # reaction path surviored for this cycle
+                           if k.count("_") == step+1
+                           and os.path.isdir(f'{wd}/{k.split("/")[0]}') and not "refproduct" in k]))  # reaction path surviored for this cycle
 
         if path_l:
             write_rec(rec, wd, 'rec')
@@ -151,7 +162,6 @@ if __name__ == "__main__":
                         traceback.print_exc()
                         pass
                     break
-            print("iamhier", step)
             step += 1
 
         else:
@@ -161,6 +171,18 @@ if __name__ == "__main__":
         print("step=", step)
         write_rec(rec, wd, 'rec')
         write_rec(reaction_rec, wd, 'reaction')
+        product_mb = [rec[k]['mb'] for k in rec.keys() if 'refproduct' in k]
+
+        for k in list(reaction_rec.keys()):
+            products_k = reaction_rec[k][1]
+            if Counter(product_mb) == Counter(products_k):
+                print("!!!!!!!found product!!!!!!!!")
+                try:
+                    if os.path.isdir(f'{wd}/{k}'):
+                        shutil.move(f'{wd}/{k}', f'{wd}/{k}_hier')
+                except:
+                    traceback.print_exc()
+                    pass
 
         print("done")
 
