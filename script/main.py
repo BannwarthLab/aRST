@@ -1,29 +1,54 @@
 #!/usr/bin/python3.9
+import warnings
+warnings.simplefilter("ignore", UserWarning)
+warnings.simplefilter("ignore", RuntimeWarning)
+
 import os
 import shutil
 import sys
 import time
 import traceback
-import billiard as multiprocessing
+# import billiard as multiprocessing
+# from billiard import managers
 from argparse import ArgumentParser
-from read import read_input, prepare, update_dict
-from multiprocessing import set_start_method
+from read import read_input, prepare
+from multiprocessing import set_start_method,log_to_stderr,get_logger,Manager
+import multiprocessing
+
 from functools import partial
 from head import print_header, call_header, printout_cycle_results
-from Assign_reaction import do_assign_reactor, Singlestep
-from operation import write_rec
+from Assign_reaction import Singlestep,complete_struc_dftopt,complete_trvandsolv
 from collections import Counter
 import threading
+from dictionaryInspector import DictionaryInspector,DataFrameEncoder
 
 # Define a lock to make the function call thread-safe
 function_lock = threading.Lock()
 
-def do_reaction_single(reactants, step, rec, wd, kwargs):
+
+def do_reaction_single(reactants, reactionpath, shared_nstruc, shared_nreaction, STRUC, REACTION, wd, kwargs):
     with function_lock:
-        singlestep_instance = Singlestep(wd, **kwargs)
-        return singlestep_instance.do_reaction(reactants, step, rec)
+        singlestep_instance = Singlestep(wd, STRUC, REACTION, **kwargs)
+        result = singlestep_instance.do_reaction(reactants, reactionpath, shared_nstruc, shared_nreaction)
+
+        return result
+
+def do_dftopt(wd,info_d,optlevel,pcm):
+    with function_lock:
+        result = complete_struc_dftopt(wd,info_d,optlevel,pcm)
+        return result
+
 
 if __name__ == "__main__":
+
+    set_start_method('fork')
+
+    # import logging
+
+    # log_to_stderr()
+    # get_logger().setLevel(logging.DEBUG)
+
+
     parser = ArgumentParser(
         # name of program
         prog="MEOW",
@@ -39,15 +64,16 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    import warnings
 
-    warnings.filterwarnings("ignore")
-    set_start_method('spawn')
+
+    # recording starting time
+    t1 = time.time()
 
     # get input
-    rec, kwargs = read_input(args.in_file)
-    print(kwargs)
-    if not rec:
+    struc_rec, kwargs = read_input(args.in_file)
+    for i in kwargs.keys():
+        print(f"{i},{kwargs[i]}\n")
+    if not struc_rec:
         print("Failed to read input")
         sys.exit()
 
@@ -70,18 +96,19 @@ if __name__ == "__main__":
     # print(sys.path)
 
     # prepare reactants before cycle: do opt and sp and get basic propoties for each reactant
-    items = [(wd, i, rec) for i in list(rec.keys()) if "sp_gfn2" not in rec[i].keys()]
-    if 0 < len(items) < num_cores:
-        nmp = len(items)
-    else:
-        nmp = num_cores
-    with multiprocessing.Pool(nmp) as pool:
+    STRUC_inspector = DictionaryInspector(struc_rec)
+    items = [(wd, struc_id, STRUC_inspector)
+             for struc_id in struc_rec.keys() if
+             STRUC_inspector.get_value(f"{struc_id}.struc_info.energy.sp_gfn2") is None]
+    with multiprocessing.Pool(num_cores) as pool:
         mapfunc = partial(prepare, **kwargs)
         for result in pool.starmap(mapfunc, items):
-            rec = update_dict(rec, result)
+            STRUC_inspector.update_strucrec_values(result)
 
-    # recording starting time
-    t1 = time.time()
+    ini_reactants = [strucid for strucid in struc_rec.keys() if "ref" not in strucid]
+
+
+
     pid = str(os.getpid())
     # print("pid:", pid)
 
@@ -89,104 +116,307 @@ if __name__ == "__main__":
     del kwargs['geom']
     print_header()
 
-    # rec = reactionnetwork(rec, wd, **kwargs)
-    searching_setting = kwargs.get('searching_setting')
-    cycle = searching_setting.get('cycle', 1)
+    cycle = kwargs.get('searching_setting').get('cycle', 1)
+    elim = kwargs.get('searching_setting').get('elim', 300)
+    # elim evaluation
+    if kwargs.get('orca_setting').get('reaction_energy', 'sp') == 'G':
+        elim_mode = 'G'
+    elif kwargs.get('orca_setting').get('dft_level', 'r2scan-3c') == 'gfn2':
+        elim_mode = 'sp_gfn2'
+    else:
+        elim_mode = 'sp_dft'
+
     step = 0
-    reaction_rec = {}
-    print('Reactants: ' + ''.join([rec[i]['mb'].split('|')[2] + str(" ; ")
-                                   for i in list(rec.keys()) if i.split('/')[0] == '1']))
+
+    reaction_inspector = DictionaryInspector({})  # record all apeared reaction
+    # set ref reaction, if there is one
+    if "refp0001" in struc_rec.keys():
+        initial_reactants = [i for i in struc_rec.keys() if "refp" not in i]
+        initial_products = [i for i in struc_rec.keys() if "refp" in i]
+        reactionid = "ref"
+        reaction_inspector.set_reaction_values(STRUC_inspector, initial_reactants, initial_products,[], reactionid, reactionid)
+
+
+    nstruc = len([k for k in struc_rec.keys() if not "ref" in k])
+    nreaction = len([k for k in reaction_inspector.data.keys() if not "ref" in k])
+
     while step < cycle:
+
+
         printout_d = {}
         call_header(f"cycle {step}", "=")
-        reactants_total_dict = {}
-        path_l = list(set([k.split('/')[0] for k in list(rec.keys())
-                           if k.count("_") == step
-                           and os.path.isdir(f'{wd}/{k.split("/")[0]}') and not "refproduct" in k]))  # reaction path for this cycle
-        # path_l = list(set([k.split('/')[0] for k in list(rec.keys())
-        #                    if len(k.split('/')[0]) == step + 1
-        #                    and os.path.isdir(f'{wd}/{k.split("/")[0]}')]))  # reaction path for this cycle
-
-        # individually sim each path
+        # find paths that surviored last cycle and the corespongding reactants id
         items = []
-        for i in range(len(path_l)):
-            path_name = path_l[i]
-            reactants_tmp = [k for k in list(rec.keys()) if k.split("/")[0] == path_name]
-            items.append(reactants_tmp)
-            printout_d[path_name] = {}
-            printout_d[path_name]['reactants'] = reactants_tmp
-
-        # Use multiprocessing.Pool to parallelize the tasks
-        if 0 < len(items) < num_cores:
-            nmp = len(items)
+        items2 = []
+        if step == 0:
+            reactants = STRUC_inspector.find_sturcid_with_reactionpath('1')
+            items.append(reactants)
+            items2.append('1')
+            printout_d['1'] = {}
+            printout_d['1']['reactants'] = [STRUC_inspector.get_value(f'{i}.struc_info.general.formula')
+                                            for i in reactants]
         else:
-            nmp = num_cores
-        with multiprocessing.Pool(nmp) as pool:
-            do_reaction_partial = partial(do_reaction_single, wd=wd, kwargs=kwargs)
-            results = pool.starmap(do_reaction_partial,
-                                   [(reactants_tmp, step, rec) for reactants_tmp in items])
-        # reactants_total_dict, rec, reaction_rec, \
-        #                (association_d, dissociation_d, hoaoa_df, hoaob_df, luaoa_df, luaob_df)
-        for r in range(len(list(results))):
-            result = list(results)[r]
-            reactants_total_dict = update_dict(reactants_total_dict, result[0])
-            rec = update_dict(rec, result[1])
-            reaction_rec = update_dict(reaction_rec, result[2])
-            # for print out
-            if result[0]:
-                path_name = list(result[0].keys())[0][:-1]
-                reactants_tmp = [k for k in list(result[1].keys()) if k.split("/")[0] == path_name]
-                association_d, dissociation_d, hoaoa_df, hoaob_df, luaoa_df, luaob_df = result[3]
-                printout_cycle_results(path_name, reactants_tmp, association_d, dissociation_d, hoaoa_df, hoaob_df,
-                                       luaoa_df, luaob_df, rec)
 
-        path_l = list(set([k.split('/')[0] for k in list(rec.keys())
-                           if k.count("_") == step+1
-                           and os.path.isdir(f'{wd}/{k.split("/")[0]}') and not "refproduct" in k]))  # reaction path surviored for this cycle
+            tmp_l = [] # record for allowed reactionID
 
-        if path_l:
-            write_rec(rec, wd, 'rec')
-            write_rec(reaction_rec, wd, 'reaction')
-            # write_rec(failreaction_rec, wd, 'failreaction')
-            # tmp test
-            product_mb = [rec[k]['mb'] for k in rec.keys() if 'refproduct' in k]
+            # screen reaction id for this cycle
+            for reactionid in reaction_inspector.data.keys():
+                reaction_pathinfo = reaction_inspector.get_value(f'{reactionid}.reaction_path')
 
-            for k in list(reaction_rec.keys()):
-                products_k = reaction_rec[k][1]
-                if Counter(product_mb) == Counter(products_k):
-                    print("!!!!!!!found product!!!!!!!!")
+                # check not ref reaction
+                if reactionid != "ref":
                     try:
-                        if os.path.isdir(f'{wd}/{k}'):
-                            shutil.move(f'{wd}/{k}', f'{wd}/{k}_hier')
+                        # check reaction energy limitation
+                        if reaction_inspector.get_value(f'{reactionid}.energy_singlecycle.{elim_mode}') < elim:
+
+                            # check if last cycle reaction
+                            if len(reaction_pathinfo) == 1 and len(reaction_pathinfo[0]) == step + 1:
+                                lastcycle = True
+                            elif len(reaction_pathinfo) >1:
+                                length_check = all(len(item) == len(reaction_pathinfo[0]) for item in reaction_pathinfo)
+                                content_check = all(item[:-1] == reaction_pathinfo[0][:-1] for item in reaction_pathinfo)
+                                if length_check and content_check:
+                                    lastcycle = True
+                                else: lastcycle = False
+                            else:
+                                lastcycle = False
+
+                            # check if new reaction: reactants for this cycle should be new
+                            if lastcycle and not reaction_inspector.test_if_reaction_loop(reactionid):
+                                # tmp_l.append(reactionid)
+                                lastcycle_products = reaction_inspector.get_value(
+                                    f"{reactionid}.struc_info.products") or []
+                                lastcycle_unreactants = reaction_inspector.get_value(
+                                    f"{reactionid}.struc_info.unreactants") or []
+                                reactants = lastcycle_products + lastcycle_unreactants
+                                path = reaction_inspector.get_value(f"{reactionid}.reaction_path")[0]
+                                tmp_l.append(reactionid)
+                                items.append(reactants)
+                                items2.append(path)
+                                printout_d[path] = {}
+                                printout_d[path]['reactants'] = [STRUC_inspector.get_value(f'{i}.struc_info.general.formula')
+                                                                 for i in reactants]
+
+
+
+
+
+
                     except:
-                        traceback.print_exc()
                         pass
-                    break
-            step += 1
+            print("heyheyhey")
+            print(tmp_l)
+            # for reactionid in tmp_l:
+            #     lastcycle_products = reaction_inspector.get_value(f"{reactionid}.struc_info.products") or []
+            #     lastcycle_unreactants = reaction_inspector.get_value(f"{reactionid}.struc_info.unreactants") or []
+            #
+            #     reactants = lastcycle_products + lastcycle_unreactants
+            #     oldreactionid = reaction_inspector.test_if_reaction_exist()
+            #     if oldreactionid is not None:
+            #         reactants = []
+            #
+            #     print(reactants)
+            #     if reactants:
+            #         path = reaction_inspector.get_value(f"{reactionid}.reaction_path")[0]
+            #         items.append(reactants)
+            #         items2.append(path)
+            #         printout_d[path] = {}
+            #         printout_d[path]['reactants'] = [STRUC_inspector.get_value(f'{i}.struc_info.general.formula')
+            #                                          for i in reactants]
 
-        else:
-            print("no path_l")
-            break
-    else:
-        print("step=", step)
-        write_rec(rec, wd, 'rec')
-        write_rec(reaction_rec, wd, 'reaction')
-        product_mb = [rec[k]['mb'] for k in rec.keys() if 'refproduct' in k]
+        if items:
 
-        for k in list(reaction_rec.keys()):
-            products_k = reaction_rec[k][1]
-            if Counter(product_mb) == Counter(products_k):
-                print("!!!!!!!found product!!!!!!!!")
+            # Use Manager to creat two shared variante
+            with Manager() as manager:
+                #  int for counting struc/reaction number
+                current_nstruc = manager.Value('i', nstruc)
+                current_nreaction = manager.Value('i', nreaction)
+
+
+                # Use multiprocessing.Pool to parallelize the tasks
+                with multiprocessing.Pool(num_cores) as pool:
+                    do_reaction_partial = partial(do_reaction_single, STRUC=STRUC_inspector,
+                                                 REACTION=reaction_inspector, wd=wd, kwargs=kwargs)
+                    results = pool.starmap(do_reaction_partial,
+                                           [(reactants_tmp, path_tmp, current_nstruc, current_nreaction)
+                                            for reactants_tmp, path_tmp in zip(items, items2)])
+
+                # after reaction simulation
+
+                # update shared values
+                nstruc = current_nstruc.value
+                nreaction = current_nreaction.value
+                print(f"for step {step} is nstruc {nstruc} and nreaction {nreaction}")
+
+                # receive results
+                tmp_struc_d,tmp_reaction_d,out_d,out2_d = {},{},{},{}
+                for result in results:
+                    tmp_struc_d.update(result[0])
+                    tmp_reaction_d.update(result[1])
+                    out_d.update(result[2])
+                    out2_d.update(result[3])
+
+                # kill reaction repeat within cycle (same reactants, different path, same products) and to old rections
+                tmp_d = STRUC_inspector.update_struc_d_after_mp(tmp_struc_d)
+                reaction_inspector.update_reaction_d_after_mp(tmp_reaction_d,tmp_d)
+
+
                 try:
-                    if os.path.isdir(f'{wd}/{k}'):
-                        shutil.move(f'{wd}/{k}', f'{wd}/{k}_hier')
+                    Singlestep(wd,STRUC_inspector,reaction_inspector,**kwargs).ML_prepare(STRUC_inspector.data.keys())
                 except:
                     traceback.print_exc()
-                    pass
 
-        print("done")
 
+                toopt_struc_l = []
+
+                for reactionid in out_d.keys():
+                    products = reaction_inspector.get_value(f"{reactionid}.struc_info.products") or []
+                    toopt_struc_l.extend(products)
+
+                toopt_struc_l = [strucid for strucid in toopt_struc_l if strucid in STRUC_inspector.data.keys()]
+                toopt_struc_l = list(set(toopt_struc_l))
+
+
+                # do dft opt
+                if kwargs.get('orca_setting').get('dft_opt', False):
+
+                    optlevel = kwargs.get("orca_setting", None).get("dft_level", None)
+                    pcm = kwargs.get("orca_setting", None).get("pcm", None)
+
+                    with multiprocessing.Pool(num_cores) as pool:
+                        results = pool.starmap(do_dftopt,[(wd,{strucid: STRUC_inspector.data[strucid]},optlevel,pcm)
+                                                          for strucid in toopt_struc_l])
+                    for result in results:
+                        strucid = result[0]
+                        STRUC_inspector.set_value(f"{strucid}.struc_info.general.coord",result[1])
+                        STRUC_inspector.set_value(f"{strucid}.struc_info.general.multiplicity", result[2])
+                        STRUC_inspector.set_value(f"{strucid}.struc_info.energy.sp_dft", result[3])
+
+                # do trv and solv
+                if kwargs.get('orca_setting').get('reaction_energy', 'sp') == 'G':
+                    xtb_setting = kwargs.get("xtb_setting")
+                    level = xtb_setting.get('xtblevel', 'gfn2')
+                    alpb = xtb_setting.get('alpb', 'water')
+                    with multiprocessing.Pool(num_cores) as pool:
+                        results = pool.starmap(complete_trvandsolv,[(wd,{strucid: STRUC_inspector.data[strucid]},level,alpb)
+                                                      for strucid in toopt_struc_l])
+                    for result in results:
+                        strucid = result[0]
+                        STRUC_inspector.set_value(f"{strucid}.struc_info.energy.trv", result[1])
+                        STRUC_inspector.set_value(f"{strucid}.struc_info.energy.solv", result[2])
+                        STRUC_inspector.set_value(f"{strucid}.struc_info.energy.G",
+                                                  result[1]+result[2]+
+                                                  STRUC_inspector.get_value(f"{strucid}.struc_info.energy.sp_gfn2")
+                                                  if kwargs.get('orca_setting').get('dft_level', 'gfn2') == 'gfn2'
+                                                  else result[1]+result[2]+
+                                                       STRUC_inspector.get_value(f"{strucid}.struc_info.energy.sp_dft"))
+
+
+                # update reaction energy
+                for reactionid,item in out_d.items():
+                    reactants_l = item[0]
+                    products_l = item[1]
+                    full_reactants = out2_d[reactionid]
+                    unreactants_l = [k for k in full_reactants if k not in reactants_l]
+                    if reactionid in reaction_inspector.data.keys():
+                        reaction_inspector.set_reaction_values(STRUC_inspector,reactants_l,
+                                                               products_l,None,reactionid,None,onlyenergy=True)
+
+                        reaction_inspector.set_reaction_values(STRUC_inspector, ini_reactants,
+                                                               products_l+unreactants_l if unreactants_l else products_l,
+                                                               None, reactionid, None, onlyenergy=True,type="total")
+
+
+            step += 1
+        else:
+
+            step += 1
+            # break
+
+
+    #     with multiprocessing.Pool(nmp) as pool:
+    #         do_reaction_partial = partial(do_reaction_single, wd=wd, kwargs=kwargs)
+    #         results = pool.starmap(do_reaction_partial,
+    #                                [(reactants_tmp, step, rec) for reactants_tmp in items])
+    #     # reactants_total_dict, rec, reaction_rec, \
+    #     #                (association_d, dissociation_d, hoaoa_df, hoaob_df, luaoa_df, luaob_df)
+    #     for r in range(len(list(results))):
+    #         result = list(results)[r]
+    #         reactants_total_dict = update_dict(reactants_total_dict, result[0])
+    #         rec = update_dict(rec, result[1])
+    #         reaction_rec = update_dict(reaction_rec, result[2])
+    #         # for print out
+    #         if result[0]:
+    #             path_name = list(result[0].keys())[0][:-1]
+    #             reactants_tmp = [k for k in list(result[1].keys()) if k.split("/")[0] == path_name]
+    #             association_d, dissociation_d, hoaoa_df, hoaob_df, luaoa_df, luaob_df = result[3]
+    #             printout_cycle_results(path_name, reactants_tmp, association_d, dissociation_d, hoaoa_df, hoaob_df,
+    #                                    luaoa_df, luaob_df, rec)
+    #
+    #     path_l = list(set([k.split('/')[0] for k in list(rec.keys())
+    #                        if k.count("_") == step + 1
+    #                        and os.path.isdir(
+    #             f'{wd}/{k.split("/")[0]}') and not "refproduct" in k]))  # reaction path surviored for this cycle
+    #
+    #     if path_l:
+    #         write_rec(rec, wd, 'rec')
+    #         write_rec(reaction_rec, wd, 'reaction')
+    #         # write_rec(failreaction_rec, wd, 'failreaction')
+    #         # tmp test
+    #         product_mb = [rec[k]['mb'] for k in rec.keys() if 'refproduct' in k]
+    #
+    #         for k in list(reaction_rec.keys()):
+    #             products_k = reaction_rec[k][1]
+    #             if Counter(product_mb) == Counter(products_k):
+    #                 print("!!!!!!!found product!!!!!!!!")
+    #                 try:
+    #                     if os.path.isdir(f'{wd}/{k}'):
+    #                         shutil.move(f'{wd}/{k}', f'{wd}/{k}_hier')
+    #                 except:
+    #                     traceback.print_exc()
+    #                     pass
+    #                 break
+    #         step += 1
+    #
+    #     else:
+    #         print("no path_l")
+    #         break
+    # else:
+    #     print("step=", step)
+    #     write_rec(rec, wd, 'rec')
+    #     write_rec(reaction_rec, wd, 'reaction')
+    #     product_mb = [rec[k]['mb'] for k in rec.keys() if 'refproduct' in k]
+    #
+    #     for k in list(reaction_rec.keys()):
+    #         products_k = reaction_rec[k][1]
+    #         if Counter(product_mb) == Counter(products_k):
+    #             print("!!!!!!!found product!!!!!!!!")
+    #             try:
+    #                 if os.path.isdir(f'{wd}/{k}'):
+    #                     shutil.move(f'{wd}/{k}', f'{wd}/{k}_hier')
+    #             except:
+    #                 traceback.print_exc()
+    #                 pass
+    #
+    #     print("done")
+    #
     # recording finishing time
+    from toolbox import rm_folderORfile
+    for folder in os.listdir(wd):
+        if os.path.isdir(os.path.join(wd,folder)) and not ("struc" in folder or "scan" in folder):
+            rm_folderORfile(os.path.join(wd,folder))
+
+    import json
+
+    with open(f'{wd}/reaction.json', "w") as f:
+        f.write(json.dumps(reaction_inspector.data, cls=DataFrameEncoder, indent=2))
+        f.write('\n')
+
+    with open(f'{wd}/struc.json', "w") as f:
+        f.write(json.dumps(STRUC_inspector.data, cls=DataFrameEncoder, indent=2))
+        f.write('\n')
+
+
     t2 = time.time()
     print(f"finished with {t2 - t1}")
     sys.exit()

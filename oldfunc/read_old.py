@@ -128,7 +128,7 @@ def prepare(wd, i, rec, **kwargs):
         typ = 'dft'
 
     # xtb opt
-    creat_folder(f'{wd}/{i}/xtbopt')  # forlder xtbopt not only for opt, also sp
+    create_folder(f'{wd}/{i}/xtbopt')  # forlder xtbopt not only for opt, also sp
     coord = rec[i]['coord']
     nat = coord.shape[0]
     charg, m = rec[i]['charge'], rec[i]['m']
@@ -149,7 +149,7 @@ def prepare(wd, i, rec, **kwargs):
 
     # dft
     if typ == 'dft':
-        creat_folder(f'{wd}/{i}/orca')
+        create_folder(f'{wd}/{i}/orca')
         write_xyz(coord, 'coord')
         if not initial_opt:
             call_orca_dft(f'{wd}/{i}/orca', level, charg, m, nat, opt=False, alpb=alpb, mode=mode)

@@ -24,233 +24,167 @@ def remove_file(old_path, new_path):
         shutil.move(src, dst)
 
 
-def call_orca_dft(wd, charg, m, caltyp='sp', **kwargs):
-    os.chdir(wd)
-    pcm = kwargs.get("pcm", None)
-    method = kwargs.get("dft_level", "r2scan-3c")
-    mode = kwargs.get("mode", 0)
+class CallORCA:
+    def __init__(self,level,coordfn,charge, m, pcm):
+        self.coordfn = coordfn
+        self.charge = charge
+        self.m = m
+        self.pcm = pcm
+        self.level = level
 
-    if pcm is not None:
-        solmode = f"CPCM({pcm})"
-    else:
-        solmode = ''
+    @staticmethod
+    def orcasubprocess(cmd):
+        rc = 1
+        try:
+            with open('orca.out', 'w') as stdout_file, open('orca_err.out', 'w') as stderr_file:
+                p = subprocess.Popen(cmd, stdout=stdout_file, stderr=stderr_file, shell=True)
+                p.wait()
+                rc = p.returncode
 
-    if m == 1:
-        caltyp2 = "RKS"
-    else:
-        caltyp2 = "UKS"
-    # f"pal nprocs 16 end\n"\
-    # f"%SCF MAXITER 200 end\n" \
-    if caltyp == 'sp':
-        # sp calculation only used for initial evaluation for reaction path
-        cmd = f"! {method} {caltyp} {caltyp2} {solmode}\n" \
-              f"%SCF guess hueckel end\n" \
-              f"* xyzfile {charg} {m} coord.xyz "
-    else:
-        cmd = f"! {method} {caltyp} {caltyp2} {solmode}\n" \
-              f"%SCF guess hueckel end\n" \
-              f"* xyzfile {charg} {m} coord.xyz "
-    with open(f'{wd}/orca.inp', 'w') as f:
-        f.write(cmd)
-    cmd = f'$ORCA orca.inp'
-    # 'orca.out'
-    #  && tac orca.out | grep -m 1 \'FINAL SINGLE\' |awk \'{{print $5}}\' > ENERGY
-    if mode == 1:  # running in debug node and return when cal has finished
-        tmpd = mkdtemp()
-        remove_file(wd, tmpd)
-        os.chdir(tmpd)
-        rc = call_subprocess(cmd, 'orca')
-        if ".tmp" in os.listdir(tmpd):
-            cmd = f"! {method} sp OPT {caltyp2} {solmode}\n" \
-                  f"" \
-                  f"* xyzfile {charg} {m} coord.xyz "
-            rc = call_subprocess(cmd, 'orca')
-        if rc != 0:
-            print(f"{wd} calling orca wrong")
+                if rc == 0:
+                    with open('orca.out', 'r') as f:
+                        lines = f.readlines()
+                        for line in lines:
+                            if 'FINAL SINGLE' in line:
+                                with open('ENERGY', 'w') as f2:
+                                    f2.write(str(re.findall(r'\-?\d+\.?\d*', line)[0]))
+                else:
+                    print(f"Error: orca execution failed with return code {rc} at {os.getcwd()}")
 
-        remove_file(tmpd, wd)
-        os.chdir(wd)
-        if os.path.isdir(tmpd):
-            shutil.rmtree(tmpd)
-        return
+        except Exception as e:
+            print(f"An error occurred: {e}")
+        return rc
 
-    elif mode == 2:  # running in master node but submit jobs using slurm
-        root_path = os.path.dirname(__file__)
-        shutil.copy(f'{root_path}/submit/submit_orca.sh', wd)
-        os.chdir(wd)
-        cmd = f'sbatch submit_orca.sh'
-        subprocess.run(cmd, shell=True)
-        return
-    else:  # default
-        rc = call_subprocess(cmd, 'orca')
-        if rc != 0:
-            print(f"{wd} calling orca wrong")
+    def callcalculation(self, caltyp='sp'):
+        if self.m == 1:
+            caltyp2 = "RKS"
+        else:
+            caltyp2 = "UKS"
+        if self.pcm is not None:
+            solmode = f"CPCM({self.pcm})"
+        else:
+            solmode = ''
+
+        input = f"! {self.level} {caltyp} {caltyp2} {solmode}\n" \
+                f"%SCF guess hueckel end\n" \
+                f"* xyzfile {self.charge} {self.m} {self.coordfn}.xyz "
+        with open(f'orca.inp', 'w') as f:
+            f.write(input)
+        cmd = f'$ORCA orca.inp'
+        rc = self.orcasubprocess(cmd)
+
         return rc
 
 
-def call_xtb(wd, charg, caltyp="", uhf=0, **kwargs):
-    os.chdir(wd)
-    alpb = kwargs.get("alpb", None)
-    mode = kwargs.get("mode", 0)
-    etemp = kwargs.get("etemp", str(300))
-    if alpb is None:
-        solmode = ""
-    else:
-        solmode = f'--alpb {alpb}'
-    command = f'xtb coord.xyz {caltyp} -c {charg} --uhf {uhf} {solmode} --etemp {etemp}'
+class CallxTB:
+    def __init__(self, level, coordfn, charge, uhf, alpb, etemp):
+        self.coordfn = coordfn
+        self.charge = charge
+        self.uhf = uhf
+        self.alpb = alpb
+        self.etemp = etemp
+        self.level = level
 
-    # f'&& tac xtb.out | grep -a \'TOTAL ENERGY\' |awk \'{{print $4}}\' > ENERGY &\n'
-    # if uhf is not None:
-    #     command = f'xtb coord.xyz --opt --uhf {uhf} {solmode}'
-    if mode == 1:  # running in /tmp and return when cal has finished
-        tmpd = mkdtemp()
-        remove_file(wd, tmpd)
-        os.chdir(tmpd)
-        rc = call_subprocess(command, 'xtb')
-        if rc != 0:
-            print("calling xtb wrong")
-        remove_file(tmpd, wd)
-        os.chdir(wd)
-        if os.path.isdir(tmpd):
-            shutil.rmtree(tmpd)
-        return rc
-    elif mode == 2:  # running in master node but submit jobs using slurm
-        root_path = os.path.dirname(__file__)
-        shutil.copy(f'{root_path}/submit/submit_xtbopt.sh', wd)
-        os.chdir(wd)
-        cmd = f'sbatch submit_xtbopt.sh'
-        subprocess.run(cmd, shell=True)
-        return
-    else:
-        rc = call_subprocess(command, 'xtb')
-        if rc != 0:
-            print("calling xtb wrong")
+    @staticmethod
+    def xtbsubprocess(cmd):
+        rc = 1
+        try:
+            with open('xtb.out', 'w') as stdout_file, open('xtb_err.out', 'w') as stderr_file:
+                p = subprocess.Popen(cmd, stdout=stdout_file, stderr=stderr_file, shell=True)
+                p.wait()
+                rc = p.returncode
+
+                if rc == 0:
+                    with open('xtb.out', 'r') as f:
+                        lines = f.readlines()
+                        for line in lines:
+                            if 'TOTAL ENERGY' in line:
+                                with open('ENERGY', 'w') as f2:
+                                    f2.write(str(re.findall(r'\-?\d+\.?\d*', line)[0]))
+                else:
+                    print(f"Error: xtb execution failed with return code {rc}")
+
+        except Exception as e:
+            print(f"An error occurred: {e}")
         return rc
 
+    def callsp(self):
+        cmd = f'xtb {self.coordfn}.xyz --{self.level} -c {self.charge} --uhf {self.uhf} --etemp {self.etemp}'
 
-def call_xtb_scan(wd, charg, uhf, **kwargs):
-    os.chdir(wd)
-    at1 = kwargs.get('at1')
-    at2 = kwargs.get('at2')
-    d1 = kwargs.get('d1')
-    d2 = kwargs.get('d2')
-    alpb = kwargs.get("alpb", None)
-    mode = kwargs.get("mode", 0)
-    etemp = kwargs.get("etemp", str(300))
-    concerted_trigger = kwargs.get("concerted_trigger", False)
-    constrain_strength = kwargs.get("constrain_strength", str(1))
-    at3 = kwargs.get('at3', None)
-    at4 = kwargs.get('at4', None)
-    d_34_start = kwargs.get('d_34_start', None)
-    d_34_end = kwargs.get("d_34_end", None)
+        if self.alpb is None:
+            cmd += f' --alpb {self.alpb}'
 
-    if concerted_trigger:
-        with open('scan.inp', 'w') as f3:
-            f3.write(f'$constrain\n'
-                     f'force constant={constrain_strength}\n'
-                     f'$scan\n'
-                     'mode=concerted\n'
-                     f'distance: {at3},{at4},{d_34_start};{d_34_start},{d_34_end},30\n'
-                     f'distance: {at1},{at2},{d1};{d1},{d2},30\n$end')
-    else:
-        with open('scan.inp', 'w') as f3:
-            f3.write(f'$constrain\n'
-                     f'force constant={constrain_strength}\n'
-                     f'$scan\n'
-                     f'distance: {at1},{at2},{d1};{d1},{d2},30\n$end')
+        rc = self.xtbsubprocess(cmd)
+        return rc
 
-    if alpb is None:
-        solmode = ""
-    else:
-        solmode = f'--alpb {alpb}'
-    command = f'xtb coord.xyz --opt  -c {charg} --uhf {uhf} {solmode} --etemp {etemp} --input scan.inp'
+    def callopt(self, extracmd=None):
+        cmd = f'xtb {self.coordfn}.xyz --{self.level} -c {self.charge} --uhf {self.uhf}  --etemp {self.etemp}'
 
-    if mode == 1:
-        tmpd = mkdtemp()
-        remove_file(wd, tmpd)
-        os.chdir(tmpd)
-        rc = call_subprocess(command, 'xtb')
-        if rc != 0:
-            print("calling scan wrong")
-        remove_file(tmpd, wd)
-        os.chdir(wd)
-        if os.path.isdir(tmpd):
-            shutil.rmtree(tmpd)
-    elif mode == 2:
-        root_path = os.path.dirname(__file__)
-        shutil.copy(f'{root_path}/submit/submit_scan.sh', wd)
-        with open('submit_scan.sh', 'r') as f:
-            line = f.readlines()
-        line[45] = f'{command}'
-        with open('submit_scan.sh', 'w') as f:
-            for i in line:
-                f.write(i)
-        subprocess.run("sbatch submit_scan.sh", shell=True)
-        return
-    else:
-        rc = call_subprocess(command, 'xtb')
-        if rc != 0:
-            print("calling scan wrong")
-        return
+        if self.alpb is not None:
+            cmd += f' --alpb {self.alpb}'
+        if extracmd is not None:
+            cmd+= f' --opt {extracmd}'
+        else:
+            cmd += f' --opt '
+
+        rc = self.xtbsubprocess(cmd)
+        return rc
+    def callConstrainedOpt(self,setting_d,extracmd=None):
+        atl = setting_d["distance"]
+        with open('xtb.inp', 'w') as f:
+            f.write(f'$constrain\n')
+
+            for i in range(len(atl)):
+                f.write(f'distance: {atl[i][0]},{atl[i][1]},{atl[i][3]}\n')
+            f.write("$end")
+        cmd = f'xtb {self.coordfn}.xyz --{self.level} --input xtb.inp' \
+              f' -c {self.charge} --uhf {self.uhf} --etemp {self.etemp}'
+        if extracmd is not None:
+            cmd+= f' --opt {extracmd}'
+        else:
+            cmd += f' --opt '
+        p = subprocess.Popen(cmd, stdout=open(f'xtb.out', 'w'), stderr=subprocess.PIPE, shell=True)
+        p.wait()
+        rc = p.returncode
+        return rc
 
 
-def call_xtb_ml(wd, charg, uhf=0, **kwargs):
-    os.chdir(wd)
-    alpb = kwargs.get("alpb", None)
-    xtbwd = kwargs.get("xtb_wd")
-    etemp = kwargs.get("etemp", str(300))
-    if alpb is not None:
-        cmd = f'{xtbwd} coord.xyz --ml_feature --etemp {etemp} -c {charg} --uhf {uhf} --alpb {alpb}'
-    else:
-        cmd = f'{xtbwd} coord.xyz --ml_feature --etemp {etemp} -c {charg} --uhf {uhf}'
 
-    # run ml
-    # subprocess.run(cmd, shell=True)
-    p = subprocess.Popen(cmd, stdout=open(f'xtb.out', 'w'), stderr=subprocess.PIPE, shell=True)
-    p.wait()
-    return
+    def callml(self, xtbwd,mllevel=None):
+        cmd = f"{xtbwd} {self.coordfn}.xyz  -c {self.charge} --uhf {self.uhf} --etemp {self.etemp} --ml_feature"
+        if self.alpb is not None:
+            cmd += f' --alpb {self.alpb}'
 
+        if mllevel is not None:
+            cmd+= f' --{mllevel}'
+        p = subprocess.Popen(cmd, stdout=open(f'xtb.out', 'w'), stderr=subprocess.PIPE, shell=True)
+        p.wait()
+        rc = p.returncode
 
-def call_trv(wd, charg, uhf=0, **kwargs):
-    os.chdir(wd)
-    alpb = kwargs.get("alpb", None)
-    mode = kwargs.get("mode", 0)
-    if alpb is None:
-        solmode = ""
-    else:
-        solmode = f'--alpb {alpb}'
-    command1 = f'xtb coord.xyz --gfn 2 --ohess --uhf {uhf} -c {charg} {solmode}'
-    command2 = f'TRVthermo --io xtb --rotthr 50 --fxyz coord.xyz --fvib freq.out --temp 298.15 > thermo.out'
-    rc = 0
-    if mode == 0:
+        return rc
+
+    def calltrv(self):
+        if self.alpb is None:
+            command1 = f'xtb {self.coordfn}.xyz  --ohess --uhf {self.uhf} -c {self.charge}'
+        else:
+            command1 = f'xtb {self.coordfn}.xyz  --ohess --uhf {self.uhf} -c {self.charge} --alpb {self.alpb}'
+
+        command2 = f'TRVthermo --io xtb --rotthr 50 --fxyz {self.coordfn}.xyz --fvib freq.out --temp 298.15 > thermo.out'
         p1 = subprocess.Popen(command1, stdout=open(f'freq.out', 'w'), stderr=subprocess.PIPE, shell=True)
         p1.wait()
         p2 = subprocess.Popen(command2, shell=True)
         p2.wait()
 
         rc = p2.returncode
-    if rc != 0:
-        print("calling trv wrong")
-    return rc
+        return rc
 
+    def callsolv(self):
+        command1 = f'xtb {self.coordfn}.xyz --gfn 2 --uhf {self.uhf} -c {self.charge} bar1M '
 
-def call_solv(wd, charg, uhf=0, **kwargs):
-    os.chdir(wd)
-    alpb = kwargs.get("alpb", None)
-    mode = kwargs.get("mode", 0)
-    esolv = 0
-    egas = 0
-    if alpb is None:
-        solmode = ""
-    else:
-        solmode = f'--alpb {alpb}'
-    command1 = f'xtb coord.xyz --gfn 2 --uhf {uhf} -c {charg} bar1M '
-
-    command2 = f'xtb coord.xyz --gfn 2 {solmode} --grad -- uhf {uhf} -c {charg} '
-    rc = 0
-    if mode == 0:
+        command2 = f'xtb {self.coordfn}.xyz --gfn 2 --alpb {self.alpb} --grad -- uhf {self.uhf} -c {self.charge} '
         p1 = subprocess.Popen(command1, stdout=open(f'gas.out', 'w'), stderr=subprocess.PIPE, shell=True)
         p1.wait()
+        rc1 = p1.returncode
         with open(f'gas.out', 'r') as f:
             lines = f.readlines()
             for line in lines:
@@ -263,32 +197,129 @@ def call_solv(wd, charg, uhf=0, **kwargs):
             for line in lines:
                 if 'TOTAL ENERGY' in line:
                     esolv = float(re.findall(r'\-?\d+\.?\d*', line)[0])
-        if rc ==0:
+        rc2 = p2.returncode
+        if rc1 == 0 and rc2 == 0:
             with open('GSOLV', 'w') as f2:
                 f2.write(str(esolv - egas))
-        rc = p2.returncode
-    if rc != 0:
-        print("calling trv wrong")
-    return rc
 
+        return rc2
 
-def call_subprocess(cmd, typ):
-    # call&check program running status and get calculated energy
-    keyw = None
-    if typ == 'orca':
-        keyw = 'FINAL SINGLE'
-    if typ == 'xtb':
-        keyw = 'TOTAL ENERGY'
-    if keyw:
-        p = subprocess.Popen(cmd, stdout=open(f'{typ}.out', 'w'), stderr=subprocess.PIPE, shell=True)
+    def call_scan(self, setting_d):
+        constrain_strength = setting_d["constrain"]["k"]
+        constrain_distance = setting_d["constrain"]["distance"]
+        mode = setting_d["scan"]["mode"]
+        atl = setting_d["scan"]["distance"]
+        step = setting_d["scan"]["step"]
+
+        with open('scan.inp', 'w') as f:
+            f.write(f'$constrain\n'
+                    f'force constant={constrain_strength}\n')
+
+            if constrain_distance is not None:
+                f.write(f'distance:{constrain_distance[0]},{constrain_distance[1]},{constrain_distance[2]}\n')
+            f.write(f'$scan\n')
+            if mode is not None:
+                f.write('mode=concerted\n')
+            for i in range(len(atl)):
+                f.write(f'distance: {atl[i][0]},{atl[i][1]},{atl[i][2]};{atl[i][2]},{atl[i][3]},{step}\n')
+            f.write("$end")
+        cmd = f'xtb {self.coordfn}.xyz --{self.level} --input scan.inp --opt ' \
+              f' -c {self.charge} --uhf {self.uhf} --etemp {self.etemp}'
+
+        p = subprocess.Popen(cmd, stdout=open(f'xtb.out', 'w'), stderr=subprocess.PIPE, shell=True)
         p.wait()
         rc = p.returncode
-        with open(f'{typ}.out', 'r') as f:
-            lines = f.readlines()
-            for line in lines:
-                if keyw in line:
-                    with open('ENERGY', 'w') as f2:
-                        f2.write(str(re.findall(r'\-?\d+\.?\d*', line)[0]))
-    else:
+        return rc
+    def get_moldeninput(self):
+        cmd = f'xtb {self.coordfn}.xyz --{self.level} -c {self.charge} --uhf {self.uhf} --etemp {self.etemp} --molden'
+
+        if self.alpb is None:
+            cmd += f' --alpb {self.alpb}'
+
+
+        rc = self.xtbsubprocess(cmd)
+        return rc
+
+
+class CallTerachem:
+    def __init__(self,coordfn,method, charge, m):
+        self.coordfn = coordfn
+        self.method = method
+        self.charge = charge
+        self.m = m
+
+    @staticmethod
+    def tcsubprocess(cmd):
         rc = 1
-    return rc
+        try:
+            with open('tc.out', 'w') as stdout_file, open('tc_err.out', 'w') as stderr_file:
+                p = subprocess.Popen(cmd, stdout=stdout_file, stderr=stderr_file, shell=True)
+                p.wait()
+                rc = p.returncode
+
+        except Exception as e:
+            print(f"An error occurred: {e}")
+        return rc
+    def get_moldeninput(self):
+        with open(f'tc.inp', 'w') as f:
+            f.write(f"coordinates             {self.coordfn}.xyz\n" 
+                f"method         {self.method}\n" 
+                "basis                   def2-sv_p\n" 
+                "dftgrid                 1\n"
+                "sphericalbasis          yes\n"
+                "guess                   sad\n"
+                "precision               mixed\n"
+                "genscrdata              true\n"
+                "threall                 1e-14\n"
+                "convthre                1e-4\n"
+                "xtol                    1e-6\n"    
+                "pcm			cosmo\n"
+                "epsilon			9.08\n"
+                f"charge                  {self.charge}\n"
+                f"spinmult                {self.m}\n"
+                "run                     energy\n"
+            )
+
+
+        cmd = f'terachem tc.inp'
+        rc = self.tcsubprocess(cmd)
+        if rc ==0 and os.path.isdir(f"scr.{self.coordfn}"):
+            cwd = os.getcwd()
+            return os.path.join(cwd,f"scr.{self.coordfn}",f"{self.coordfn}.molden")
+        else:
+            return None
+
+
+class CallsTDA:
+    def __init__(self,coordfn):
+        self.coordfn= coordfn
+
+    @staticmethod
+    def stdasubprocess(cmd):
+        rc = 1
+        try:
+            with open('stda.out', 'w') as stdout_file, open('stda_err.out', 'w') as stderr_file:
+                p = subprocess.Popen(cmd, stdout=stdout_file, stderr=stderr_file, shell=True)
+                p.wait()
+                rc = p.returncode
+
+        except Exception as e:
+            print(f"An error occurred: {e}")
+        return rc
+    def callml(self, stdawd,sty):
+        cmd = f"{stdawd} -f {self.coordfn} -ml_feature -sty {str(sty)}"
+        print(cmd)
+        p = subprocess.Popen(cmd, stdout=open(f'stda.out', 'w'), stderr=subprocess.PIPE, shell=True)
+        p.wait()
+        rc = p.returncode
+
+        return rc
+
+
+
+
+
+
+
+
+

@@ -9,7 +9,7 @@ from Element import element2
 def print_header():
     print('==========================================================================================')
     print('|                                                                                        |')
-    print('|                         Reaction Path Serach Tool                                      |')
+    print('|                         Reaction Path Search Tool                                      |')
     print('|                                                                                        |')
     print('|                                 Y.Chen                                                 |')
     print('|                                                                                        |')

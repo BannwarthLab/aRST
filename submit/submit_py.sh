@@ -3,12 +3,12 @@
 # ask for eight cores
 
 #SBATCH --nodes=1
-#SBATCH --cpus-per-task=1
+#SBATCH --cpus-per-task=2
 #SBATCH --ntasks=1
 #SBATCH --time=48:00:00
 #SBATCH --signal=B:USR1@120
 
-#SBATCH --mem-per-cpu=2G   #M is the default and can therefore be omitted, but could also be K(ilo)|G(iga)|T(era)
+#SBATCH --mem-per-cpu=1G   #M is the default and can therefore be omitted, but could also be K(ilo)|G(iga)|T(era)
 
 # name the job
 #SBATCH --job-name=react_search

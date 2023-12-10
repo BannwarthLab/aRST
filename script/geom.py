@@ -4,11 +4,10 @@ from Element import r0
 
 
 class Coord:
-    def __init__(self, coord, at):
+    def __init__(self, coord):
         self.coord = coord
-        self.at = at
 
-    def get_principal_moment_vec(self):
+    def get_principal_moment_vec(self, at):
         t1, t2, t3, t4, t5, t6 = 0, 0, 0, 0, 0, 0
         # matrix for moments of inertia is of form, with CN in mass as weight
         # *           |   y**2+z**2                         |
@@ -17,12 +16,12 @@ class Coord:
         xv, yv, zv = 0, 0, 0
         neighbor_atl = []
         for i in range(self.coord.shape[0]):
-            if i != self.at - 1:
-                x = self.coord.iloc[i, 1] - self.coord.iloc[self.at - 1, 1]
-                y = self.coord.iloc[i, 2] - self.coord.iloc[self.at - 1, 2]
-                z = self.coord.iloc[i, 3] - self.coord.iloc[self.at - 1, 3]
+            if i != at:
+                x = self.coord.iloc[i, 1] - self.coord.iloc[at, 1]
+                y = self.coord.iloc[i, 2] - self.coord.iloc[at, 2]
+                z = self.coord.iloc[i, 3] - self.coord.iloc[at, 3]
                 r = np.linalg.norm(np.array([x, y, z]))
-                rcov_c = float(r0[f'{self.coord.iloc[self.at - 1, 0]}'])
+                rcov_c = float(r0[f'{self.coord.iloc[at, 0]}'])
                 rcov_i = float(r0[f'{self.coord.iloc[i, 0]}'])
                 rr = (rcov_i + rcov_c) / r
                 # add connected at's xyz
@@ -53,19 +52,19 @@ class Coord:
         return mv, P, v, neighbor_atl
 
     def get_punkt_coord(self, at):
-        a = np.array([self.coord.iloc[at - 1, 1],
-                      self.coord.iloc[at - 1, 2],
-                      self.coord.iloc[at - 1, 3]])
+        a = np.array([self.coord.iloc[at, 1],
+                      self.coord.iloc[at, 2],
+                      self.coord.iloc[at, 3]])
         return a
 
     def get_nat(self):
         return self.coord.shape[0]
 
-    def shift(self, d):
+    def shift(self, at, d):
         # shift the molecule with aktiv as center to (0,0,d)
-        x = self.coord.iloc[self.at - 1, 1]
-        y = self.coord.iloc[self.at - 1, 2]
-        z = self.coord.iloc[self.at - 1, 3] - d
+        x = self.coord.iloc[at, 1]
+        y = self.coord.iloc[at, 2]
+        z = self.coord.iloc[at, 3] - d
         for i in range(self.coord.shape[0]):
             self.coord.iloc[i, 1] = self.coord.iloc[i, 1] - x
             self.coord.iloc[i, 2] = self.coord.iloc[i, 2] - y
@@ -91,10 +90,10 @@ class Coord:
                 f.write('%2s %10.5f %10.5f %10.5f\n' % (at, x, y, z))
             f.write('\n')
 
-    def write_p(self, P, v, name):
+    def write_p(self, at, P, v, name):
         x, y, z = 0, 0, 0
         try:
-            a = Coord.get_punkt_coord(self, at=self.at)
+            a = Coord.get_punkt_coord(self, at)
             x, y, z = a[0], a[1], a[2]
         except:
             pass
@@ -131,12 +130,54 @@ class Coord:
                 f2.write(f'.arrow 0 0 0 0 6 0 0.05 0.150000\n')
         return
 
+    def get_dihedral_angle(self, at1, at2, at3, at4):
+        a = self.get_punkt_coord(at1)
+        b = self.get_punkt_coord(at2)
+        c = self.get_punkt_coord(at3)
+        d = self.get_punkt_coord(at4)
+
+        ra = b - a
+        rb = c - b
+        rc = d - c
+
+        n1 = np.cross(ra, rb)
+        n2 = np.cross(rb, rc)
+
+        n1_normalized = n1 / np.linalg.norm(n1)
+        n2_normalized = n2 / np.linalg.norm(n2)
+
+        # Calculate the dihedral angle in radians
+        # sign = np.sign(np.dot(np.cross(ra, rb), rc))
+        theta = np.arccos(np.dot(n1_normalized, n2_normalized))
+
+        # # Determine the sign of the angle using the dot product between n1 and rc
+        if np.dot(n1, rc) < 0.0:
+            theta = -theta
+
+        # Convert the angle to degrees
+        theta = np.degrees(theta)
+
+        return theta
+
+    def get_ats_distance(self, at1, at2):
+        a = self.get_punkt_coord(at1)
+        b = self.get_punkt_coord(at2)
+        c = b - a
+        return np.linalg.norm(c)
+
+    def get_rr_distance(self, at):
+        ele = self.coord.iloc[at, 0]
+        return r0[ele]
+
 
 def get_angle(v1, v2):
     r1 = np.round(np.linalg.norm(v1), 1)
     r2 = np.round(np.linalg.norm(v2), 1)
     dot_product = np.round(np.dot(v1, v2), 1)
-    theta = np.arccos(dot_product / (r1 * r2)) * 180 / np.pi
+    try:
+        theta = np.arccos(dot_product / (r1 * r2)) * 180 / np.pi
+    except RuntimeWarning:
+        theta = 90
     return theta
 
 
@@ -162,7 +203,10 @@ def rerange_P(P, neighbor_atl):
             dot_product = np.dot(p, normal_vector)
             magnitude_v = np.linalg.norm(p)
             magnitude_normal = np.linalg.norm(normal_vector)
-            theta = np.arccos(dot_product / (magnitude_v * magnitude_normal)) * 180 / np.pi
+            try:
+                theta = np.arccos(dot_product / (magnitude_v * magnitude_normal)) * 180 / np.pi
+            except RuntimeWarning:
+                theta = 90
             angle_l.append(np.round(theta, 2))
 
     tmp_l = (abs(np.array(angle_l) - 90)).tolist()
@@ -215,8 +259,8 @@ def alignment(coord1, coord2, at1, at2, **kwargs):
     stuc1 = coord1.copy(deep=True)
     stuc2 = coord2.copy(deep=True)
 
-    stuc1 = Coord(stuc1, at1).shift(d=0)
-    mv1, P1, v1, neighbor_atl1 = Coord(stuc1, at1).get_principal_moment_vec()
+    stuc1 = Coord(stuc1).shift(d=0, at=at1)
+    mv1, P1, v1, neighbor_atl1 = Coord(stuc1).get_principal_moment_vec(at1)
 
     # make sure p point into the direction of the smallest resistance
     P1 = check_orient(P1, mv1)
@@ -231,12 +275,12 @@ def alignment(coord1, coord2, at1, at2, **kwargs):
         P1 = l2r(P1, mv1)
 
     # change coordinante system to main axes system
-    stuc1 = Coord(stuc1, at1).change_cs(P1)
+    stuc1 = Coord(stuc1).change_cs(P1)
     xyz1 = stuc1.copy(deep=True)
 
     # now do 2. structure
-    stuc2 = Coord(stuc2, at2).shift(d=0)
-    mv2, P2, v2, neighbor_atl2 = Coord(stuc2, at2).get_principal_moment_vec()
+    stuc2 = Coord(stuc2).shift(d=0, at=at2)
+    mv2, P2, v2, neighbor_atl2 = Coord(stuc2).get_principal_moment_vec(at2)
 
     P2 = check_orient(P2, mv2)
 
@@ -247,20 +291,24 @@ def alignment(coord1, coord2, at1, at2, **kwargs):
     # set P2 right-handed by fliping one main axis to the opposite direction
     if check_rl(P2):
         P2 = l2r(P2, mv2)
+
+    # test flip all axis? original flip only P2[:, 2]
+    P2[:, 0] = -P2[:, 0]
+    P2[:, 1] = -P2[:, 1]
     P2[:, 2] = -P2[:, 2]
 
-    stuc2 = Coord(stuc2, at2).change_cs(P2)
+    stuc2 = Coord(stuc2).change_cs(P2)
 
     # merge two structures
-    name1 = xyz1.iloc[at1 - 1, 0]
-    name2 = stuc2.iloc[at2 - 1, 0]
+    name1 = xyz1.iloc[at1, 0]
+    name2 = stuc2.iloc[at2, 0]
     rr = (r0[name1] + r0[name2])
     relativ_r = kwargs.get('aligning_distance', 5)  # 5 times of rr by default
     d_pre = kwargs.get('aligning_direction', 1)  # 1 by default, -1: opposite alignment
     d = d_pre * np.round(rr * relativ_r, 2)
 
-    stuc2 = Coord(stuc2, at2).shift(d)
+    stuc2 = Coord(stuc2).shift(at2, d)
     xyz2 = stuc2.copy(deep=True)  # for the bug if cood1=cood2, the class will be inherited
 
     coord_merge = pd.concat([xyz1, xyz2])
-    return coord_merge, rr
+    return coord_merge

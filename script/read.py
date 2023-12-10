@@ -5,14 +5,13 @@ import shutil
 import sys
 import time
 import traceback
-
+from dictionaryInspector import DictionaryInspector, convert_json2dict
 import toml
-from get_molbar import do_molbar
-from operation import collect_sp_xyz,collect_g_xyz,get_nelectron
-
+from toolbox import get_nelectron, create_folder, get_energy, write_xyz
+from callsys import CallxTB, CallORCA
 import json
 import pandas as pd
-from struc import Struc
+from struc import StrucOperation
 
 
 def read_input(path):
@@ -31,19 +30,11 @@ def read_input(path):
 
     # print(input_d)
     wd = os.path.abspath(os.path.dirname(path))
-    if input_d.get('searching_setting').get('continue_sesarch', False) == True and os.path.isfile(f'{wd}/rec.json'):
+    if input_d.get('searching_setting').get('continue_sesarch', False) and os.path.isfile(f'{wd}/rec.json'):
         # continuing the last search
         with open(f'{wd}/rec.json', 'r') as f:
             content = json.load(f)
-        rec = {}
-        for struc in content.keys():
-            rec[struc] = {}
-            for item in list(content[struc].keys()):
-                try:
-                    df = pd.read_json(content[struc][item])
-                    rec[struc][item] = df
-                except:
-                    rec[struc][item] = content[struc][item]
+        rec = convert_json2dict(content)
     else:
         # clean up old resultes
         l = os.listdir(wd)
@@ -53,101 +44,126 @@ def read_input(path):
             elif i.endswith('out') or i.endswith('json'):
                 os.remove(f'{wd}/{i}')
 
-        # read Geom
+        # read general strucal info
         geom_d = input_d['geom']
         prefix = os.path.dirname(path)
         if not os.path.isabs(path):
             prefix = os.path.join('.', prefix)
 
         rec = {}
+        struc_inspector = DictionaryInspector(rec)
         count = 1
         pcount = 1
         for i in geom_d.keys():
+            filename = input_d['geom'][i]['name']
             if "reactant" in i:
-                rec['1/' + str(count)] = {}
-                filename = input_d['geom'][i]['name']
-                charge = input_d['geom'][i]['charge']
-                m = input_d['geom'][i]['multiplicity']
-                coord = pd.read_table(f'{prefix}/{filename}', header=None, skiprows=2, sep='\s+')
-                rec['1/' + str(count)]['coord'] = coord
-                rec['1/' + str(count)]['charge'] = int(charge)
-                rec['1/' + str(count)]['m'] = int(m)
+                struc_id = f"{count:04d}"
                 count += 1
-            elif "product" in i:
-                rec['refproduct/' + str(pcount)] = {}
-                filename = input_d['geom'][i]['name']
-                charge = input_d['geom'][i]['charge']
-                m = input_d['geom'][i]['multiplicity']
-                coord = pd.read_table(f'{prefix}/{filename}', header=None, skiprows=2, sep='\s+')
-                rec['refproduct/' + str(pcount)]['coord'] = coord
-                rec['refproduct/' + str(pcount)]['charge'] = int(charge)
-                rec['refproduct/' + str(pcount)]['m'] = int(m)
-                pcount += 1
 
+            elif "product" in i:
+                struc_id = f"refp{pcount:04d}"
+                pcount += 1
+            else:
+                continue
+            struc_inspector.set_value(f"{struc_id}.struc_info.general.coord",
+                                      pd.read_table(f'{prefix}/{filename}', header=None, skiprows=2, sep='\s+'))
+            struc_inspector.set_value(f"{struc_id}.struc_info.general.charge", input_d['geom'][i]['charge'])
+            struc_inspector.set_value(f"{struc_id}.struc_info.general.multiplicity", input_d['geom'][i]['multiplicity'])
     return rec, input_d
 
 
-def prepare(wd, i, rec, **kwargs):
-    coord = rec[i]['coord']
-    charge, m = rec[i]['charge'], rec[i]['m']
-    if "sp_gfn2" not in rec[i].keys():
-        # xtb opt
-        xtb_setting = kwargs.get('xtb_setting')
-        rc = Struc(coord, m, charge).runxtb(f'{wd}/{i}/xtbopt', **xtb_setting)
+def prepare(wd, struc_id, struc_inspector, **kwargs):
+    coord = struc_inspector.get_value(f"{struc_id}.struc_info.general.coord")
+    charge = struc_inspector.get_value(f"{struc_id}.struc_info.general.charge")
+    m = struc_inspector.get_value(f"{struc_id}.struc_info.general.multiplicity")
+
+    tmprec = {}
+    wd = create_folder(os.path.join(wd, "struc"))
+    # gfn2 opt
+    xtb_setting = kwargs.get('xtb_setting')
+    extracmd = xtb_setting.get('extracmd', None)
+    level = xtb_setting.get('xtblevel', 'gfn2')
+    alpb = xtb_setting.get('alpb', 'h2o')
+    etemp = xtb_setting.get("etemp", str(300))
+    struc_callxtb = CallxTB(level, "coord", charge, m - 1, alpb, etemp)
+    output_folder = os.path.join(wd, f"{struc_id}/xtbopt")
+    create_folder(output_folder)
+    write_xyz(coord, "coord")
+
+    if coord.shape[0] > 1:
+        rc = struc_callxtb.callopt(extracmd)
+        if rc == 0:
+            coord = pd.read_table(os.path.join(output_folder, 'xtbopt.xyz'), header=None, skiprows=2, sep='\s+')
+    else:
+        rc = struc_callxtb.callsp()
+
+    if rc == 0:
+        nel = get_nelectron(os.path.join(output_folder, 'xtb.out'))
+        extb = get_energy(os.path.join(output_folder, 'ENERGY'))
+    else:
+        extb = float("inf")
+        nel = float("inf")
+
+    # get mb
+    mb = StrucOperation(coord, m, charge).get_molbarcode()
+    formula = mb.split('|')[2]
+
+    # dft
+    orca_setting = kwargs.get('orca_setting')
+    method = orca_setting.get("dft_level", None)
+    eorca = float("inf")
+    if method != "gfn2":
+        pcm = orca_setting.get("pcm", None)
+        output_folder = os.path.join(wd, f"{struc_id}/orca")
+        create_folder(output_folder)
+        write_xyz(coord, "coord")
+        struc_callorca = CallORCA(method, "coord", charge, m, pcm)
+        if coord.shape[0] > 1 and method is not None and orca_setting.get("initial_dftopt", True):
+            rc = struc_callorca.callcalculation(caltyp="sp OPT")
+            if rc == 0:
+                coord = pd.read_table(os.path.join(output_folder, 'orca.xyz'), header=None, skiprows=2, sep='\s+')
+        else:
+            rc = struc_callorca.callcalculation()
+
         if rc != 0:
-            sys.exit(f'{wd}/{i}/ xtb error')
-        # collect gfn2 data
-        rec = collect_sp_xyz(rec, i, f'{wd}/{i}/xtbopt/', 'gfn2')
-        rec[i]['nel'] = get_nelectron(f'{wd}/{i}/xtbopt/xtb.out')
+            print(f"{struc_id} calling orca wrong")
+        else:  # Reduce storage space
+            eorca = get_energy(os.path.join(output_folder, "ENERGY"))
+            extensions_to_remove = ['.gbw', '.densities', '.opt']
+            for filename in os.listdir('.'):
+                if any(filename.endswith(ext) for ext in extensions_to_remove):
+                    os.remove(filename)
 
-    # molbar
-    if "mb" not in rec[i].keys():
-        rec[i]['mb'], rec[i]['name'] = do_molbar(coord, wd)
+    # collect data
+    struc_inspector = DictionaryInspector(tmprec)
+    struc_inspector.set_value(f"{struc_id}.struc_info.general.coord", coord)
+    struc_inspector.set_value(f"{struc_id}.struc_info.general.nel", nel)
+    struc_inspector.set_value(f"{struc_id}.struc_info.general.mb", mb)
+    struc_inspector.set_value(f"{struc_id}.struc_info.general.formula", formula)
+    struc_inspector.set_value(f"{struc_id}.struc_info.energy.sp_gfn2", extb)
+    struc_inspector.set_value(f"{struc_id}.struc_info.energy.sp_dft", eorca)
+    if "refp" in struc_id:
+        struc_inspector.set_value(f"{struc_id}.reaction_path.as_product", ['ref'])
+    else:
+        struc_inspector.set_value(f"{struc_id}.reaction_path.as_reactant", ['1'])
 
-    # dft, sp required, opt optional
-    if "sp_dft" not in rec[i].keys():
-        # gfn2 overwrite option
-        orca_setting = kwargs.get('orca_setting')
-        if orca_setting.get('dft_level', 'r2scan-3c') != 'gfn2':
-            if orca_setting.get('dft_opt', False) and orca_setting.get('initial_dftopt', True):
-                # CALL ORCA OPT
-                Struc(coord, m, charge).runorcasp(f'{wd}/{i}/orca', caltyp='sp OPT', **orca_setting)
-            else:
-                # CALL ORCA SP
-                Struc(coord, m, charge).runorcasp(f'{wd}/{i}/orca', caltyp='sp', **orca_setting)
+    # trv,solv
+    if orca_setting.get("reaction_energy", 'sp') == 'g' or orca_setting.get("reaction_energy", 'sp') == 'G':
+        output_folder = os.path.join(wd, f"{struc_id}/trv")
+        create_folder(output_folder)
+        write_xyz(coord, "coord")
+        rc = struc_callxtb.calltrv()
+        etrv = get_energy(os.path.join(output_folder, 'GTRV')) if rc == 0 else None
 
-            # collect dft results
-            rec = collect_sp_xyz(rec, i, f'{wd}/{i}/orca', 'dft')
-            # TRV and SOLV
-            if orca_setting.get("reaction_energy", 'sp') == 'g' or orca_setting.get("reaction_energy", 'sp') == 'G':
-                coord = rec[i]['coord']
-                xtb_setting = kwargs.get('xtb_setting')
-                Struc(coord, m, charge).runtrv(f'{wd}/{i}/gfn2_trv', **xtb_setting)
-                Struc(coord, m, charge).runsolv(f'{wd}/{i}/gfn2_solv', **xtb_setting)
-                rec = collect_g_xyz(rec, i, f'{wd}/{i}')
-    return rec
+        output_folder = os.path.join(wd, f"{struc_id}/solv")
+        create_folder(output_folder)
+        write_xyz(coord, "coord")
+        rc = struc_callxtb.callsolv()
+        esolv = get_energy(os.path.join(output_folder, 'GSOLV')) if rc == 0 else None
 
-
-def update_dict(rec_old, rec_new):
-    # update rec, reaction_rec
-    if rec_new:
-        for i in list(rec_new.keys()):
-            try:
-                if type(rec_new[i]) == list:
-                    # override reaction_rec
-                    rec_old[i] = rec_new[i]
-                else:
-                    if i in rec_old.keys():
-                        for j in list(rec_new[i].keys()):
-                            if j not in rec_old[i].keys():
-                                rec_old[i][j] = {}
-                                rec_old[i][j] = rec_new[i][j]
-                            else:
-                                rec_old[i][j] = rec_new[i][j]
-                    else:
-                        rec_old[i] = {}
-                        rec_old[i] = rec_new[i]
-            except:
-                traceback.print_exc()
-                pass
-    return rec_old
+        struc_inspector.set_value(f"{struc_id}.struc_info.energy.sp_trv", etrv)
+        struc_inspector.set_value(f"{struc_id}.struc_info.energy.sp_solv", esolv)
+        if etrv is not None and esolv is not None:
+            eG = etrv+esolv+extb if method == "gfn2" else etrv+esolv+eorca
+            struc_inspector.set_value(f"{struc_id}.struc_info.energy.G", eG)
+    return tmprec
