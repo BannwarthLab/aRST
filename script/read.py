@@ -1,13 +1,8 @@
-import builtins
 import os
-import re
 import shutil
-import sys
-import time
-import traceback
 from dictionaryInspector import DictionaryInspector, convert_json2dict
 import toml
-from toolbox import get_nelectron, create_folder, get_energy, write_xyz
+from toolbox import get_nelectron, create_folder, get_energy, write_xyz,read_topomol
 from callsys import CallxTB, CallORCA
 import json
 import pandas as pd
@@ -85,7 +80,7 @@ def prepare(wd, struc_id, struc_inspector, **kwargs):
     level = xtb_setting.get('xtblevel', 'gfn2')
     alpb = xtb_setting.get('alpb', 'h2o')
     etemp = xtb_setting.get("etemp", str(300))
-    struc_callxtb = CallxTB(level, "coord", charge, m - 1, alpb, etemp)
+    struc_callxtb = CallxTB("gfn2", "coord", charge, m - 1, alpb, etemp) # todo change it back
     output_folder = os.path.join(wd, f"{struc_id}/xtbopt")
     create_folder(output_folder)
     write_xyz(coord, "coord")
@@ -100,13 +95,25 @@ def prepare(wd, struc_id, struc_inspector, **kwargs):
     if rc == 0:
         nel = get_nelectron(os.path.join(output_folder, 'xtb.out'))
         extb = get_energy(os.path.join(output_folder, 'ENERGY'))
+        if coord.shape[0] > 1:
+            constrain_l, ele=read_topomol(os.path.join(output_folder, 'xtbtopo.mol'))
+        else:
+            constrain_l=[]
+            ele=[str(coord.loc[0,0])]
+
     else:
         extb = float("inf")
         nel = float("inf")
 
     # get mb
-    mb = StrucOperation(coord, m, charge).get_molbarcode()
-    formula = mb.split('|')[2]
+    mb = StrucOperation(coord, m, charge).get_molbarcode(opt=False)
+    if mb is not None:
+        if "|" in mb:
+            formula = mb.split('|')[2]
+        else:
+            formula = mb
+    else:
+        formula = None
 
     # dft
     orca_setting = kwargs.get('orca_setting')
@@ -140,8 +147,10 @@ def prepare(wd, struc_id, struc_inspector, **kwargs):
     struc_inspector.set_value(f"{struc_id}.struc_info.general.nel", nel)
     struc_inspector.set_value(f"{struc_id}.struc_info.general.mb", mb)
     struc_inspector.set_value(f"{struc_id}.struc_info.general.formula", formula)
+    struc_inspector.set_value(f"{struc_id}.struc_info.general.atomic_connection", (constrain_l, ele))
     struc_inspector.set_value(f"{struc_id}.struc_info.energy.sp_gfn2", extb)
     struc_inspector.set_value(f"{struc_id}.struc_info.energy.sp_dft", eorca)
+
     if "refp" in struc_id:
         struc_inspector.set_value(f"{struc_id}.reaction_path.as_product", ['ref'])
     else:

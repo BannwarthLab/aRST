@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from Element import r0
+from Element import r0,element
 
 
 class Coord:
@@ -37,9 +37,9 @@ class Coord:
                 t5 = t5 + atmass * (-z * y)
                 t6 = t6 + atmass * (x ** 2 + y ** 2)
                 # add up molecular orientation
-                xv = xv + atmass * x
-                yv = yv + atmass * y
-                zv = zv + atmass * z
+                xv = xv + element[f'{self.coord.iloc[i, 0]}']* x
+                yv = yv + element[f'{self.coord.iloc[i, 0]}'] * y
+                zv = zv + element[f'{self.coord.iloc[i, 0]}'] * z
         # print(cn)
         mv = np.array([xv, yv, zv])
         arep = np.zeros((3, 3))
@@ -131,6 +131,8 @@ class Coord:
         return
 
     def get_dihedral_angle(self, at1, at2, at3, at4):
+        # struc1: at1, at3 and at1 = 0,0,0
+        # struc2: at2,at4 and at2 = 0,0,z
         a = self.get_punkt_coord(at1)
         b = self.get_punkt_coord(at2)
         c = self.get_punkt_coord(at3)
@@ -150,7 +152,7 @@ class Coord:
         # sign = np.sign(np.dot(np.cross(ra, rb), rc))
         theta = np.arccos(np.dot(n1_normalized, n2_normalized))
 
-        # # Determine the sign of the angle using the dot product between n1 and rc
+        #         # # Determine the sign of the angle using the dot product between n1 and rc
         if np.dot(n1, rc) < 0.0:
             theta = -theta
 
@@ -158,6 +160,17 @@ class Coord:
         theta = np.degrees(theta)
 
         return theta
+
+    def test_if_cross(self, at1, at2, at3, at4):
+        # atl =  [[at1,at2],[at3,at4]]
+        # at1 = 0,0,0; at2 = 0,0,z
+        d1 = self.get_dihedral_angle(at3, at1, at2, at4)
+        d2 = self.get_dihedral_angle(at3, at1, at4, at2)
+
+        if abs(d1) >= abs(d2):
+            return True
+        else:
+            return False
 
     def get_ats_distance(self, at1, at2):
         a = self.get_punkt_coord(at1)
@@ -170,7 +183,7 @@ class Coord:
         return r0[ele]
 
 
-def get_angle(v1, v2):
+def get_angle(v1, v2): # 0-180
     r1 = np.round(np.linalg.norm(v1), 1)
     r2 = np.round(np.linalg.norm(v2), 1)
     dot_product = np.round(np.dot(v1, v2), 1)
@@ -181,52 +194,48 @@ def get_angle(v1, v2):
     return theta
 
 
-def rerange_P(P, neighbor_atl):
-    # determin which main is the reaction direction
-    angle_l = []
+def check_orient(P, mv, rh_cs=True):
+    # default to optput right-handed P
+    tmp, tmp2 = [], []
+    current_type = check_rl(P)  # true = left handed
 
-    if len(neighbor_atl) == 1:
-        A = neighbor_atl[0]
-        for i in range(3):
-            p = np.array(P[:, i])
-            angle_l.append(get_angle(p, A))
-    else:
-        neighbor_atl.append([0, 0, 0])
-        A = neighbor_atl[0]
-        B = neighbor_atl[1]
-        C = neighbor_atl[2]
-        AB = np.array(B) - np.array(A)
-        AC = np.array(C) - np.array(A)
-        normal_vector = np.cross(AB, AC)
-        for i in range(3):
-            p = np.array(P[:, i])
-            dot_product = np.dot(p, normal_vector)
-            magnitude_v = np.linalg.norm(p)
-            magnitude_normal = np.linalg.norm(normal_vector)
-            try:
-                theta = np.arccos(dot_product / (magnitude_v * magnitude_normal)) * 180 / np.pi
-            except RuntimeWarning:
-                theta = 90
-            angle_l.append(np.round(theta, 2))
-
-    tmp_l = (abs(np.array(angle_l) - 90)).tolist()
-    pr_index = tmp_l.index(max(tmp_l))
-    column_order = [0, 1, 2]
-
-    if pr_index < 2:
-        for i in range(2 - pr_index):
-            column_order.insert(0, column_order.pop())
-
-    P = P[:, column_order]
-    return P
-
-
-def check_orient(P, mv):
     for i in range(3):
         p = np.array(P[:, i])
         theta = get_angle(p, mv)
+        tmp2.append(abs(abs(theta) - 90))
+
         if theta < 90:
+            tmp.append(i)
             P[:, i] = -p
+
+    if len(tmp) == 1 or len(tmp) == 3:
+        if (rh_cs and current_type) or (not rh_cs and not current_type):
+            i = tmp2.index(min(tmp2))
+            P[:, i] = -P[:, i]
+        else:
+            return P
+
+    return P
+
+
+def check_range(P, v):
+    #
+    v = v.round(2)
+    v = [i for i in v]
+    # a=b=c spherical pr=pc
+    # a<b=c prolate pr=pa !
+    # a=b<c oblate pr=pc
+    # a=0 b=c linear pr=pc
+    # a+b = c oblate, plane pr=pc
+
+    if v[1] == v[2] and v[0] != 0:  # prolate
+        column_order = [0, 1, 2]
+        pr_index = v.index(min(v))
+        for i in range(2 - pr_index):
+            column_order.insert(0, column_order.pop())
+        P = P[:, column_order]
+    else:
+        P = P
     return P
 
 
@@ -241,16 +250,9 @@ def check_rl(P):
         return False
 
 
-def l2r(P, mv):
-    # or r2l, it is the same
-    theta_l = []
-    for i in range(3):
-        p = np.array(P[:, i])
-        theta = get_angle(p, mv)
-        theta_l.append(theta)
-    min_index = theta_l.index(min(theta_l))
-    tmp = np.array(P[:, min_index])
-    P[:, min_index] = -tmp
+def l2r(P):
+    column_order = [1, 0, 2]
+    P = P[:, column_order]
     return P
 
 
@@ -262,17 +264,13 @@ def alignment(coord1, coord2, at1, at2, **kwargs):
     stuc1 = Coord(stuc1).shift(d=0, at=at1)
     mv1, P1, v1, neighbor_atl1 = Coord(stuc1).get_principal_moment_vec(at1)
 
-    # make sure p point into the direction of the smallest resistance
+    # make sure p point into the direction of the smallest resistance and keep right-handed
     P1 = check_orient(P1, mv1)
 
-    # find main reaction direction
-    if neighbor_atl1:
-        P1 = rerange_P(P1, neighbor_atl1[:3])
 
-    # set P1 left-handed by fliping one main axis to the opposite direction
-    # (the one with the least influence on the main orient)
-    if not check_rl(P1):
-        P1 = l2r(P1, mv1)
+    # find main reaction direction
+    P1 = check_range(P1,v1)
+
 
     # change coordinante system to main axes system
     stuc1 = Coord(stuc1).change_cs(P1)
@@ -285,17 +283,17 @@ def alignment(coord1, coord2, at1, at2, **kwargs):
     P2 = check_orient(P2, mv2)
 
     # find main reaction direction
-    if neighbor_atl2:
-        P2 = rerange_P(P2, neighbor_atl2[:3])
+    P2 = check_range(P2,v2)
 
-    # set P2 right-handed by fliping one main axis to the opposite direction
-    if check_rl(P2):
-        P2 = l2r(P2, mv2)
+    P2[:, 2] = -P2[:, 2]
 
-    # test flip all axis? original flip only P2[:, 2]
     P2[:, 0] = -P2[:, 0]
     P2[:, 1] = -P2[:, 1]
-    P2[:, 2] = -P2[:, 2]
+
+    ovlap_mode = kwargs.get('aligning_ovlap', False)
+    if ovlap_mode:
+        P2[:, 0] = -P2[:, 0]
+        P2[:, 1] = -P2[:, 1]
 
     stuc2 = Coord(stuc2).change_cs(P2)
 
@@ -310,5 +308,5 @@ def alignment(coord1, coord2, at1, at2, **kwargs):
     stuc2 = Coord(stuc2).shift(at2, d)
     xyz2 = stuc2.copy(deep=True)  # for the bug if cood1=cood2, the class will be inherited
 
-    coord_merge = pd.concat([xyz1, xyz2])
+    coord_merge = pd.concat([xyz1, xyz2], ignore_index=True)
     return coord_merge

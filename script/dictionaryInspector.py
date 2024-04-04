@@ -81,25 +81,37 @@ class DictionaryInspector:
 
         return current_data
 
-    def get_keys_from_value(self, target_value, current_data=None, key_path=None):
-        if current_data is None:
-            current_data = self.data
-        if key_path is None:
-            key_path = []
+    def find_strucid_from_mb(self,mb):
+        if mb is not None:
+            out = []
+            for key in self.data.keys():
+                tmp_mb = self.get_value(f"{key}.struc_info.general.mb")
+                if tmp_mb ==mb:
+                    out.append(key)
+            return out
+        else:
+            return None
 
-        found_keys = []
-        if isinstance(current_data, dict):
-            for key, value in current_data.items():
-                current_key_path = key_path + [key]
-                if not isinstance(value, pd.DataFrame):
-                    if isinstance(value, list):
-                        if Counter(value) == Counter(target_value):
-                            found_keys.append('.'.join(current_key_path))
-                    elif value == target_value:
-                        found_keys.append('.'.join(current_key_path))
-                    elif isinstance(value, dict):
-                        found_keys.extend(self.get_keys_from_value(target_value, value, current_key_path))
-        return found_keys
+
+    # def get_keys_from_value(self, target_value, current_data=None, key_path=None):
+    #     if current_data is None:
+    #         current_data = self.data
+    #     if key_path is None:
+    #         key_path = []
+    #
+    #     found_keys = []
+    #     if isinstance(current_data, dict):
+    #         for key, value in current_data.items():
+    #             current_key_path = key_path + [key]
+    #             if not isinstance(value, pd.DataFrame):
+    #                 if isinstance(value, list):
+    #                     if Counter(value) == Counter(target_value):
+    #                         found_keys.append('.'.join(current_key_path))
+    #                 elif value == target_value:
+    #                     found_keys.append('.'.join(current_key_path))
+    #                 elif isinstance(value, dict):
+    #                     found_keys.extend(self.get_keys_from_value(target_value, value, current_key_path))
+    #     return found_keys
 
     def set_value(self, target_key, new_value):
         keys = target_key.split('.')
@@ -172,20 +184,20 @@ class DictionaryInspector:
         di2 = DictionaryInspector(dict2)
         def should_update(key):
             if "energy" in key.split("."):
-                if erec_gfn is None or erec_gfn > di2.get_value(f"{reaction_id}.energy_singlecycle.sp_gfn2"):
+                if erec_gfn is None or erec_gfn > di2.get_value(f"{reaction_id}.energy.sp_gfn2"):
                     return True
-                elif erec_dft is None or erec_dft > di2.get_value(f"{reaction_id}.energy_singlecycle.sp_dft"):
+                elif erec_dft is None or erec_dft > di2.get_value(f"{reaction_id}.energy.sp_dft"):
                     return True
-                elif erec_g is None or erec_g > di2.get_value(f"{reaction_id}.energy_singlecycle.G"):
+                elif erec_g is None or erec_g > di2.get_value(f"{reaction_id}.energy.G"):
                     return True
             else:
                 return True
 
         for i in dict2_keys:
             reaction_id = i.split('.')[0]
-            erec_gfn = self.get_value(f"{reaction_id}.energy_singlecycle.sp_gfn2")
-            erec_dft = self.get_value(f"{reaction_id}.energy_singlecycle.sp_dft")
-            erec_g = self.get_value(f"{reaction_id}.energy_singlecycle.G")
+            erec_gfn = self.get_value(f"{reaction_id}.energy.sp_gfn2")
+            erec_dft = self.get_value(f"{reaction_id}.energy.sp_dft")
+            erec_g = self.get_value(f"{reaction_id}.energy.G")
             if should_update(i):
                 value = di2.get_value(i)
                 if isinstance(value,list):
@@ -201,10 +213,10 @@ class DictionaryInspector:
 
 
     def set_reaction_values(self, STRUC_rec, reactants, products,unreactants,
-                            reactionid, reactionpath,onlyenergy=False,type="singlecycle"):
+                            reactionid, reactionpath,at_l,gap,onlyenergy=False):
         if not onlyenergy:
-            name_reactants = [try_get_formular(STRUC_rec,i) for i in reactants]
-            name_products = [try_get_formular(STRUC_rec,i) for i in products]
+            name_reactants = [try_get_formular(STRUC_rec,i) for i in reactants if try_get_formular(STRUC_rec,i) is not None]
+            name_products = [try_get_formular(STRUC_rec,i) for i in products if try_get_formular(STRUC_rec,i) is not None]
 
             if all(name_reactants) is not None and all(name_products) is not None:
                 str1 = ", ".join(name_reactants)
@@ -230,6 +242,10 @@ class DictionaryInspector:
             else:
                 self.set_value(f"{reactionid}.struc_info.unreactants", unreactants)
 
+            if at_l is not None:
+                self.set_value(f"{reactionid}.atl", at_l)
+            if at_l is not None:
+                self.set_value(f"{reactionid}.gap", gap)
         for item in ['sp_gfn2', 'sp_dft', 'G']:
             item_values = [STRUC_rec.get_value(f"{i}.struc_info.energy.{item}") for i in reactants + products]
 
@@ -238,9 +254,9 @@ class DictionaryInspector:
                 results = sum([STRUC_rec.get_value(f"{i}.struc_info.energy.{item}") for i in products]) - \
                           sum([STRUC_rec.get_value(f"{i}.struc_info.energy.{item}") for i in reactants])
 
-                self.set_value(f"{reactionid}.energy_{type}.{item}", results*627.205)
+                self.set_value(f"{reactionid}.energy.{item}", results*627.205)
             else:
-                self.set_value(f"{reactionid}.energy_{type}.{item}", None)
+                self.set_value(f"{reactionid}.energy.{item}", None)
 
 
 
@@ -260,9 +276,9 @@ class DictionaryInspector:
                 if mb is None:
                     from struc import StrucOperation
                     coord = dict2[strucid]["struc_info"]["general"]["coord"]
-                    mb = StrucOperation(coord, 1, 0).get_molbarcode()
+                    mb = StrucOperation(coord, 1, 0).get_molbarcode(opt=False)
 
-                exist_id = self.get_keys_from_value(mb)
+                exist_id = self.find_strucid_from_mb(mb)
                 exist_id_l = [k for k in exist_id if not "ref" in k.split(".")[0]]
 
                 if not exist_id_l:
@@ -370,6 +386,21 @@ class DictionaryInspector:
 
 
 
+def convert_df2json(d):
+    for key, value in d.items():
+        if key == "atomic_connection":
+            d[key]=None
+        else:
+            if isinstance(value, dict):
+                convert_df2json(value)
+            elif isinstance(value, pd.DataFrame):
+                d[key] = value.to_json()
+            else:
+                pass
+    return d
+
+
+
 
 import json
 class DataFrameEncoder(json.JSONEncoder):
@@ -416,8 +447,12 @@ def try_get_formular(STRUC_inspector, struc_id):
         try:
             from struc import StrucOperation
             coord = STRUC_inspector.get_value(f"{struc_id}.struc_info.general.coord")
-            mb = StrucOperation(coord, 1, 0).get_molbarcode()
-            formula = mb.split('|')[2]
+            mb = StrucOperation(coord, 1, 0).get_molbarcode(opt=False)
+            if mb is not None:
+                if "|" in mb:
+                    formula = mb.split('|')[2]
+                else:formula = mb
+            else:formula = None
             STRUC_inspector.set_value(f"{struc_id}.struc_info.general.formula", formula)
         except:
             pass
@@ -427,6 +462,28 @@ import pandas as pd
 def update_strucid_in_reaction_d(reaction_d,out_d):
     di = DictionaryInspector(reaction_d)
     reactants_l = di.get_value(f"")
+
+def remove_idential_atl(d):
+    newd = {}
+    for key in sorted(d.keys()):
+        struc1, struc2, at_l = d[key]
+        at1, at2 = int(at_l[0][0]), int(at_l[0][1])
+        trigger = False
+        for k in newd.keys():
+            s1,s2,al2 = newd[k]
+            a1, a2 = int(al2[0][0]), int(al2[0][1])
+            if struc1 ==s1 and struc2 ==s2:
+                if at1==a1 and at2==a2:
+                    trigger = True
+            elif struc1 ==s2 and struc2 ==s1:
+                if at1==a2 and at2==a1:
+                    trigger = True
+        if not trigger:
+            newd[key] = d[key]
+    return newd
+
+
+
 
 
 
@@ -509,29 +566,29 @@ class JSONInspector:
                 return default_value
         return current_data
 
-    def get_keys_from_value(self, target_value, current_data=None, key_path=None):
-        if current_data is None:
-            current_data = self.json_data
-        if key_path is None:
-            key_path = []
-
-        found_keys = []
-
-        if isinstance(current_data, dict):
-            for key, value in current_data.items():
-                current_key_path = key_path + [key]
-                if value == target_value:
-                    found_keys.append('.'.join(current_key_path))
-                elif isinstance(value, (dict, list)):
-                    found_keys.extend(self.get_keys_from_value(target_value, value, current_key_path))
-        elif isinstance(current_data, list):
-            for index, value in enumerate(current_data):
-                current_key_path = key_path + [str(index)]
-                if value == target_value:
-                    found_keys.append('.'.join(current_key_path))
-                elif isinstance(value, (dict, list)):
-                    found_keys.extend(self.get_keys_from_value(target_value, value, current_key_path))
-        return found_keys
+    # def get_keys_from_value(self, target_value, current_data=None, key_path=None):
+    #     if current_data is None:
+    #         current_data = self.json_data
+    #     if key_path is None:
+    #         key_path = []
+    #
+    #     found_keys = []
+    #
+    #     if isinstance(current_data, dict):
+    #         for key, value in current_data.items():
+    #             current_key_path = key_path + [key]
+    #             if value == target_value:
+    #                 found_keys.append('.'.join(current_key_path))
+    #             elif isinstance(value, (dict, list)):
+    #                 found_keys.extend(self.get_keys_from_value(target_value, value, current_key_path))
+    #     elif isinstance(current_data, list):
+    #         for index, value in enumerate(current_data):
+    #             current_key_path = key_path + [str(index)]
+    #             if value == target_value:
+    #                 found_keys.append('.'.join(current_key_path))
+    #             elif isinstance(value, (dict, list)):
+    #                 found_keys.extend(self.get_keys_from_value(target_value, value, current_key_path))
+    #     return found_keys
 
 #
 # # Example usage:

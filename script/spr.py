@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 
 
-def build_gap_d(react_d, h_df, l_df):
+def build_gap_d(react_d, h_df, l_df,search_range):
     # loop 2 df to get HL gap
     for index1, row1 in l_df.iterrows():
         for column1 in l_df.columns:
@@ -12,37 +12,46 @@ def build_gap_d(react_d, h_df, l_df):
                 for index2, row2 in h_df.iterrows():
                     for column2 in h_df.columns:
                         if pd.notna(h_df.at[index2, column2]):
-                            H = h_df.at[index2, column2]
-                            if isinstance(H, float) and isinstance(L, float):
-                                gap = np.round(L - H, 3)
-                                struc1, struc2 = str(column2), str(column1)
-                                tmp_key = (struc1, struc2)
-                                tmp_val = [str(index2), str(index1)]
-                                # check if gap exist
-                                if gap not in react_d.keys():
-                                    react_d[gap] = {}
-                                    react_d[gap][tmp_key] = [tmp_val]
-                                # degenrated pairs form different struc combinations
-                                elif tmp_key not in react_d[gap].keys() \
-                                        and tuple(list(tmp_key)[::-1]) not in react_d[gap].keys():
-                                    react_d[gap][tmp_key] = [tmp_val]
-                                # degenrated pairs form same struc combinations
-                                else:
-                                    for current_key, current_item in react_d[gap].items():
-                                        if tmp_key == current_key and len(set(tmp_key)) == 1:
-                                            if tmp_val in current_item or tmp_val[::-1] in current_item:
-                                                continue
-                                        if tmp_key == current_key and tmp_val \
-                                                not in current_item:
-                                            # same atom not allow to appear twice e.g. [['2', '1'], ['3', '1']]
-                                            if tmp_val[0] not in [k[0] for k in current_item] \
-                                                    and tmp_val[1] not in [k[1] for k in current_item]:
-                                                current_item.append(tmp_val)
-                                        elif tuple(list(tmp_key)[::-1]) == current_key and tmp_val[::-1] \
-                                                not in current_item:
-                                            if tmp_val[0] not in [k[0] for k in current_item] \
-                                                    and tmp_val[1] not in [k[1] for k in current_item]:
-                                                current_item.append(tmp_val[::-1])
+                            def wrap_build_dict(column1, column2, index1, index2, react_d):
+                                H = h_df.at[index2, column2]
+                                if isinstance(H, float) and isinstance(L, float):
+                                    gap = np.round(L - H, 3)
+                                    tmp_key = (str(column2), str(column1))
+                                    tmp_val = [str(index2), str(index1)]
+                                    # check if gap exist
+                                    if gap not in react_d.keys():
+                                        react_d[gap] = {}
+                                        react_d[gap][tmp_key] = [tmp_val]
+                                    # degenrated pairs form different struc combinations
+                                    elif tmp_key not in react_d[gap].keys() \
+                                            and tuple(list(tmp_key)[::-1]) not in react_d[gap].keys():
+                                        react_d[gap][tmp_key] = [tmp_val]
+                                    # degenrated pairs form same struc combinations
+                                    else:
+                                        for current_key, current_item in react_d[gap].items():
+                                            if tmp_key == current_key and len(set(tmp_key)) == 1:
+                                                if tmp_val in current_item or tmp_val[::-1] in current_item:
+                                                    continue
+                                            if tmp_key == current_key and tmp_val \
+                                                    not in current_item:
+                                                # same atom not allow to appear twice e.g. [['2', '1'], ['3', '1']]
+                                                if tmp_val[0] not in [k[0] for k in current_item] \
+                                                        and tmp_val[1] not in [k[1] for k in current_item]:
+                                                    current_item.append(tmp_val)
+                                            elif tuple(list(tmp_key)[::-1]) == current_key and tmp_val[::-1] \
+                                                    not in current_item:
+                                                if tmp_val[0] not in [k[0] for k in current_item] \
+                                                        and tmp_val[1] not in [k[1] for k in current_item]:
+                                                    current_item.append(tmp_val[::-1])
+                                    return react_d
+                            if search_range == 0:
+                                if column2 ==column1: #struc1 = struc2
+                                    react_d = wrap_build_dict(column1, column2, index1, index2, react_d)
+                            elif search_range == 1:
+                                if column2 !=column1: #struc1 != struc2
+                                    react_d = wrap_build_dict(column1, column2, index1, index2, react_d)
+                            else:
+                                react_d = wrap_build_dict(column1, column2, index1, index2, react_d)
 
                             ## text-wise out put
                             # value = f"1|{column2},{column1}|{index2},{index1}"
@@ -75,7 +84,8 @@ def build_gap_d(react_d, h_df, l_df):
     return react_d
 
 
-def SPR_HL(reactants, struc_inspector, allow_hydrogen=True):
+def SPR_HL(reactants, struc_inspector, allow_hydrogen=True, search_range=2):
+    # search_range =0 : only intramollecule; 1: only intermolecular; 2: all
     """
     :param allow_hydrogen:
     :param reactants: strucid of reactants
@@ -110,7 +120,7 @@ def SPR_HL(reactants, struc_inspector, allow_hydrogen=True):
             df.apply(pd.to_numeric, errors='coerce')
 
     # remove all Value exceeding the limit
-    lim = 200  # eV
+    lim = 20  # eV
 
     for df in [HOAO_a, HOAO_b]:
         max_value = pd.to_numeric(df.values.flatten(), errors='coerce').max()
@@ -125,12 +135,12 @@ def SPR_HL(reactants, struc_inspector, allow_hydrogen=True):
 
     # buid HL_d
     react_ss = {}
-    react_ss = build_gap_d(react_ss, HOAO_a, LUAO_a)
-    react_ss = build_gap_d(react_ss, HOAO_b, LUAO_b)
+    react_ss = build_gap_d(react_ss, HOAO_a, LUAO_a,search_range)
+    react_ss = build_gap_d(react_ss, HOAO_b, LUAO_b,search_range)
 
     react_os = {}
-    react_os = build_gap_d(react_os, HOAO_a, LUAO_b)
-    react_os = build_gap_d(react_os, HOAO_b, LUAO_a)
+    react_os = build_gap_d(react_os, HOAO_a, LUAO_b,search_range)
+    react_os = build_gap_d(react_os, HOAO_b, LUAO_a,search_range)
 
     # for print out
     HOAO_a.index.name = 'HOAO_a'
@@ -140,7 +150,7 @@ def SPR_HL(reactants, struc_inspector, allow_hydrogen=True):
     return react_os, react_ss, HOAO_a, HOAO_b, LUAO_a, LUAO_b
 
 
-def SPR_dissociation(reactants, struc_inspector, allow_hydrogen=True,allow_halogen=True,type="bo"):
+def SPR_dissociation(reactants, struc_inspector, allow_hydrogen=True, allow_halogen=True,type="bo"):
     """
     :param reactants: strucid of reactants
     :param struc_inspector: struc_record

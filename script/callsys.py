@@ -9,9 +9,9 @@ import re
 from func_timeout import func_set_timeout
 
 
-def print(text):
-    builtins.print(text)
-    os.fsync(sys.stdout)
+# def print(text):
+#     builtins.print(text)
+#     os.fsync(sys.stdout)
 
 
 def remove_file(old_path, new_path):
@@ -109,7 +109,10 @@ class CallxTB:
         return rc
 
     def callsp(self):
-        cmd = f'xtb {self.coordfn}.xyz --{self.level} -c {self.charge} --uhf {self.uhf} --etemp {self.etemp}'
+        cmd = f'xtb {self.coordfn}.xyz --{self.level} -c {self.charge} --etemp {self.etemp}'
+
+        if self.uhf is not None and self.uhf!=0:
+            cmd += f' --uhf {self.uhf}'
 
         if self.alpb is None:
             cmd += f' --alpb {self.alpb}'
@@ -118,7 +121,10 @@ class CallxTB:
         return rc
 
     def callopt(self, extracmd=None):
-        cmd = f'xtb {self.coordfn}.xyz --{self.level} -c {self.charge} --uhf {self.uhf}  --etemp {self.etemp}'
+        cmd = f'xtb {self.coordfn}.xyz --{self.level} -c {self.charge} --etemp {self.etemp}'
+
+        if self.uhf is not None and self.uhf!=0:
+            cmd += f' --uhf {self.uhf}'
 
         if self.alpb is not None:
             cmd += f' --alpb {self.alpb}'
@@ -150,13 +156,16 @@ class CallxTB:
 
 
 
-    def callml(self, xtbwd,mllevel=None):
-        cmd = f"{xtbwd} {self.coordfn}.xyz  -c {self.charge} --uhf {self.uhf} --etemp {self.etemp} --ml_feature"
+    def callml(self, xtbwd,mllevel=None,mletemp=None):
+        cmd = f"{xtbwd} {self.coordfn}.xyz  -c {self.charge} --uhf {self.uhf} --ml_feature"
         if self.alpb is not None:
             cmd += f' --alpb {self.alpb}'
 
         if mllevel is not None:
             cmd+= f' --{mllevel}'
+        if mletemp is not None:
+            cmd += f' --etemp {mletemp}'
+
         p = subprocess.Popen(cmd, stdout=open(f'xtb.out', 'w'), stderr=subprocess.PIPE, shell=True)
         p.wait()
         rc = p.returncode
@@ -209,6 +218,7 @@ class CallxTB:
         constrain_distance = setting_d["constrain"]["distance"]
         mode = setting_d["scan"]["mode"]
         atl = setting_d["scan"]["distance"]
+
         step = setting_d["scan"]["step"]
 
         with open('scan.inp', 'w') as f:
@@ -216,15 +226,18 @@ class CallxTB:
                     f'force constant={constrain_strength}\n')
 
             if constrain_distance is not None:
-                f.write(f'distance:{constrain_distance[0]},{constrain_distance[1]},{constrain_distance[2]}\n')
+                f.write(f'distance:{constrain_distance[0]}, {constrain_distance[1]}, {constrain_distance[2]}\n')
             f.write(f'$scan\n')
             if mode is not None:
                 f.write('mode=concerted\n')
             for i in range(len(atl)):
-                f.write(f'distance: {atl[i][0]},{atl[i][1]},{atl[i][2]};{atl[i][2]},{atl[i][3]},{step}\n')
+                f.write(f'distance: {atl[i][0]}, {atl[i][1]}, {atl[i][2]}; {atl[i][2]}, {atl[i][3]}, {step}\n')
             f.write("$end")
         cmd = f'xtb {self.coordfn}.xyz --{self.level} --input scan.inp --opt ' \
               f' -c {self.charge} --uhf {self.uhf} --etemp {self.etemp}'
+
+        if self.alpb is not None:
+            cmd += f' --alpb {self.alpb}'
 
         p = subprocess.Popen(cmd, stdout=open(f'xtb.out', 'w'), stderr=subprocess.PIPE, shell=True)
         p.wait()
@@ -233,7 +246,7 @@ class CallxTB:
     def get_moldeninput(self):
         cmd = f'xtb {self.coordfn}.xyz --{self.level} -c {self.charge} --uhf {self.uhf} --etemp {self.etemp} --molden'
 
-        if self.alpb is None:
+        if self.alpb is not None:
             cmd += f' --alpb {self.alpb}'
 
 

@@ -38,20 +38,17 @@ def rm_folderORfile(wd):
 
 
 
-
 def creat_randomfolder(wd):
+    wd = os.path.abspath(wd)
     random_name = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(5))
-    if not os.path.isdir(f'{wd}/{random_name}'):
-        os.makedirs(f'{wd}/{random_name}')
+    if not os.path.isdir(os.path.join(wd,random_name)):
+        os.makedirs(os.path.join(wd,random_name))
     else:
-        try:
-            shutil.rmtree(f'{wd}/{random_name}', ignore_errors=True)
-            os.rmdir(f'{wd}/{random_name}')
-        except:
-            pass
-        os.makedirs(f'{wd}/{random_name}')
-    os.chdir(f'{wd}/{random_name}')
-    return f'{wd}/{random_name}'
+        rm_folderORfile(os.path.join(wd,random_name))
+        os.makedirs(os.path.join(wd,random_name))
+    os.chdir(os.path.join(wd,random_name))
+    return os.path.join(wd,random_name)
+
 
 
 def write_xyz(xyz, name):
@@ -98,6 +95,14 @@ def get_charge(coord_new, coord_old, chargefile):
         return int(np.round(charge))
     else:
         return a
+
+def get_total_charge(chargefile):
+    context = pd.read_table(chargefile, header=None, sep='\s+')
+    charge=0
+    for i in range(context.shape[0]):
+        charge+=float(context.iloc[i, 0])
+    return int(charge)
+
 
 
 def get_uhf_from_excprep(excprepoutwd, fnr):
@@ -181,6 +186,41 @@ def get_reactionenergy(reactants, products, level,struc_inspector):
     if ereactants is not None and eproducts is not None:
         ereaction = eproducts - ereactants
     return ereaction
+
+def read_topomol(molfile, nat1=None):
+    from geom import r0
+    # V2000
+    with open(molfile) as f:
+        context = f.readlines()
+
+    if len(context[3].split())<7:
+        nat, nbond = int(''.join(context[3].split()[0][:3])), int(''.join(context[3].split()[0][3:]))
+    else:
+
+        nat, nbond = int(context[3].split()[0]), int(context[3].split()[1])
+    # coordinates = []
+    constrain_l = []
+    ele = []
+
+    for i in range(nat):
+        # tmp = context[i + 4].split()[:3]
+        # coordinates.append([float(k) for k in tmp])
+        ele.append(context[i + 4].split()[3])
+
+    for i in range(nbond):
+        bond_pair = context[i + nat + 4].split()[:2]
+        atom1, atom2 = int(bond_pair[0]), int(bond_pair[1])
+        d = r0[ele[atom1 - 1]] + r0[ele[atom2 - 1]]
+        tmp_d = {"atoms": {}, "value": {}}
+        if nat1 is None:
+            tmp_d["atoms"] = [atom1, atom2]
+            tmp_d["value"] = d
+        else:
+            tmp_d["atoms"] = [atom1 + nat1, atom2 + nat1]
+            tmp_d["value"] = d
+        constrain_l.append(tmp_d)
+
+    return constrain_l, ele
 
 # def collect_sp_xyz(rec, reckey, wd, typ):
 #     speh = float('inf')

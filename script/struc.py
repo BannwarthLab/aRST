@@ -2,10 +2,11 @@ import os
 import shutil
 import sys
 import time
+import traceback
 from collections import Counter
 
 import pandas as pd
-from molbar.barcode import get_molbar_from_file
+from molbar.barcode import get_molbar_from_file,get_molbar_from_coordinates
 from toolbox import create_folder, write_xyz, seperate, creat_randomfolder
 
 
@@ -16,6 +17,7 @@ class StrucOperation:
         self.charge = charge
 
     def check_if_fall_back(self, reactants_mb):
+
         pwd = os.getcwd()
         random_wd = creat_randomfolder(pwd)
         write_xyz(self.coord, 'coord')
@@ -33,19 +35,15 @@ class StrucOperation:
             shutil.rmtree(f'{random_wd}', ignore_errors=True)
             return False
 
-    def get_nfragement(self):
-        pwd = os.getcwd()
-        wd = create_folder(os.path.join(pwd,"sep"))
+    def get_nfragement(self,fragment_wd):
+
+        wd = creat_randomfolder(fragment_wd)
         write_xyz(self.coord, 'coord')
         seperate()
         l = [k for k in os.listdir('.') if os.path.isdir(f'.') and str.isdigit(k)]
         dir_l = [os.path.join(wd,k) for k in l]
-        if len(l) == 1:
-            os.chdir(pwd)
-            shutil.rmtree(f'{wd}', ignore_errors=True)
-            return dir_l # if nfragment =1, dir_l no meaning, only len counts
-        else:
-            return dir_l
+        return dir_l
+
 
 
     def compare_structs(self, Struc2):
@@ -59,11 +57,36 @@ class StrucOperation:
         else:
             return True
 
-    def get_molbarcode(self):
-        pwd = os.getcwd()
-        random_wd = creat_randomfolder(pwd)
-        write_xyz(self.coord, 'coord')
-        mb = get_molbar_from_file("coord.xyz")
-        os.chdir(pwd)
-        shutil.rmtree(f'{random_wd}', ignore_errors=True)
+    def get_molbarcode(self,opt=True):
+        if self.coord.shape[0]>1:
+            # transform coord to coord_l and ele_l
+            coord_l,ele_l = [],[]
+            for i in range(self.coord.shape[0]):
+                coord_l.append(self.coord.loc[i,1:3].tolist())
+                ele_l.append(self.coord.loc[i,0])
+            mb = get_molbar_from_coordinates(coord_l,ele_l)
+
+            #
+            #
+            #
+            # pwd = os.getcwd()
+            # print(pwd,"!!")
+            # random_wd = creat_randomfolder(pwd)
+            # write_xyz(self.coord, 'coord')
+            #
+            # try:
+            #     if not opt:
+            #         mb = get_molbar_from_file("coord.xyz")
+            #     else:
+            #         from callsys import CallxTB
+            #         CallxTB("gfn2", "coord", self.charge, 0,None,"300").callopt()
+            #         mb = get_molbar_from_file("xtbopt.xyz")
+            #     os.chdir(pwd)
+            #     shutil.rmtree(f'{random_wd}', ignore_errors=True)
+            # except:
+            #     mb = None
+            #     print(self.coord)
+            #     traceback.print_exc()
+        else:
+            mb = self.coord.iloc[0,0]
         return mb
