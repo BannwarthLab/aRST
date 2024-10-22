@@ -3,7 +3,7 @@ import traceback
 
 import pandas as pd
 
-from Element import element2
+from aRST.script.Element import element2
 
 
 def print_header():

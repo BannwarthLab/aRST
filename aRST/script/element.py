@@ -78,3 +78,67 @@ r0 = {'H': 0.32, 'D': 0.32, 'He': 0.46, 'Li': 1.20, 'Be': 0.94, 'B': 0.77, 'C': 
       'Bk': 1.68, 'Cf': 1.68, 'Es': 1.65, 'Fm': 1.67, 'Md': 1.73, 'No': 1.76, 'Lr': 1.61, 'Rf': 1.57,
       'Db': 1.49, 'Sg': 1.43, 'Bh': 1.41, 'Hs': 1.34, 'Mt': 1.29, 'Ds': 1.21, 'Rg': 1.21, 'Cn': 1.22,
       'Nh': 1.36, 'Fl': 1.43, 'Mc': 1.62, 'Lv': 1.75, 'Ts': 1.65, 'Og': 1.57, 'Cl': 0.99}
+
+valence_electrons = {
+    # Group 1 - Alkali Metals
+    "H": 1, "Li": 1, "Na": 1, "K": 1, "Rb": 1, "Cs": 1, "Fr": 1,
+
+    # Group 2 - Alkaline Earth Metals
+    "Be": 2, "Mg": 2, "Ca": 2, "Sr": 2, "Ba": 2, "Ra": 2,
+
+    # Group 3 (commonly 3 valence electrons, though transition metals are more complex)
+    "Sc": 3, "Y": 3, "La": 3, "Ac": 3,
+
+    # Group 4
+    "Ti": 4, "Zr": 4, "Hf": 4, "Rf": 4,
+
+    # Group 5
+    "V": 5, "Nb": 5, "Ta": 5, "Db": 5,
+
+    # Group 6
+    "Cr": 6, "Mo": 6, "W": 6, "Sg": 6,
+
+    # Group 7
+    "Mn": 7, "Tc": 7, "Re": 7, "Bh": 7,
+
+    # Group 8
+    "Fe": 8, "Ru": 8, "Os": 8, "Hs": 8,
+
+    # Group 9
+    "Co": 9, "Rh": 9, "Ir": 9, "Mt": 9,
+
+    # Group 10
+    "Ni": 10, "Pd": 10, "Pt": 10, "Ds": 10,
+
+    # Group 11
+    "Cu": 1, "Ag": 1, "Au": 1, "Rg": 1,
+
+    # Group 12
+    "Zn": 2, "Cd": 2, "Hg": 2, "Cn": 2,
+
+    # Group 13 - Boron Group
+    "B": 3, "Al": 3, "Ga": 3, "In": 3, "Tl": 3, "Nh": 3,
+
+    # Group 14 - Carbon Group
+    "C": 4, "Si": 4, "Ge": 4, "Sn": 4, "Pb": 4, "Fl": 4,
+
+    # Group 15 - Nitrogen Group
+    "N": 5, "P": 5, "As": 5, "Sb": 5, "Bi": 5, "Mc": 5,
+
+    # Group 16 - Oxygen Group (Chalcogens)
+    "O": 6, "S": 6, "Se": 6, "Te": 6, "Po": 6, "Lv": 6,
+
+    # Group 17 - Halogens
+    "F": 7, "Cl": 7, "Br": 7, "I": 7, "At": 7, "Ts": 7,
+
+    # Group 18 - Noble Gases
+    "He": 2, "Ne": 8, "Ar": 8, "Kr": 8, "Xe": 8, "Rn": 8, "Og": 8,
+
+    # Lanthanides (Variable valence electrons, but typically 3)
+    "Ce": 3, "Pr": 3, "Nd": 3, "Pm": 3, "Sm": 3, "Eu": 3, "Gd": 3,
+    "Tb": 3, "Dy": 3, "Ho": 3, "Er": 3, "Tm": 3, "Yb": 3, "Lu": 3,
+
+    # Actinides (Variable, but typically 3)
+    "Th": 3, "Pa": 3, "U": 3, "Np": 3, "Pu": 3, "Am": 3, "Cm": 3,
+    "Bk": 3, "Cf": 3, "Es": 3, "Fm": 3, "Md": 3, "No": 3, "Lr": 3
+}

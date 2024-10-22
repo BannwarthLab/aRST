@@ -2,12 +2,7 @@ import os
 import re
 import shutil
 import string
-import subprocess
-import json
-import copy
 import random
-import traceback
-import math
 import numpy as np
 import pandas as pd
 
@@ -37,6 +32,104 @@ def rm_folderORfile(wd):
             pass
 
 
+def get_neighborats(at,wbo,filetype="bo"):
+    neighbor_l = []
+    if filetype=="bo":
+        boindex = 2
+    else:
+        boindex = 3
+    for index in range(wbo.shape[0]):
+        at1, at2 = wbo.iloc[index, :2]
+        dgap = wbo.iloc[index, boindex]
+        if filetype=="bo" and dgap<=0.3:
+            continue
+        elif filetype!="bo" and wbo.iloc[index, boindex]<=0.3:
+            continue
+        if int(at) ==int(at1):
+            neighbor_l.append(int(at2))
+        elif int(at) ==int(at2):
+            neighbor_l.append(int(at1))
+    return list(set(neighbor_l))
+
+def add_fragmentat(at,wbo,check_l,atomlist = []):
+    if wbo is None:
+        # single atom
+        atomlist.append(at)
+        check_l[at-1] = True
+        return check_l,atomlist
+    else:
+        trigger = True
+        while trigger:
+            neighbor_l = get_neighborats(at,wbo)
+            if not neighbor_l:
+                # single atom
+                atomlist.append(at)
+                check_l[at - 1] = True
+                trigger=False
+            else:
+                if not all(check_l[i-1] for i in neighbor_l):
+                    for i in neighbor_l:
+                        if not check_l[i-1]:
+                            check_l[i-1] = True
+                            atomlist.append(i)
+                            if i not in atomlist:
+                                atomlist.append(i)
+                            check_l,atomlist = add_fragmentat(i,wbo,check_l,atomlist)
+                else:
+                    trigger = False
+    return check_l,atomlist
+
+def get_fr_valenz_nel(coord):
+    from aRST.script.element import valence_electrons
+    nel = 0
+    for at in range(coord.shape[0]):
+        Z = valence_electrons[coord.iloc[at,0]]
+        nel +=Z
+    return nel
+
+import math
+def round_charge(charge,tol):
+    # round up to higher int for .tol
+    b,a = math.modf(charge)
+    if abs(b)>=tol:
+        if b<=0:
+            out = a-1
+        else:
+            out = a+1
+    else:
+        out = a
+    return int(out)
+
+def seperate_fragment(coord,wbo,atcharge):
+    nat = coord.shape[0]
+    charge0 = round(sum(atcharge))
+    if nat ==1:
+        # single atom
+        fragment_l = [{"coord":coord, "charge":charge0,"atomic_charge":atcharge}]
+    else:
+        fragment_l = []
+        # set check list
+        check_l = [False for i in range(nat)]
+        for atindex in range(nat):
+            if not check_l[atindex]:
+                check_l, atomlist = add_fragmentat(atindex+1,wbo,check_l,atomlist=[])
+                atomlist = list(set(sorted(atomlist)))
+                fcoord = coord.iloc[[i-1 for i in atomlist]]
+                fcharge = atcharge.iloc[[i-1 for i in atomlist]]
+                fragment_l.append({"coord": fcoord.reset_index(drop=True),
+                                   "atomic_charge": fcharge.reset_index(drop=True),
+                                   })
+        # now set charge based on charge conservation
+        charge_floatl = [fragment_l[frindex]["atomic_charge"].loc[:,0].sum() for frindex in range(len(fragment_l))]
+        charge_intl = [round_charge(i,0.5) for i in charge_floatl]
+        if np.round(sum(charge_intl)) !=np.round(sum(charge_floatl)):
+            print(f"please debug here: charge_floatl = {charge_floatl}; charge_intl = {charge_intl}")
+        for frindex in range(len(fragment_l)):
+            fragment_l[frindex]["charge"] = charge_intl[frindex]
+            vnel = get_fr_valenz_nel(fragment_l[frindex]["coord"])
+            fragment_l[frindex]["nel"]=vnel+charge_intl[frindex]
+    return fragment_l
+
 
 def creat_randomfolder(wd):
     wd = os.path.abspath(wd)
@@ -60,63 +153,46 @@ def write_xyz(xyz, name):
         f.write('\n')
         for i in range(nat):
             at, x, y, z = xyz.iloc[i, 0], xyz.iloc[i, 1], xyz.iloc[i, 2], xyz.iloc[i, 3]
-            f.write('%2s %20.12f %20.12f %20.12f\n' % (at, x, y, z))
+            f.write('%2s %12.8f %12.8f %12.8f\n' % (at, x, y, z))
         f.write('\n')
 
 
-def seperate():
-    command = f'excprep coord.xyz > e.out'
-    subprocess.run(command, shell=True)
-    return
 
+# def get_charge(coord_new, coord_old, chargefile):
+#     context = pd.read_table(chargefile, header=None, sep='\s+')
+#
+#     nat_l = []
+#     coord_new = coord_new.round(4)
+#     coord_old = coord_old.round(4)
+#     try:
+#         for i in range(coord_new.shape[0]):
+#             new = [coord_new.iloc[i, 1], coord_new.iloc[i, 2], coord_new.iloc[i, 3]]
+#             for j in range(coord_old.shape[0]):
+#                 old = [coord_old.iloc[j, 1], coord_old.iloc[j, 2], coord_old.iloc[j, 3]]
+#                 if new == old:
+#                     nat_l.append(j)
+#     except IndexError:
+#         print(chargefile)
+#     charge = 0
+#     for i in nat_l:
+#         charge += float(context.iloc[i, 0])
+#
+#     # tmp set homogeneous dissociation
+#     a = int(math.modf(charge)[1])
+#     if abs(charge - a) >= 0.5:
+#         return int(np.round(charge))
+#     else:
+#         return a
 
-def get_charge(coord_new, coord_old, chargefile):
-    context = pd.read_table(chargefile, header=None, sep='\s+')
-
-    nat_l = []
-    coord_new = coord_new.round(4)
-    coord_old = coord_old.round(4)
-    try:
-        for i in range(coord_new.shape[0]):
-            new = [coord_new.iloc[i, 1], coord_new.iloc[i, 2], coord_new.iloc[i, 3]]
-            for j in range(coord_old.shape[0]):
-                old = [coord_old.iloc[j, 1], coord_old.iloc[j, 2], coord_old.iloc[j, 3]]
-                if new == old:
-                    nat_l.append(j)
-    except IndexError:
-        print(chargefile)
-    charge = 0
-    for i in nat_l:
-        charge += float(context.iloc[i, 0])
-
-    # tmp set homogeneous dissociation
-    a = int(math.modf(charge)[1])
-    if abs(charge - a) >= 0.5:
-        return int(np.round(charge))
-    else:
-        return a
-
-def get_total_charge(chargefile):
-    context = pd.read_table(chargefile, header=None, sep='\s+')
-    charge=0
-    for i in range(context.shape[0]):
-        charge+=float(context.iloc[i, 0])
-    return int(charge)
+# def get_total_charge(chargefile):
+#     context = pd.read_table(chargefile, header=None, sep='\s+')
+#     charge=0
+#     for i in range(context.shape[0]):
+#         charge+=float(context.iloc[i, 0])
+#     return int(charge)
 
 
 
-def get_uhf_from_excprep(excprepoutwd, fnr):
-    uhf = {}
-    with open(f'{excprepoutwd}', 'r+') as f:
-        lines = f.readlines()
-    for i in range(1, fnr + 1):
-        for j in lines:
-            if f"{str(i)}:" in j:
-                if "UHF" not in j:
-                    uhf[i] = 0
-                else:
-                    uhf[i] = int(re.findall(r'\-?\d+\.?\d*', str(re.findall(re.compile(r'[(](.*?)[)]', re.S), j)))[0])
-    return uhf
 
 
 def get_nelectron(xtboutwd):
@@ -134,7 +210,7 @@ def get_nelectron(xtboutwd):
 
 
 def get_energy(ENERGYFILE):
-    speh = float("inf")
+    speh = np.inf
     if os.path.isfile(f'{ENERGYFILE}'):
         with open(f'{ENERGYFILE}', 'r') as f:
             speh = float(f.readlines()[0])
@@ -144,7 +220,6 @@ def get_energy(ENERGYFILE):
 
 def boltzmanp(a):
     # a: gap or wb(wboe)
-
     ev2j = 1.602176634 * pow(10, -19)
     return np.exp(-a * ev2j / (1.38 * pow(10, -23) * 1000))
 
@@ -170,25 +245,25 @@ def lowestgeom(infile):
         return outlist
 
 
-def sum_energy(fragments,level,struc_inspector):
-    energy = None
-    tmp = [struc_inspector.get_value(f"{k}.struc_info.energy.{level}") for k in fragments]
-    print("fragments:",fragments)
-    print("energy:",tmp)
-    if not any(element is None for element in tmp):
-        energy= sum(tmp)
-    return energy
+# def sum_energy(fragments,level,struc_inspector):
+#     energy = None
+#     tmp = [struc_inspector.get_value(f"{k}.struc_info.energy.{level}") for k in fragments]
+#     print("fragments:",fragments)
+#     print("energy:",tmp)
+#     if not any(element is None for element in tmp):
+#         energy= sum(tmp)
+#     return energy
 
-def get_reactionenergy(reactants, products, level,struc_inspector):
-    ereaction = None
-    ereactants = sum_energy(reactants, level,struc_inspector)
-    eproducts = sum_energy(products, level,struc_inspector)
-    if ereactants is not None and eproducts is not None:
-        ereaction = eproducts - ereactants
-    return ereaction
+# def get_reactionenergy(reactants, products, level,struc_inspector):
+#     ereaction = None
+#     ereactants = sum_energy(reactants, level,struc_inspector)
+#     eproducts = sum_energy(products, level,struc_inspector)
+#     if ereactants is not None and eproducts is not None:
+#         ereaction = eproducts - ereactants
+#     return ereaction
 
 def read_topomol(molfile, nat1=None):
-    from geom import r0
+    from aRST.script.geom import r0
     # V2000
     with open(molfile) as f:
         context = f.readlines()
@@ -221,6 +296,25 @@ def read_topomol(molfile, nat1=None):
         constrain_l.append(tmp_d)
 
     return constrain_l, ele
+
+from molbar.barcode import get_molbar_from_file,get_molbar_from_coordinates
+def get_molbarcode(coord,molbarlevel=None):
+    if coord.shape[0]>1:
+        # transform coord to coord_l and ele_l
+        coord_l,ele_l = [],[]
+        for i in range(coord.shape[0]):
+            coord_l.append(coord.loc[i,1:3].tolist())
+            ele_l.append(coord.loc[i,0])
+        try:
+            mb = get_molbar_from_coordinates(coord_l,ele_l)
+            if molbarlevel =="loose":
+                mb = mb[:4] # only take mb code until Topology Spectrum
+        except Exception:
+            mb = "unknow"
+
+    else:
+        mb = coord.iloc[0,0]
+    return mb
 
 # def collect_sp_xyz(rec, reckey, wd, typ):
 #     speh = float('inf')

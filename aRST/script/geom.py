@@ -1,6 +1,10 @@
+import os
+
 import numpy as np
 import pandas as pd
-from Element import r0,element
+from aRST.script.element import r0,element
+import warnings
+warnings.filterwarnings( "ignore" )
 
 
 class Coord:
@@ -90,44 +94,39 @@ class Coord:
                 f.write('%2s %10.5f %10.5f %10.5f\n' % (at, x, y, z))
             f.write('\n')
 
-    def write_p(self, at, P, v, name):
-        x, y, z = 0, 0, 0
-        try:
-            a = Coord.get_punkt_coord(self, at)
-            x, y, z = a[0], a[1], a[2]
-        except:
-            pass
-        if P is not None and v is not None:
-            scale = 0.5
-            with open(f'{name}.bild', 'w+') as f2:
-                f2.write('.color black\n')
-                f2.write(f'.arrow 0 0 0 0 0 6 0.05 0.150000\n')
-                f2.write(f'.arrow 0 0 0 6 0 0 0.05 0.150000\n')
-                f2.write(f'.arrow 0 0 0 0 6 0 0.05 0.150000\n')
+    def write_p(self, at, P, name, dst, length=2, porder=None):
+        # display p vector in chimera, defalut length =2
+        a = Coord.get_punkt_coord(self, at)
+        x, y, z = a[0], a[1], a[2]
+        P_scalred = np.copy(P)
+        for i in range(P_scalred.shape[1]):
+            tmp = np.linalg.norm(P[:, i])
+            P_scalred[:, i] = P_scalred[:, i] * length / tmp
 
-                f2.write('.color red\n')
-                f2.write(
-                    f'.arrow {x} {y} {z} {x + P[::, 2][0] / scale} {y + P[::, 2][1] / scale} {z + P[::, 2][2] / scale} 0.05 0.150000\n')
-                f2.write(
-                    f'.arrow {x} {y} {z} {x - P[::, 2][0] / scale} {y - P[::, 2][1] / scale} {z - P[::, 2][2] / scale} 0.05 0.150000\n')
-
-                f2.write('.color green\n')
-                f2.write(
-                    f'.arrow {x} {y} {z} {x + P[::, 0][0] / scale} {y + P[::, 0][1] / scale} {z + P[::, 0][2] / scale} 0.05 0.150000\n')
-                f2.write(
-                    f'.arrow {x} {y} {z} {x - P[::, 0][0] / scale} {y - P[::, 0][1] / scale} {z - P[::, 0][2] / scale} 0.05 0.150000\n')
-
-                f2.write('.color blue\n')
-                f2.write(
-                    f'.arrow {x} {y} {z} {x + P[::, 1][0] / scale} {y + P[::, 1][1] / scale} {z + P[::, 1][2] / scale} 0.05 0.150000\n')
-                f2.write(
-                    f'.arrow {x} {y} {z} {x - P[::, 1][0] / scale} {y - P[::, 1][1] / scale} {z - P[::, 1][2] / scale} 0.05 0.150000\n')
+        targetfile = os.path.join(dst, f'{name}.bild')
+        color0 = ["green", "blue", "red"]
+        if porder is not None:
+            color = [color0[i] for i in porder]
         else:
-            with open(f'{name}.bild', 'w+') as f2:
-                f2.write('.color black\n')
-                f2.write(f'.arrow 0 0 0 0 0 6 0.05 0.150000\n')
-                f2.write(f'.arrow 0 0 0 6 0 0 0.05 0.150000\n')
-                f2.write(f'.arrow 0 0 0 0 6 0 0.05 0.150000\n')
+            color = color0
+        with open(targetfile, 'w+') as f2:
+            # Coordinante system
+            f2.write('.color black\n')
+            f2.write(f'.arrow 0 0 0 0 0 6 0.05 0.150000\n')
+            f2.write(f'.arrow 0 0 0 6 0 0 0.05 0.150000\n')
+            f2.write(f'.arrow 0 0 0 0 6 0 0.05 0.150000\n')
+
+            f2.write(f'.color {color[2]}\n')
+            f2.write(
+                f'.arrow {x} {y} {z} {x + P_scalred[:, 2][0]} {y + P_scalred[:, 2][1]} {z + P_scalred[:, 2][2]} 0.05 0.150000\n')
+
+            f2.write(f'.color {color[0]}\n')
+            f2.write(
+                f'.arrow {x} {y} {z} {x + P_scalred[:, 0][0]} {y + P_scalred[:, 0][1]} {z + P_scalred[:, 0][2]} 0.05 0.150000\n')
+
+            f2.write(f'.color {color[1]}\n')
+            f2.write(
+                f'.arrow {x} {y} {z} {x + P_scalred[:, 1][0]} {y + P_scalred[:, 1][1]} {z + P_scalred[:, 1][2]} 0.05 0.150000\n')
         return
 
     def get_dihedral_angle(self, at1, at2, at3, at4):
@@ -227,7 +226,7 @@ def check_range(P, v):
     # a=b<c oblate pr=pc
     # a=0 b=c linear pr=pc
     # a+b = c oblate, plane pr=pc
-
+    column_order = [0, 1, 2]
     if v[1] == v[2] and v[0] != 0:  # prolate
         column_order = [0, 1, 2]
         pr_index = v.index(min(v))
@@ -236,7 +235,7 @@ def check_range(P, v):
         P = P[:, column_order]
     else:
         P = P
-    return P
+    return P,column_order
 
 
 def check_rl(P):
@@ -256,7 +255,7 @@ def l2r(P):
     return P
 
 
-def alignment(coord1, coord2, at1, at2, **kwargs):
+def alignment(coord1, coord2, at1, at2, extra_setting=None,writingP=False):
     # copy coord so that won't affect global variant
     stuc1 = coord1.copy(deep=True)
     stuc2 = coord2.copy(deep=True)
@@ -266,44 +265,52 @@ def alignment(coord1, coord2, at1, at2, **kwargs):
 
     # make sure p point into the direction of the smallest resistance and keep right-handed
     P1 = check_orient(P1, mv1)
-
+    if writingP:
+        Coord(stuc1).write_xyz("coord1")
+        Coord(stuc1).write_p(at1, P1, "p1_primitive", os.getcwd(), 2)
 
     # find main reaction direction
-    P1 = check_range(P1,v1)
-
+    P1,new_porder = check_range(P1,v1)
 
     # change coordinante system to main axes system
     stuc1 = Coord(stuc1).change_cs(P1)
     xyz1 = stuc1.copy(deep=True)
+    if writingP:
+        Coord(stuc1).write_p(at1, P1, "p1_oriented", os.getcwd(), 2, new_porder)
 
     # now do 2. structure
     stuc2 = Coord(stuc2).shift(d=0, at=at2)
     mv2, P2, v2, neighbor_atl2 = Coord(stuc2).get_principal_moment_vec(at2)
 
     P2 = check_orient(P2, mv2)
+    if writingP:
+        Coord(stuc2).write_xyz("coord2")
+        Coord(stuc2).write_p(at2, P2, "p2_primitive", os.getcwd(), 2)
+
 
     # find main reaction direction
-    P2 = check_range(P2,v2)
+    P2,new_porder = check_range(P2,v2)
 
     P2[:, 2] = -P2[:, 2]
 
     P2[:, 0] = -P2[:, 0]
     P2[:, 1] = -P2[:, 1]
 
-    ovlap_mode = kwargs.get('aligning_ovlap', False)
-    if ovlap_mode:
+    maxovlap = extra_setting.get("maxovlap",False)
+    if maxovlap:
         P2[:, 0] = -P2[:, 0]
         P2[:, 1] = -P2[:, 1]
 
     stuc2 = Coord(stuc2).change_cs(P2)
+    if writingP:
+        Coord(stuc2).write_p(at2, P2, "p2_oriented", os.getcwd(), 2, new_porder)
 
     # merge two structures
     name1 = xyz1.iloc[at1, 0]
     name2 = stuc2.iloc[at2, 0]
     rr = (r0[name1] + r0[name2])
-    relativ_r = kwargs.get('aligning_distance', 5)  # 5 times of rr by default
-    d_pre = kwargs.get('aligning_direction', 1)  # 1 by default, -1: opposite alignment
-    d = d_pre * np.round(rr * relativ_r, 2)
+    relativ_r = extra_setting.get('aligning_distance', 5)  # 5 times of rr by default
+    d = np.round(rr * relativ_r, 2)
 
     stuc2 = Coord(stuc2).shift(at2, d)
     xyz2 = stuc2.copy(deep=True)  # for the bug if cood1=cood2, the class will be inherited

@@ -2,16 +2,15 @@ import os
 
 import numpy as np
 import pandas as pd
-from toolbox import create_folder, write_xyz, get_nelectron
-from spr import SPR_HL, build_bo_d
+from aRST.script.toolbox import  write_xyz
+
 from molbar.barcode import idealize_structure_from_coordinates
 from collections import Counter
-from geom import Coord, alignment
-from dictionaryInspector import DictionaryInspector
-from callsys import CallxTB
+from aRST.script.geom import Coord
+from aRST.script.callsys import CallxTB
 
 
-def build_push_l(coord, at_l, nat1=0):
+def build_push_l(coord, at_l, nat1=0,d=0.95):
     # avoiding crossing push atomic pairs
     if len(at_l) == 2:
 
@@ -27,11 +26,11 @@ def build_push_l(coord, at_l, nat1=0):
         current_atl = [[int(at_l[0][0]), int(at_l[0][1]) + nat1]]
 
     ## at_l: index starting with 0; push_l: index starting with 1
-    push_l = [(str(k[0] + 1),  # at1 (index starts with 1)
-               str(k[1] + 1),  # at2 (index starts with 1)
-               str(np.round(Coord(coord).get_ats_distance(k[0], k[1]), 2)),  # d_12
-               str((Coord(coord).get_rr_distance(k[0]) +
-                   Coord(coord).get_rr_distance(k[1])*0.95))) for k in current_atl]  # rr_12
+    push_l = [(k[0] + 1,  # at1 (index starts with 1)
+               k[1] + 1,  # at2 (index starts with 1)
+               Coord(coord).get_ats_distance(k[0], k[1]),  # d_12
+               (Coord(coord).get_rr_distance(k[0]) +
+                   Coord(coord).get_rr_distance(k[1])*d)) for k in current_atl]  # rr_12
 
     return push_l
 
@@ -140,36 +139,36 @@ def get_endxyz_from_mb(constrain_l, coordinates, ele):
     return coord
 
 
-def evaluate_bo_after_mbff(wd, level, coord, charge, uhf, alpb, etemp, tmp_at_connection, wbolim=0.9):
-    # do sp to get wbo
-    Trigger = False
-
-    os.chdir(os.path.abspath(wd))
-    write_xyz(coord, f"coord")
-
-    rc = CallxTB(level, "coord", charge, uhf, alpb, etemp).callopt()
-    if rc==0:
-        BO = {}
-        wboe = pd.read_csv(os.path.join(wd, "wbo"), header=None, sep='\s+')
-        for index in range(wboe.shape[0]):
-            dgap = wboe.iloc[index, 2]
-            if dgap >= wbolim:
-                at_1, at_2 = wboe.iloc[index, 0], wboe.iloc[index, 1]
-                value = [at_1, at_2]
-                if dgap not in BO.keys():
-                    BO[dgap] = [value]
-                else:
-                    BO[dgap].append(value)
-        if tmp_at_connection is not None:
-            for item in BO.values():
-                for atl1 in item:
-                    for atl2 in tmp_at_connection:
-                        if Counter(atl1) == Counter(atl2):
-                            Trigger = True
-        else:
-            Trigger = True  # opt sussess
-
-    return Trigger
+# def evaluate_bo_after_mbff(wd, level, coord, charge, uhf, alpb, etemp, tmp_at_connection, wbolim=0.9):
+#     # do sp to get wbo
+#     Trigger = False
+#
+#     os.chdir(os.path.abspath(wd))
+#     write_xyz(coord, f"coord")
+#
+#     rc = CallxTB(level, "coord", charge, uhf, alpb, etemp).callopt()
+#     if rc==0:
+#         BO = {}
+#         wboe = pd.read_csv(os.path.join(wd, "wbo"), header=None, sep='\s+')
+#         for index in range(wboe.shape[0]):
+#             dgap = wboe.iloc[index, 2]
+#             if dgap >= wbolim:
+#                 at_1, at_2 = wboe.iloc[index, 0], wboe.iloc[index, 1]
+#                 value = [at_1, at_2]
+#                 if dgap not in BO.keys():
+#                     BO[dgap] = [value]
+#                 else:
+#                     BO[dgap].append(value)
+#         if tmp_at_connection is not None:
+#             for item in BO.values():
+#                 for atl1 in item:
+#                     for atl2 in tmp_at_connection:
+#                         if Counter(atl1) == Counter(atl2):
+#                             Trigger = True
+#         else:
+#             Trigger = True  # opt sussess
+#
+#     return Trigger
 
 
 def get_bo(wbopath,tmp_at_connection):
@@ -195,10 +194,10 @@ def get_bo(wbopath,tmp_at_connection):
                         continue
     return bo
 
-def get_bl(coord,tmp_at_connection):
-    at1 = tmp_at_connection[0][0]-1
-    at2 = tmp_at_connection[0][1]-1
-
-    d = np.round(Coord(coord).get_ats_distance(at1, at2), 2)
-    return d
+# def get_bl(coord,tmp_at_connection):
+#     at1 = tmp_at_connection[0][0]-1
+#     at2 = tmp_at_connection[0][1]-1
+#
+#     d = np.round(Coord(coord).get_ats_distance(at1, at2), 2)
+#     return d
 
