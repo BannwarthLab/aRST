@@ -8,7 +8,7 @@ To clone and run this package you will need:
 Clone
 ```bash
 # Clone this repository
-git clone https://github.com/xx
+git clone https://git.rwth-aachen.de/bannwarthlab/aRST
 ```
 
 Create a virtual environment for python
