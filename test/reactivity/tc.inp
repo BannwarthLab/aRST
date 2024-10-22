@@ -1,0 +1,16 @@
+coordinates             coord.xyz
+method                  pbe
+basis                   vdzp
+dftgrid                 1
+sphericalbasis          yes
+guess                   sad
+precision               mixed
+genscrdata              true
+threall                 1e-14
+convthre                1e-4
+xtol                    1e-6
+pcm                     cosmo
+epsilon                 80.4
+charge                  0
+spinmult                1
+run                     energy

@@ -1,0 +1,50 @@
+[geom.reactant1]
+name = "coord1.xyz"
+charge = 0
+multiplicity = 1
+
+[geom.reactant2]
+name = "coord2.xyz"
+charge = 0
+multiplicity = 1
+
+[searching_setting.general]
+cycle = 2
+elim = 300
+
+[searching_setting.inter]
+number = 3
+search_mode = 1
+hydrogen =true
+halogen =true
+scan_mode = 0
+
+[searching_setting.disso]
+number = 2
+search_mode = 1
+hydrogen =true
+halogen =true
+scan_mode = 0
+
+[searching_setting.intra]
+number = 1
+search_mode = 1
+hydrogen = true
+halogen = true
+scan_mode = 0
+
+[xtb_setting]
+method = "gfn2"
+alpb = "h2o" # solvent mode
+etemp = 1000 # electronic temp
+k = 1 # geom constrain strength (used in scan)
+step = 20 # pushing/pulling steps
+xtb_wd = "/home/guests/ychen/public/xtbml/_build/xtb"
+
+
+[orca_setting]
+method = "r2scan-3c"
+dftopt=false
+#optlevel = ""
+#solmode = "water"
+ncpu=4

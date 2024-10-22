@@ -1,0 +1,27 @@
+Namespace(align=False, explore=False, in_file='in.toml', ml_features=True, opt=False, reactor=False, time=True)
+starting to search inter-association possibility:
+allow_hydrogen: True
+allow_halogen: True
+search_range: 10
+write jason and txt file in  reactivity/interA
+for jason dict: {'hoao-luao gap':[struc index1, struc index2,[[at index 1,at index2],[possible eq atomic combination]]]
+
+
+starting to search dissociation possibility:
+allow_hydrogen: True
+allow_halogen: True
+search_range: 10
+search_mode: 1
+write jason and txt file in  reactivity/disso
+for jason dict: {BO:[strucid, at1, at2 , dgap]}
+
+
+starting to search intra association possibility:
+allow_hydrogen: True
+allow_halogen: True
+search_range: 10
+write jason and txt file in  reactivity/intraA
+for jason dict: {'hoao-luao gap':[struc index1, struc index2,[[at index 1,at index2],[possible eq atomic combination]]]
+
+
+finished with 00:00:30
