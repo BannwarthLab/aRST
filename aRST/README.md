@@ -3,61 +3,146 @@
 This package provides as an automated tool for modeling chemical reaction paths, searching thermodynamic-allowed products based on the given electronic structures. Other useful built-in functions include evaluating atomic reactive sites and generating the reactive complex.
 
 ## Getting Started
-To clone and run this package you will need:
+for now (test version):
+source my version of QC progromm and venv environment
 
-Clone
-```bash
-# Clone this repository
-git clone https://github.com/xx
+please talk to me before you use this package
 ```
+source "/mnt/group-bin/venv-python/ychen/aRST/bin/activate"
+module load openmpi/4.1.1
+module load orca
+module load xtb
+module load libraries/libgfortran/5
+module load terachem/dev-3c
 
-Create a virtual environment for python
-```bash
-python3 -m venv your_path
-```
-
-Activate this environment
-```bash
-source your_path/bin/activate
-```
-
-Install aRST
-```bash
-run setup.py
+cmd for calling aRST
 ```
 
 now you are able to used aRST as commandline tool or call its functions :)
-
-## Commandlines for calling usages
-Example of different usages are given below as well as can be found in test folder.
-
 To start the calculation, the essential input consists of the .xyz file of the structure, the .toml file with detailed settings.
 
-for my version of xtb and stda i can provide a complied binary address with
-xtb
+## User Manual for setting input file
+### essential input
 ```
-/home/guests/ychen/public/xtbml/_build/xtb
-```
-stda
-```
-/home/guests/ychen/public/stdaml/stda
-```
+[geom.reactant1]
+name = "coord1.xyz"                 # str, file name of coord1
+charge = 0                          # int,chagrge of coord1
+multiplicity = 1                    # int,multiplicity of coord1
 
-### Reaction Pathes Exploration
-Explore reaction pathes based on given reactants.
+[geom.reactant2]
+name =
+charge =
+multiplicity =
+
+...
 ```
-aRST in.toml --explore > record.log 2>&1 &
+For inputs with a stoichiometric number more than 1, you can add under each entry with
+```
+[geom.reactantX]
+number =                            # stoichiometric number of coord
 ```
 
 ### HOAO and LUAO Infomation
 Print out reactive information of given structures.
+
+with essential input, calling command with
 ```
-aRST in.toml -e -t > record.log 2>&1 &
+aRST in.toml --ml_feature > record.log 2>&1 &
 ```
 
 ### Alignment
 Aligning two strucs with given atom index.
+
+besides essential input, adding target atomic loation for each coord with 
+```
+[geom.reactantX]
+at =                                # reactive atom number                      
+```
+calling command with
 ```
 aRST in.toml --align > record.log 2>&1 &
 ```
 
+
+### Reaction Pathes Exploration
+Explore reaction pathes based on given reactants.
+
+besides essential input, (optional) adding detailed searching settings with
+```
+[searching_setting.general]
+cycle = 1                           # int, number of searching cycle
+elim =  300                         # float, energy limitation to kill this reaction path, unit kcal/mol
+ml_method ="gfn2"/"stda"            # str, method for ml feature calculations
+ml_tc_method="BHandHLYP"            # str, if use stda, method for struc sp calculations in TC
+ml_tc_basis="vdzp"                  # str, if use stda, basis for struc sp calculations in TC
+ml_tc_epsilon=                      # float, if use stda, pcm solvent mode
+mb_level =                          # None or "loose" to only screen with topology spectrum
+
+[searching_setting.inter]
+number = 1                          # int, number of inermolecular reaction paths to be search in one cycle
+search_mode = 1                     # 0: only search association possibility between same structures (A+A -> and B+B ->);
+                                    # 1(default): only search association possibility between different structures (A+B ->);
+                                    # 2: search association possibility in all structures (A+A ->, A+B-> and B+B ->).
+hydrogen = True                     # bool, searching range includs/excludes H atoms
+halogen = True                      # bool, searching range includs/excludes halogen atoms
+scan_mode = 0                       # 0(default): use xtb-scan simulating reactions
+                                    # 1: use molbar FF simulating reactions
+loose_bond =                        # bool (defalut as False), loose a bit the weakest bond in the struc
+maxovlap =                          # bool (defalut as False), different alignment direction
+aligning_distance = 5               # int, scale of aligning distance
+
+[searching_setting.disso]
+number = 1                          # int, number of inermolecular reaction paths to be search in one cycle
+hydrogen =                          # bool, searching range includs/excludes H atoms
+halogen =                           # bool, searching range includs/excludes halogen atoms
+scan_mode =                         # 0(default): use xtb-scan simulating reactions
+                                    # 1: use molbar FF simulating reactions
+mode="bo/wboe"                      # str, searching mode              
+pulling_distance =                  # int, scale of pulling distance
+
+[searching_setting.intra]
+number =                            # int, number of inermolecular reaction paths to be search in one cycle
+hydrogen =                          # bool, searching range includs/excludes H atoms
+halogen =                           # bool, searching range includs/excludes halogen atoms
+scan_mode =                         # 0(default): use xtb-scan simulating reactions
+                                    # 1: use molbar FF simulating reactions
+loose_bond =                        # bool (defalut as False), loose a bit the weakest bond in the struc
+
+
+[xtb_setting]
+strucopt=False                     # bool, do xtb preopt for struc
+method = "gfn2"                    # str, method for xtb calculations
+optlevel = ""                      # str, xtb acceptable optimization levels
+alpb = "h2o"                       # str, alpb solvent mode
+struc_etemp = 1000                 # int, electronic temp for struc opt
+scan_etemp = 1000                  # int, electronic temp for scan
+k = 1                              # geom constrain strength (used in scan)
+step = 20                          # pushing/pulling steps
+xtb_wd = "/home/guests/ychen/public/xtbml/_build/xtb" 
+
+[orca_setting]
+method = "r2scan-3c"                # str, method for dft calculations
+dftopt = False                      # bool, do dft opt
+solmode = "water"                   # str, CPCM solvent mode
+ncpu = 1                            # int, parallel calculations for orca
+
+[stda_setting]
+stda_wd = "/home/guests/ychen/public/stdaml/stda"
+```
+if products are known, you can add following struc infomation, aRST will compare each simulated reaction path results for products
+```
+[geom.product1]
+name =
+charge =
+multiplicity =
+
+[geom.product2]
+name =
+charge =
+multiplicity =
+```
+
+commandline
+```
+aRST in.toml --explore > record.log 2>&1 &
+```
