@@ -62,7 +62,7 @@ def main():
     import toml
     with open(args.in_file, "r") as f:
         setting_d = toml.load(f)
-
+    print(setting_d)
     setting_inspertor = DictionaryInspector(setting_d)
     # determine the running folder
     if setting_inspertor.get_value("searching_setting.general.wd") is not None:
@@ -88,14 +88,14 @@ def main():
                     STRUC_inspector.set_value(f"{rcount}.struc_info.general.sameas",str(anchornr))
                     rcount+=1
         elif "product" in struckn:
-            REFSTRUC_rec = initial_struc_info(geom_d, str(pcount), struckn, REFSTRUC_rec)
+            REFSTRUC_rec = initial_struc_info(geom_d, "p"+str(pcount), struckn, REFSTRUC_rec)
             REFSTRUC_inspector = DictionaryInspector(REFSTRUC_rec)
             anchornr = pcount
             pcount += 1
             if number > 1:
                 for i in range(number - 1):
-                    REFSTRUC_inspector.set_value(str(pcount), REFSTRUC_inspector.get_value(str(pcount - 1)).copy())
-                    STRUC_inspector.set_value(f"{pcount}.struc_info.general.sameas", str(anchornr))
+                    REFSTRUC_inspector.set_value("p"+str(pcount), REFSTRUC_inspector.get_value(str(pcount - 1)).copy())
+                    STRUC_inspector.set_value(f"p{pcount}.struc_info.general.sameas", str(anchornr))
                     pcount += 1
 
     if args.time:
@@ -119,7 +119,24 @@ def main():
                 else:
                     REFSTRUC_rec = refine_struc_info(wd,strucid, REFSTRUC_rec, setting_d)
         # receive reaction path discovery record
-        STRUC_rec, REACTION_rec = ReactionSearch(wd,STRUC_rec, setting_d, {},REFSTRUC_rec=REFSTRUC_rec)
+        STRUC_rec, REACTION_rec = ReactionSearch(wd,STRUC_rec, setting_d, {})
+        #  examine if found ref reaction path
+        from collections import Counter
+        STRUC_inspector = DictionaryInspector(STRUC_rec)
+        REF_inspector = DictionaryInspector(REFSTRUC_rec)
+        ref_mb = [REF_inspector.get_value(f"{i}.struc_info.general.mb") for i in REFSTRUC_rec.keys()]
+
+        triger = False
+        for rxid in REACTION_rec.keys():
+            unreacted_l = REACTION_rec[rxid][0]["unreacted"]
+            products_l = REACTION_rec[rxid][0]["products"]
+            products_l.extend(unreacted_l)
+            pmb = [STRUC_inspector.get_value(f"{i}.struc_info.general.mb") for i in products_l]
+            if Counter(pmb) == Counter(ref_mb):
+                triger = True
+                print("!!!! Congret, you have found ref. reaction path in reactionID:", rxid)
+        if not triger:
+            print("!!!! not found ref. reaction path with prod. mb", ref_mb)
 
         # write output file
         from aRST.script.dictionaryInspector import convert_df2json
@@ -163,7 +180,8 @@ def main():
                     REFSTRUC_rec = refine_struc_info(wd, strucid, REFSTRUC_rec, setting_d)
         # receive reaction path discovery record
         try:
-            STRUC_rec, REACTION_rec = ReactionSearch(wd, STRUC_rec, setting_d, {},REFSTRUC_rec=REFSTRUC_rec)
+            STRUC_rec, REACTION_rec = ReactionSearch(wd, STRUC_rec, setting_d, {})
+
         except:
             traceback.print_exc()
 

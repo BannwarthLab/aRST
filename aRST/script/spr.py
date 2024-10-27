@@ -52,12 +52,14 @@ def build_gap_d(react_d, h_df, l_df, search_range):
             L = l_df.at[index1, column1]
             if isinstance(L, pd.Series): # reactants contains mulitple identical structures
                 L = L.iloc[0]
+            if isinstance(L,str) or np.isnan(L) or np.isinf(L):
+                continue
             for index2, row2 in h_df.iterrows():  # loop row in H
                 for column2 in h_df.columns:  # loop col in H
                     H = h_df.at[index2, column2]
                     if isinstance(H, pd.Series):  # reactants contains mulitple identical structures
                         H = H.iloc[0]
-                    if np.isnan(H) or np.isinf(H):
+                    if isinstance(H,str) or np.isnan(H) or np.isinf(H):
                         continue
                     if search_range == 0:
                         if column2 == column1:  # struc1 = struc2

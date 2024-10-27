@@ -9,7 +9,7 @@ from aRST.script.dictionaryInspector import DictionaryInspector
 from aRST.script.callsys import CallxTB, CallORCA, CallTerachem, CallsTDA
 
 
-def ReactionSearch(wd, STRUC_rec, setting_d, REACTION_rec, step=0, REFSTRUC_rec={}):
+def ReactionSearch(wd, STRUC_rec, setting_d, REACTION_rec, step=0):
     setting_inspector = DictionaryInspector(setting_d)
     ncycle = setting_inspector.get_value("searching_setting.general.cycle", 1)
     print("ncycle=", ncycle)
@@ -44,7 +44,9 @@ def ReactionSearch(wd, STRUC_rec, setting_d, REACTION_rec, step=0, REFSTRUC_rec=
             for prefix_rpid in node:
                 status = REACTION_rec[prefix_rpid][-1]
                 if status:  # this reaction path is allowed to explore further
+                    print("starting exploring node ", prefix_rpid)
                     reactants_l = REACTION_rec[prefix_rpid][0]["products"] + REACTION_rec[prefix_rpid][0]["unreacted"]
+                    print("reactants for this node: ", reactants_l)
                     singlecycle = SingleCycleSearch(STRUC_rec, REACTION_rec, setting_d, wd)
                     explore_dl = singlecycle.explore(reactants_l, prefix_rpid)
                     for reactiontype_d in explore_dl:
@@ -108,22 +110,37 @@ class SingleCycleSearch:
         STRUC_inspector = DictionaryInspector(self.STRUC_rec)
         setting_inspector = DictionaryInspector(self.setting_d)
 
-        # check if H atom #todo fix xtb ml version for H radical
+        # there is a bug in xtb_ml for H
         coord = STRUC_inspector.get_value(f"{struc}.struc_info.general.coord")
-        if coord.shape[0]==1 and coord.iloc[0,0] =="H":
+        if coord.shape[0] == 1 and coord.iloc[0, 0] == "H":
             wboe = None
             nel = STRUC_inspector.get_value(f"{struc}.struc_info.general.nel")
-            ml_df = pd.DataFrame(columns=['index','HOAO_a (eV)', 'HOAO_b (eV)','LUAO_a (eV)', 'LUAO_b (eV)', 'Atom'])
+            ml_df = pd.DataFrame(columns=['index', 'HOAO_a (eV)', 'HOAO_b (eV)', 'LUAO_a (eV)', 'LUAO_b (eV)', 'Atom'])
             if nel == 0:
                 # H+
                 ml_df.loc[0,:] = [0,-np.inf,-np.inf,-np.inf,-np.inf,1]
-            elif nel ==1:
-                ml_df.loc[0, :] = [0, -10.7072, -10.7072, np.inf, np.inf, 1]
+                STRUC_inspector.set_value(f"{struc}.struc_info.reactivity.ml", ml_df)
+                STRUC_inspector.set_value(f"{struc}.struc_info.reactivity.bo", wboe)
+                return
             else:
-                ml_df.loc[0, :] = [0, -1.8430, -1.8430, np.inf, np.inf, 1]
-            STRUC_inspector.set_value(f"{struc}.struc_info.reactivity.ml", ml_df)
-            STRUC_inspector.set_value(f"{struc}.struc_info.reactivity.bo", wboe)
-            return
+                # defalut routine
+                pass
+        # # check if H atom #todo fix xtb ml version for H radical
+        # coord = STRUC_inspector.get_value(f"{struc}.struc_info.general.coord")
+        # if coord.shape[0]==1 and coord.iloc[0,0] =="H":
+        #     wboe = None
+        #     nel = STRUC_inspector.get_value(f"{struc}.struc_info.general.nel")
+        #     ml_df = pd.DataFrame(columns=['index','HOAO_a (eV)', 'HOAO_b (eV)','LUAO_a (eV)', 'LUAO_b (eV)', 'Atom'])
+        #     if nel == 0:
+        #         # H+
+        #         ml_df.loc[0,:] = [0,-np.inf,-np.inf,-np.inf,-np.inf,1]
+        #     elif nel ==1:
+        #         ml_df.loc[0, :] = [0, -10.7072, -10.7072, np.inf, np.inf, 1]
+        #     else:
+        #         ml_df.loc[0, :] = [0, -1.8430, -1.8430, np.inf, np.inf, 1]
+        #     STRUC_inspector.set_value(f"{struc}.struc_info.reactivity.ml", ml_df)
+        #     STRUC_inspector.set_value(f"{struc}.struc_info.reactivity.bo", wboe)
+        #     return
 
         # check setting for gfn ml or dft ml
         keyword = setting_inspector.get_value("searching_setting.general.ml_method")
@@ -141,7 +158,7 @@ class SingleCycleSearch:
                                     "charge": charge,
                                     "uhf": m - 1,
                                     "alpb": self.setting_d["xtb_setting"].get("alpb", "h2o"),
-                                    "etemp": self.setting_d["xtb_setting"].get("etemp", "4000"),
+                                    "etemp": self.setting_d["xtb_setting"].get("struc_etemp", "4000"),
                                     "xtbwd": self.setting_d["xtb_setting"].get("xtb_wd")
                                     }).ml()
                 if rc == 0:
@@ -161,7 +178,7 @@ class SingleCycleSearch:
                                     "charge": charge,
                                     "uhf": m - 1,
                                     "alpb": self.setting_d["xtb_setting"].get("alpb", "h2o"),
-                                    "etemp": self.setting_d["xtb_setting"].get("etemp", "4000")
+                                    "etemp": self.setting_d["xtb_setting"].get("struc_etemp", "4000")
                                     }).get_moldeninput()
                 if rc == 0:
                     rc2 = CallsTDA("molden.input").callml(setting_inspector.get_value("stda_setting.stda_wd"), 0)
@@ -173,27 +190,30 @@ class SingleCycleSearch:
                     raise Exception(f"struc {struc} xtb get molden file failed")
         else:  # call Terachem first
             tcwd = create_folder(os.path.join(self.wd, "struc", struc, "tc"))
-            inputfn = setting_inspector.get_value("searching_setting.general.ml_tc_inputfn")
-            if inputfn:
-                shutil.copyfile(os.path.join(self.wd, inputfn), os.path.join(tcwd, "tc.inp"))
-                coord = STRUC_inspector.get_value(f"{struc}.struc_info.general.coord")
-                write_xyz(coord, "coord")
-                cmd = f'terachem {inputfn}'
-                rc = CallTerachem(cmd)
-                if rc == 0:
-                    mlwd = create_folder(os.path.join(self.wd,"struc", struc, "stda"))
-                    shutil.copyfile(os.path.join(tcwd, "scr.coord", "coord.molden"),
-                                    os.path.join(mlwd, "coord.molden"))
-                    rc2 = CallsTDA("coord.molden").callml(setting_inspector.get_value("stda_setting.stda_wd"),3)
-                    if rc2 == 0:
-                        pass
-                    else:
-                        raise Exception(f"struc {struc} stda ml failed")
+            coord = STRUC_inspector.get_value(f"{struc}.struc_info.general.coord")
+            write_xyz(coord, "coord")
+            inputcmd_d = {"coordfn":"coord",
+                          "c": STRUC_inspector.get_value(f"{struc}.struc_info.general.charge"),
+                          "m":STRUC_inspector.get_value(f"{struc}.struc_info.general.multiplicity"),
+                          "method": setting_inspector.get_value("searching_setting.general.ml_tc_method"),
+                          "basis":setting_inspector.get_value("searching_setting.general.ml_tc_basis"),
+                          "epsilon":setting_inspector.get_value("searching_setting.general.ml_tc_epsilon"),
+                          }
 
+            rc = CallTerachem(wd=tcwd,command_d=inputcmd_d).run()
+
+            if rc == 0:
+                mlwd = create_folder(os.path.join(self.wd,"struc", struc, "stda"))
+                shutil.copyfile(os.path.join(tcwd, "scr.coord", "coord.molden"),
+                                os.path.join(mlwd, "coord.molden"))
+                rc2 = CallsTDA("coord.molden").callml(setting_inspector.get_value("stda_setting.stda_wd"),3)
+                if rc2 == 0:
+                    pass
                 else:
-                    raise Exception(f"struc {struc} tc molden failed")
+                    raise Exception(f"struc {struc} stda ml failed")
+
             else:
-                raise Exception("no tc inp file found")
+                raise Exception(f"struc {struc} tc molden failed")
 
         # read ml
         ml_feature = pd.read_csv(os.path.join(mlwd, "ml_feature.csv"), index_col=False)
@@ -230,6 +250,7 @@ class SingleCycleSearch:
         for struc in reactants:
             if STRUC_inspector.get_value(f"{struc}.struc_info.reactivity.ml") is None or STRUC_inspector.get_value(
                     f"{struc}.struc_info.reactivity.bo") is None:
+                print("prepare ML features for struc ",struc)
                 self.ML_prepare(struc)
 
         # starting searching
@@ -237,20 +258,26 @@ class SingleCycleSearch:
         output_interA, output_D, output_intraA = {}, {}, {}
         if setting_inspector.get_value("searching_setting.inter") and len(reactants) > 1:
             ## interA
+            merged_setting = {**setting_inspector.get_value("searching_setting.inter"),
+                              **setting_inspector.get_value("searching_setting.general")}
             from aRST.script.interA import simulation_interA
+            print("starting searching interA posiibilities")
             output_interA = simulation_interA(reactants,
                                               self.STRUC_rec,
-                                              setting_inspector.get_value("searching_setting.inter"),
+                                              merged_setting,
                                               setting_inspector.get_value("xtb_setting"),
                                               self.wd, strnr, count=searchcount)
             searchcount += len(output_interA.keys())
 
         ## intraD
         if setting_inspector.get_value("searching_setting.disso"):
+            merged_setting = {**setting_inspector.get_value("searching_setting.disso"),
+                              **setting_inspector.get_value("searching_setting.general")}
             from aRST.script.intraD import simulation_intraD
+            print("starting searching Dissociation posiibilities")
             output_D = simulation_intraD(reactants,  # reactants list
                                          self.STRUC_rec,  # correspongding struc info in dict
-                                         setting_inspector.get_value("searching_setting.disso"),
+                                         merged_setting,
                                          setting_inspector.get_value("xtb_setting"),
                                          self.wd, strnr, count=searchcount)
             searchcount += len(output_D.keys())
@@ -258,9 +285,12 @@ class SingleCycleSearch:
         # intraA
         if setting_inspector.get_value("searching_setting.intra"):
             from aRST.script.intraA import simulation_interA
+            merged_setting = {**setting_inspector.get_value("searching_setting.intra"),
+                              **setting_inspector.get_value("searching_setting.general")}
+            print("starting searching intraA posiibilities")
             output_intraA = simulation_interA(reactants,  # reactants list
                                               self.STRUC_rec,  # correspongding struc info in dict
-                                              setting_inspector.get_value("searching_setting.intra"),
+                                              merged_setting,
                                               setting_inspector.get_value("xtb_setting"),
                                               self.wd, strnr, count=searchcount)
             searchcount += len(output_intraA.keys())
@@ -303,7 +333,7 @@ class SingleCycleSearch:
                                              "charge": fragment_l[frindex]["charge"],
                                              "uhf": uhf,
                                              "alpb": setting_inspector.get_value("xtb_setting.alpb", "h2o"),
-                                             "etemp": setting_inspector.get_value("xtb_setting.etemp", "4000")
+                                             "etemp": setting_inspector.get_value("xtb_setting.struc_etemp", "4000")
                                              }).opt()
                     if status == 0:
                         # # check here!!!!
@@ -445,7 +475,7 @@ class SingleCycleSearch:
                                  "charge": frinfo_d["charge"],
                                  "uhf": tmp_path_d[1][frindex]["m"] - 1,
                                  "alpb": setting_inspector.get_value("xtb_setting.alpb", "h2o"),
-                                 "etemp": setting_inspector.get_value("xtb_setting.etemp", "4000")
+                                 "etemp": setting_inspector.get_value("xtb_setting.struc_etemp", "4000")
                                  }).trv()
             etrv = get_energy(os.path.join(wd, 'GTRV')) if staus == 0 else np.inf
             tmp_path_d[1][frindex]["trv"] = etrv
@@ -459,7 +489,7 @@ class SingleCycleSearch:
                                  "charge": frinfo_d["charge"],
                                  "uhf": tmp_path_d[1][frindex]["m"] - 1,
                                  "alpb": setting_inspector.get_value("xtb_setting.alpb", "h2o"),
-                                 "etemp": setting_inspector.get_value("xtb_setting.etemp", "4000")
+                                 "etemp": setting_inspector.get_value("xtb_setting.struc_etemp", "4000")
                                  }).solv()
             esolv = get_energy(os.path.join(wd, 'GSOLV')) if staus == 0 else np.inf
             tmp_path_d[1][frindex]["solv"] = esolv
@@ -514,7 +544,7 @@ class SingleCycleSearch:
         G0 = sum([STRUC_inspector.get_value(f"{i}.struc_info.energy.G_dft") for i in reactants_l])
         G1 = sum([tmp_path_d[1][frindex]["G_dft"] for frindex in range(len(tmp_path_d[1]))])
         delta_G = (G1 - G0) * 627.503
-        if delta_G > DictionaryInspector(self.setting_d).get_value("searching_setting.general.elim"):
+        if delta_G > DictionaryInspector(self.setting_d).get_value("searching_setting.general.elim",300):
             status = False
 
         # prepare to record reaction info

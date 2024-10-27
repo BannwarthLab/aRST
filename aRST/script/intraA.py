@@ -106,7 +106,7 @@ def simulation_interA(reactants,  # reactants list
                                        "charge": charge,
                                        "uhf": uhf,
                                        "alpb": xtb_setting.get("alpb", "h2o"),
-                                       "etemp": xtb_setting.get("etemp", "4000")
+                                       "etemp": xtb_setting.get("scan_etemp", "4000")
                                        }).scan(constrain_setting)
 
             if status == 0:
@@ -164,7 +164,7 @@ def simulation_interA(reactants,  # reactants list
                                        "charge": charge,
                                        "uhf": uhf,
                                        "alpb": xtb_setting.get("alpb", "h2o"),
-                                       "etemp": xtb_setting.get("etemp", "4000")
+                                       "etemp": xtb_setting.get("scan_etemp", "4000")
                                        }).opt()
             if status == 0:
                 endxyz = pd.read_table(os.path.join(scan_wd, 'xtbopt.xyz'), header=None, skiprows=2, sep='\s+')

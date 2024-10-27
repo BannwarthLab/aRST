@@ -32,9 +32,11 @@ def refine_struc_info(wd0,strucid, struc_rec, setting_d, forcedftopt=False):
     m = struc_inspector.get_value(f"{strucid}.struc_info.general.multiplicity")
 
     # do QC calculations to get more struc properties
-    if coord.shape[0] > 1:  # check if single atom
-        # at least do gfn opt
-        wd = create_folder(os.path.join(wd0,"struc", strucid, "xtb"))
+    nel, sp_xtb, ele = None,None,None
+    ### do opt if required
+    if setting_inspector.get_value("xtb_setting.strucopt", False) and coord.shape[0] > 1:
+        # do gfn opt
+        wd = create_folder(os.path.join(wd0, "struc", strucid, "xtb"))
         write_xyz(coord, "coord")
 
         staus = CallxTB(wd, {"method": setting_inspector.get_value("xtb_setting.method", "gfn2"),
@@ -43,63 +45,45 @@ def refine_struc_info(wd0,strucid, struc_rec, setting_d, forcedftopt=False):
                              "charge": charge,
                              "uhf": m - 1,
                              "alpb": setting_inspector.get_value("xtb_setting.alpb", "h2o"),
-                             "etemp": setting_inspector.get_value("xtb_setting.etemp", "4000")
+                             "etemp": setting_inspector.get_value("xtb_setting.struc_etemp", "4000")
                              }).opt()
         if staus == 0:
             coord = pd.read_table(os.path.join(wd, 'xtbopt.xyz'), header=None, skiprows=2, sep='\s+')
             nel = get_nelectron(os.path.join(wd, 'xtb.out'))
             sp_xtb = get_energy(os.path.join(wd, 'ENERGY'))
             constrain_l, ele = read_topomol(os.path.join(wd, 'xtbtopo.mol')) if os.path.exists(
-                            os.path.join(wd, 'xtbtopo.mol')) else [],[]
+                os.path.join(wd, 'xtbtopo.mol')) else [], []
+
         else:
             nel, sp_xtb = None, None
             constrain_l, ele = [], [str(coord.iloc[0, 0])]
-            raise Exception(
-                f'struc {strucid} opt at {setting_inspector.get_value("xtb_setting.method", "gfn2")} failed')
+            print(f'struc {strucid} opt at {setting_inspector.get_value("xtb_setting.method", "gfn2")} failed')
 
-        if forcedftopt or setting_inspector.get_value("orca_setting.dftopt"):
-            # do dft opt
-            wd = create_folder(os.path.join(wd0,"struc", strucid, "orca"))
-            write_xyz(coord, "coord")
-            staus = CallORCA(wd, {"method": setting_inspector.get_value("orca_setting.method", "r2scan-3c"),
-                                  "charge": charge,
-                                  "m": m,
-                                  "fn": "coord",
-                                  "caltyp": "SP OPT",
-                                  "caltyp2": "RKS" if m == 1 else "UKS",
-                                  "solmode": setting_inspector.get_value("orca_setting.solmode", ""),
-                                  "ncpu": setting_inspector.get_value("orca_setting.ncpu", 1)}).call()
-            if staus == 0:
-                endxyz = pd.read_table(os.path.join(wd, 'orca.xyz'), header=None, skiprows=2, sep='\s+')
-                sp_orca = get_energy(os.path.join(wd, 'ENERGY'))
-            else:
-                sp_orca = None
-                endxyz = coord
-                raise Exception(f'struc {strucid} opt at '
-                                f'{setting_inspector.get_value("orca_setting.method", "r2scan-3c")} failed')
+
+    if forcedftopt or setting_inspector.get_value("orca_setting.dftopt") and coord.shape[0] > 1:
+        dftopt = True
+        # do dft opt
+        wd = create_folder(os.path.join(wd0,"struc", strucid, "orca"))
+        write_xyz(coord, "coord")
+        staus = CallORCA(wd, {"method": setting_inspector.get_value("orca_setting.method", "r2scan-3c"),
+                              "charge": charge,
+                              "m": m,
+                              "fn": "coord",
+                              "caltyp": "SP OPT",
+                              "caltyp2": "RKS" if m == 1 else "UKS",
+                              "solmode": setting_inspector.get_value("orca_setting.solmode", ""),
+                              "ncpu": setting_inspector.get_value("orca_setting.ncpu", 1)}).call()
+        if staus == 0:
+            coord = pd.read_table(os.path.join(wd, 'orca.xyz'), header=None, skiprows=2, sep='\s+')
+
         else:
-            # do dft sp
-            wd = create_folder(os.path.join(wd0,"struc", strucid, "orca"))
-            write_xyz(coord, "coord")
-            staus = CallORCA(wd, {"method": setting_inspector.get_value("orca_setting.method", "r2scan-3c"),
-                                  "charge": charge,
-                                  "m": m,
-                                  "fn": "coord",
-                                  "caltyp": "SP",
-                                  "caltyp2": "RKS" if m == 1 else "UKS",
-                                  "solmode": setting_inspector.get_value("orca_setting.solmode", ""),
-                                  "ncpu": setting_inspector.get_value("orca_setting.ncpu", 1)}).call()
-            if staus == 0:
-                sp_orca = get_energy(os.path.join(wd, 'ENERGY'))
-            else:
-                sp_orca = None
-                raise Exception(f'struc {strucid} sp at '
-                                f'{setting_inspector.get_value("orca_setting.method", "r2scan-3c")} failed.')
-            endxyz = coord
+            print(f'struc {strucid} opt at '
+                            f'{setting_inspector.get_value("orca_setting.method", "r2scan-3c")} failed')
 
-    else:
-        # do xtb sp
-        wd = create_folder(os.path.join(wd0,"struc", strucid, "xtb"))
+    ### do sp
+    # do xtb sp
+    if not all([nel,sp_xtb,ele]) or dftopt:
+        wd = create_folder(os.path.join(wd0, "struc", strucid, "xtb"))
         write_xyz(coord, "coord")
         staus = CallxTB(wd, {"method": setting_inspector.get_value("xtb_setting.method", "gfn2"),
                              "coordfn": "coord",
@@ -107,35 +91,37 @@ def refine_struc_info(wd0,strucid, struc_rec, setting_d, forcedftopt=False):
                              "charge": charge,
                              "uhf": m - 1,
                              "alpb": setting_inspector.get_value("xtb_setting.alpb", "h2o"),
-                             "etemp": setting_inspector.get_value("xtb_setting.etemp", "4000")
+                             "etemp": setting_inspector.get_value("xtb_setting.struc_etemp", "4000")
                              }).sp()
         if staus == 0:
             nel = get_nelectron(os.path.join(wd, 'xtb.out'))
             sp_xtb = get_energy(os.path.join(wd, 'ENERGY'))
+            constrain_l, ele = read_topomol(os.path.join(wd, 'xtbtopo.mol')) if os.path.exists(
+                os.path.join(wd, 'xtbtopo.mol')) else [], []
         else:
             nel, sp_xtb = None, None
-            raise Exception(f"struc {strucid} sp at {setting_inspector.get_value('xtb_setting.method', 'gfn2')} failed")
+            raise Exception(
+                f"struc {strucid} sp at {setting_inspector.get_value('xtb_setting.method', 'gfn2')} failed")
 
-        constrain_l, ele = [], [str(coord.iloc[0, 0])]
 
-        # do orca sp
-        wd = create_folder(os.path.join(wd0,"struc", strucid, "orca"))
-        write_xyz(coord, "coord")
-        staus = CallORCA(wd, {"method": setting_inspector.get_value("orca_setting.method", "r2scan-3c"),
-                              "charge": charge,
-                              "m": m,
-                              "fn": "coord",
-                              "caltyp": "SP",
-                              "caltyp2": "RKS" if m == 1 else "UKS",
-                              "solmode": setting_inspector.get_value("orca_setting.solmode", ""),
-                              "ncpu": setting_inspector.get_value("orca_setting.ncpu", 1)}).call()
-        if staus == 0:
-            sp_orca = get_energy(os.path.join(wd, 'ENERGY'))
-        else:
-            sp_orca = None
-            raise Exception(f'struc {strucid} sp at '
-                            f'{setting_inspector.get_value("orca_setting.method", "r2scan-3c")} failed')
-        endxyz = coord
+    # do orca sp
+    wd = create_folder(os.path.join(wd0, "struc", strucid, "orca"))
+    write_xyz(coord, "coord")
+    staus = CallORCA(wd, {"method": setting_inspector.get_value("orca_setting.method", "r2scan-3c"),
+                          "charge": charge,
+                          "m": m,
+                          "fn": "coord",
+                          "caltyp": "SP",
+                          "caltyp2": "RKS" if m == 1 else "UKS",
+                          "solmode": setting_inspector.get_value("orca_setting.solmode", ""),
+                          "ncpu": setting_inspector.get_value("orca_setting.ncpu", 1)}).call()
+    if staus == 0:
+        sp_orca = get_energy(os.path.join(wd, 'ENERGY'))
+    else:
+        sp_orca = None
+        raise Exception(f'struc {strucid} sp at '
+                        f'{setting_inspector.get_value("orca_setting.method", "r2scan-3c")} failed')
+    endxyz = coord
 
     # getting molbar code
     mb = get_molbarcode(endxyz, setting_inspector.get_value("searching_setting.general.mb_levlel"))
@@ -149,7 +135,7 @@ def refine_struc_info(wd0,strucid, struc_rec, setting_d, forcedftopt=False):
                          "charge": charge,
                          "uhf": m - 1,
                          "alpb": setting_inspector.get_value("xtb_setting.alpb", "h2o"),
-                         "etemp": setting_inspector.get_value("xtb_setting.etemp", "4000")
+                         "etemp": setting_inspector.get_value("xtb_setting.struc_etemp", "4000")
                          }).trv()
     etrv = get_energy(os.path.join(wd, 'GTRV')) if staus == 0 else 0
 
@@ -161,7 +147,7 @@ def refine_struc_info(wd0,strucid, struc_rec, setting_d, forcedftopt=False):
                          "charge": charge,
                          "uhf": m - 1,
                          "alpb": setting_inspector.get_value("xtb_setting.alpb", "h2o"),
-                         "etemp": setting_inspector.get_value("xtb_setting.etemp", "4000")
+                         "etemp": setting_inspector.get_value("xtb_setting.struc_etemp", "4000")
                          }).solv()
     esolv = get_energy(os.path.join(wd, 'GSOLV')) if staus == 0 else 0
 

@@ -26,6 +26,7 @@ multiplicity =
 [searching_setting.general]
 cycle = # int, number of searching cycle
 elim = # float, energy limitation to kill this reaction path, unit kcal/mol
+
 ml_method = # str, method for ml feature calculations
 mb_level = # None or "loose" to only screen with topology spectrum
 
@@ -60,10 +61,12 @@ scan_mode = # 0(default): use xtb-scan simulating reactions
 loose_bond = # bool (defalut as False), loose a bit the weakest bond in the struc
 
 [xtb_setting]
+strucopt= # bool, do xtb opt for struc
 method = "gfn2"
 optlevel = ""
 alpb = "h2o" # solvent mode
-etemp = 1000 # electronic temp
+struc_etemp = 1000 # electronic temp for struc opt
+scan_etemp = 1000 # electronic temp for scan
 k = 1 # geom constrain strength (used in scan)
 step = 20 # pushing/pulling steps
 xtb_wd = "/home/guests/ychen/xtb_mloutput/_build/xtb"

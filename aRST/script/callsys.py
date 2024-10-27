@@ -236,64 +236,55 @@ class CallxTB:
         return rc
 
 
-def CallTerachem(cmd):
-    with open('tc.out', 'w') as stdout_file, open('tc_err.out', 'w') as stderr_file:
-        p = subprocess.Popen(cmd, stdout=stdout_file, stderr=stderr_file, shell=True)
-        p.wait()
-        rc = p.returncode
-    return rc
+class CallTerachem:
+    def __init__(self, wd, command_d):
+        self.wd = wd
+        self.command_d_inspertor = DictionaryInspector(command_d)
 
+    def wirte_input(self):
+        epsilon = self.command_d_inspertor.get_value("epsilon")
+        coordfn = self.command_d_inspertor.get_value("coordfn")
+        c = self.command_d_inspertor.get_value("c")
+        m = self.command_d_inspertor.get_value("m")
+        method = self.command_d_inspertor.get_value("method")
+        basis = self.command_d_inspertor.get_value("basis")
+        if m !=1:
+            method = "u"+method
 
-# class CallTerachem:
-#     def __init__(self):
-#
-#
-#     @staticmethod
-#     def tcsubprocess(cmd):
-#         rc = 1
-#         try:
-#             with open('tc.out', 'w') as stdout_file, open('tc_err.out', 'w') as stderr_file:
-#                 p = subprocess.Popen(cmd, stdout=stdout_file, stderr=stderr_file, shell=True)
-#                 p.wait()
-#                 rc = p.returncode
-#
-#         except Exception as e:
-#             print(f"An error occurred: {e}")
-#         return rc
-#
-#     def run(self):
-#         cmd = f'terachem tc.inp'
-#         rc = self.tcsubprocess(cmd)
-#         return rc
-#
-#     # def get_moldeninput(self):
-#     #     with open(f'tc.inp', 'w') as f:
-#     #         f.write(f"coordinates             {self.coordfn}.xyz\n"
-#     #                 f"method         {self.method}\n"
-#     #                 "basis                   def2-sv_p\n"
-#     #                 "dftgrid                 1\n"
-#     #                 "sphericalbasis          yes\n"
-#     #                 "guess                   sad\n"
-#     #                 "precision               mixed\n"
-#     #                 "genscrdata              true\n"
-#     #                 "threall                 1e-14\n"
-#     #                 "convthre                1e-4\n"
-#     #                 "xtol                    1e-6\n"
-#     #                 "pcm			cosmo\n"
-#     #                 "epsilon			9.08\n"
-#     #                 f"charge                  {self.charge}\n"
-#     #                 f"spinmult                {self.m}\n"
-#     #                 "run                     energy\n"
-#     #                 )
-#     #
-#     #     cmd = f'terachem tc.inp'
-#     #     rc = self.tcsubprocess(cmd)
-#     #     if rc == 0 and os.path.isdir(f"scr.{self.coordfn}"):
-#     #         cwd = os.getcwd()
-#     #         return os.path.join(cwd, f"scr.{self.coordfn}", f"{self.coordfn}.molden")
-#     #     else:
-#     #         return None
+        with open(os.path.join(self.wd,"tc.inp"), 'w') as f:
+            f.write(f"coordinates             {coordfn}.xyz\n"
+                    f"method         {method}\n"
+                    f"basis                   {basis}\n"
+                    "dftgrid                 1\n"
+                    "sphericalbasis          yes\n"
+                    "guess                   sad\n"
+                    "precision               mixed\n"
+                    "genscrdata              true\n"
+                    "threall                 1e-14\n"
+                    "convthre                1e-4\n"
+                    "xtol                    1e-8\n"
+                    f"charge                  {c}\n"
+                    f"spinmult                {m}\n"
+                    )
+        if epsilon is None:
+            with open(os.path.join(self.wd, "tc.inp"), 'a+') as f:
+                f.write("run                     energy\n")
+        else:
+            with open(os.path.join(self.wd, "tc.inp"), 'a+') as f:
+                f.write("pcm			cosmo\n")
+                f.write(f"epsilon			{epsilon}\n")
+                f.write("run                     energy\n")
 
+    def run(self):
+        cmd = "terachem tc.inp"
+        # write input
+        self.wirte_input()
+        # run
+        with open(os.path.join(self.wd,"tc.out"), 'w') as stdout_file, open('tc_err.out', 'w') as stderr_file:
+            p = subprocess.Popen(cmd, stdout=stdout_file, stderr=stderr_file, shell=True)
+            p.wait()
+            rc = p.returncode
+        return rc
 
 class CallsTDA:
     def __init__(self, coordfn):

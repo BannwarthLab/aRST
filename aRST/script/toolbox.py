@@ -314,6 +314,8 @@ def get_molbarcode(coord,molbarlevel=None):
 
     else:
         mb = coord.iloc[0,0]
+        if mb =="Cl":
+            mb = "CL"
     return mb
 
 # def collect_sp_xyz(rec, reckey, wd, typ):
