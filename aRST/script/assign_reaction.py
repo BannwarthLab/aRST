@@ -230,6 +230,13 @@ class SingleCycleSearch:
             ml_df.rename(columns={'LUAO (eV)': 'LUAO_a (eV)'})
             ml_df.insert(len(ml_df.columns), "HOAO_b (eV)", ml_df.loc[:, "HOAO_a (eV)"].copy())
             ml_df.insert(len(ml_df.columns), "LUAO_b (eV)", ml_df.loc[:, "LUAO_a (eV)"].copy())
+
+        ###### del H radical beta afo features (no beta electron at all) ######
+        nel = STRUC_inspector.get_value(f"{struc}.struc_info.general.nel")
+        if nel == 1:
+            ml_df.loc[:, "HOAO_b (eV)"] = -np.inf
+            ml_df.loc[:, "LUAO_b (eV)"] = np.inf
+
         STRUC_inspector.set_value(f"{struc}.struc_info.reactivity.ml", ml_df)
 
         # set bo
@@ -467,17 +474,20 @@ class SingleCycleSearch:
 
             coord = tmp_path_d[1][frindex]["coord"]
             # trv
-            wd = create_folder(os.path.join(self.wd, "inter_fragments", frinfo_d['strucwd'], "xtb", "trv"))
-            write_xyz(coord, "coord")
-            staus = CallxTB(wd, {"method": setting_inspector.get_value("xtb_setting.method", "gfn2"),
-                                 "coordfn": "coord",
-                                 "optlevel": setting_inspector.get_value("xtb_setting.optlevel", None),
-                                 "charge": frinfo_d["charge"],
-                                 "uhf": tmp_path_d[1][frindex]["m"] - 1,
-                                 "alpb": setting_inspector.get_value("xtb_setting.alpb", "h2o"),
-                                 "etemp": setting_inspector.get_value("xtb_setting.struc_etemp", "4000")
-                                 }).trv()
-            etrv = get_energy(os.path.join(wd, 'GTRV')) if staus == 0 else np.inf
+            if coord.shape[0] > 1:
+                wd = create_folder(os.path.join(self.wd, "inter_fragments", frinfo_d['strucwd'], "xtb", "trv"))
+                write_xyz(coord, "coord")
+                staus = CallxTB(wd, {"method": setting_inspector.get_value("xtb_setting.method", "gfn2"),
+                                     "coordfn": "coord",
+                                     "optlevel": setting_inspector.get_value("xtb_setting.optlevel", None),
+                                     "charge": frinfo_d["charge"],
+                                     "uhf": tmp_path_d[1][frindex]["m"] - 1,
+                                     "etemp": setting_inspector.get_value("xtb_setting.struc_etemp", "4000"),
+                                     "alpb": setting_inspector.get_value("xtb_setting.alpb", "h2o"),
+                                     }).trv()
+                etrv = get_energy(os.path.join(wd, 'GTRV')) if staus == 0 else np.inf
+            else:
+                etrv=0
             tmp_path_d[1][frindex]["trv"] = etrv
 
             # solv
