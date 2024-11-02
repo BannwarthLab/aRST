@@ -9,14 +9,13 @@ import pandas as pd
 from aRST.script.dictionaryInspector import DictionaryInspector
 
 
-def build_gap_d(react_d, h_df, l_df, search_range):
+def build_gap_d(react_d, h_df, l_df, search_mode):
     """
     loop over Hdf and Ldf to build up atomic pairs
     """
 
     def wrap_build_dict(Lcol, Lindex, L, Hcol, Hindex, H, react_d):
-        gap = np.round(L - H, 3)
-
+        gap = np.round((L - H ) * 0.5, 3)
         tmp_key = (str(Hcol), str(Lcol))
         tmp_val = [str(Hindex), str(Lindex)]
 
@@ -50,24 +49,24 @@ def build_gap_d(react_d, h_df, l_df, search_range):
     for index1, row1 in l_df.iterrows():  # loop row in L
         for column1 in l_df.columns:  # loop col in L
             L = l_df.at[index1, column1]
-            if isinstance(L, pd.Series): # reactants contains mulitple identical structures
+            if isinstance(L, pd.Series):  # reactants contains mulitple identical structures
                 L = L.iloc[0]
-            if isinstance(L,str) or np.isnan(L) or np.isinf(L):
+            if isinstance(L, str) or np.isnan(L) or np.isinf(L):
                 continue
             for index2, row2 in h_df.iterrows():  # loop row in H
                 for column2 in h_df.columns:  # loop col in H
                     H = h_df.at[index2, column2]
                     if isinstance(H, pd.Series):  # reactants contains mulitple identical structures
                         H = H.iloc[0]
-                    if isinstance(H,str) or np.isnan(H) or np.isinf(H):
+                    if isinstance(H, str) or np.isnan(H) or np.isinf(H):
                         continue
-                    if search_range == 0:
+                    if search_mode == 0:
                         if column2 == column1:  # struc1 = struc2
                             react_d = wrap_build_dict(column1, index1, L, column2, index2, H, react_d)
-                    elif search_range == 1:
+                    elif search_mode == 1:
                         if column2 != column1:  # struc1 != struc2
                             react_d = wrap_build_dict(column1, index1, L, column2, index2, H, react_d)
-                    elif search_range == 2:
+                    elif search_mode == 2:
                         react_d = wrap_build_dict(column1, index1, L, column2, index2, H, react_d)
                     else:
                         raise Exception("unknow keyword in searching_setting.inter.search_mode, "
@@ -79,7 +78,7 @@ def SPR_HL(reactants,  # reactants id list
            struc_rec,  # struc dict record
            allow_hydrogen=True,  # if search range including hydrogen elements
            allow_halogen=True,  # if search range including halogen elements
-           search_range=1  # 0 : only search intramollecule reaction possibility;
+           search_mode=1,  # 0 : only search intramollecule reaction possibility;
            # 1: only intermolecular;
            # 2: both inter- and intra reaction possibility.
            ):
@@ -122,41 +121,43 @@ def SPR_HL(reactants,  # reactants id list
             mldf_original.loc[hindex, "LUAO_a (eV)"] = np.inf
 
         for df, column_name in zip(dfs, column_names):
-            tmpl = list(mldf_original[column_name])
-
-            for j in range(maxnat-len(tmpl)):
+            tmpl = list(mldf_original.loc[:,column_name])
+            for j in range(maxnat - len(tmpl)):
                 tmpl.append(np.nan)
-            df[strucid] = tmpl # .reset_index(drop=True)
+            df.loc[:,strucid] = tmpl  # .reset_index(drop=True)
 
             # # Convert all elements in the DataFrame to numeric, coercing errors to NaN
             # df.apply(pd.to_numeric, errors='coerce')
 
-    # prescreen HL values with a thres range
-    for df in [HOAO_a, HOAO_b]:
-        lim = 10  # eV
-        max_value = pd.to_numeric(df.values.flatten(), errors='coerce').max()
-        non_nan_count = df.notna().sum().sum()
-        mask_count = (df < max_value - lim).sum().sum()
-        while mask_count > int(0.8 * non_nan_count):  # make sure df always has more than 20 % of original data
-            lim += 5
-            mask_count = (df < max_value - lim).sum().sum()
-        df.where(df < max_value - lim, -np.inf)
-
-    for df in [LUAO_a, LUAO_b]:
-        lim = 10  # eV
-        min_value = pd.to_numeric(df.values.flatten(), errors='coerce').min()
-        non_nan_count = df.notna().sum().sum()
-        mask_count = (df > min_value + lim).sum().sum()
-        while mask_count > int(0.8 * non_nan_count):  # make sure df always has more than 20 % of original data
-            lim += 5
-            mask_count = (df > min_value + lim).sum().sum()
-        df.where(df > min_value + lim, np.inf)
+    # # prescreen HL values with a thres range
+    # for df in [HOAO_a, HOAO_b]:
+    #     lim = 10  # eV
+    #     max_value = pd.to_numeric(df.values.flatten(), errors='coerce').max()
+    #     non_nan_count = df.notna().sum().sum()
+    #     mask_count = (df < max_value - lim).sum().sum()
+    #     while mask_count > int(0.8 * non_nan_count):  # make sure df always has more than 20 % of original data
+    #         lim += 5
+    #         mask_count = (df < max_value - lim).sum().sum()
+    #     df=df.where(df < max_value - lim, -np.inf)
+    #     df=df.where(df.applymap(lambda x: isinstance(x, str)), -np.inf)
+    #
+    # for df in [LUAO_a, LUAO_b]:
+    #     lim = 10  # eV
+    #     min_value = pd.to_numeric(df.values.flatten(), errors='coerce').min()
+    #     non_nan_count = df.notna().sum().sum()
+    #     mask_count = (df > min_value + lim).sum().sum()
+    #     while mask_count > int(0.8 * non_nan_count):  # make sure df always has more than 20 % of original data
+    #         lim += 5
+    #         mask_count = (df > min_value + lim).sum().sum()
+    #     df=df.where(df > min_value + lim, np.inf)
+    #     df=df.where(df.applymap(lambda x: isinstance(x, str)), np.inf)
 
     # build up reactive atomic pair dict
-    react_aa = build_gap_d({}, HOAO_a, LUAO_a, search_range)
-    react_bb = build_gap_d({}, HOAO_b, LUAO_b, search_range)
-    react_ab = build_gap_d({}, HOAO_a, LUAO_b, search_range)
-    react_ba = build_gap_d({}, HOAO_b, LUAO_a, search_range)
+    react_aa, react_bb, react_ab, react_ba = {},{},{},{}
+    react_aa = build_gap_d({}, HOAO_a, LUAO_a, search_mode)
+    react_bb = build_gap_d({}, HOAO_b, LUAO_b, search_mode)
+    react_ab = build_gap_d({}, HOAO_a, LUAO_b, search_mode)
+    react_ba = build_gap_d({}, HOAO_b, LUAO_a, search_mode)
 
     return react_aa, react_bb, react_ab, react_ba
 
@@ -181,7 +182,7 @@ def SPR_dissociation(reactants,  # reactants id list
                 else:
                     dgap = wboe.iloc[index, 2]  # energy-baesd MBO
                 at1, at2 = wboe.iloc[index, :2]  # index starting from 1
-                ele1, ele2 = ml.loc[at1 - 1,'Atom'], ml.loc[at2 - 1,'Atom']
+                ele1, ele2 = ml.loc[at1 - 1, 'Atom'], ml.loc[at2 - 1, 'Atom']
 
                 if not allow_hydrogen:
                     if int(ele1) == 1 or int(ele2) == 1:
@@ -222,7 +223,6 @@ def build_bo_d(reactants,
                     value = [f'{at_1 - 1}', f'{at_2 - 1}']
                     bo[strucid].append(value)
     return bo
-
 
 # def spr_intra_new(reactants,  # reactants id list
 #                   struc_inspector,  # struc dict record
