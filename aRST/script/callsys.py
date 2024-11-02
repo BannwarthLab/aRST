@@ -144,7 +144,9 @@ class CallxTB:
         p1.wait()
         rc = p1.returncode
         if rc == 0:
-            cmd2 = f'TRVthermo --io xtb --rotthr 50 --fxyz {self.command_d_inspertor.get_value("coordfn")}.xyz --fvib freq.out > thermo.out'
+            cmd2 = f'TRVthermo --io xtb --rotthr 50 ' \
+                   f'--fxyz {self.command_d_inspertor.get_value("coordfn")}.xyz ' \
+                   f'--fvib freq.out > thermo.out'
             p2 = subprocess.Popen(cmd2, shell=True)
             p2.wait()
             rc2 = p2.returncode
