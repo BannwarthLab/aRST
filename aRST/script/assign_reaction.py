@@ -485,7 +485,7 @@ class SingleCycleSearch:
                                      "etemp": setting_inspector.get_value("xtb_setting.struc_etemp", "4000"),
                                      "alpb": setting_inspector.get_value("xtb_setting.alpb", "h2o"),
                                      }).trv()
-                etrv = get_energy(os.path.join(wd, 'GTRV')) if staus == 0 else np.inf
+                etrv = get_energy(os.path.join(wd, 'GTRV')) if staus == 0 else 0
             else:
                 etrv=0
             tmp_path_d[1][frindex]["trv"] = etrv

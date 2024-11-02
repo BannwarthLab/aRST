@@ -127,17 +127,20 @@ def refine_struc_info(wd0,strucid, struc_rec, setting_d, forcedftopt=False):
     mb = get_molbarcode(endxyz, setting_inspector.get_value("searching_setting.general.mb_levlel"))
 
     # getting trv and solv
-    wd = create_folder(os.path.join(wd0,"struc", strucid, "xtb", "trv"))
-    write_xyz(coord, "coord")
-    staus = CallxTB(wd, {"method": setting_inspector.get_value("xtb_setting.method", "gfn2"),
-                         "coordfn": "coord",
-                         "optlevel": setting_inspector.get_value("xtb_setting.optlevel", ""),
-                         "charge": charge,
-                         "uhf": m - 1,
-                         "alpb": setting_inspector.get_value("xtb_setting.alpb", "h2o"),
-                         "etemp": setting_inspector.get_value("xtb_setting.struc_etemp", "4000")
-                         }).trv()
-    etrv = get_energy(os.path.join(wd, 'GTRV')) if staus == 0 else 0
+    if coord.shape[0]>1:
+        wd = create_folder(os.path.join(wd0,"struc", strucid, "xtb", "trv"))
+        write_xyz(coord, "coord")
+        staus = CallxTB(wd, {"method": setting_inspector.get_value("xtb_setting.method", "gfn2"),
+                             "coordfn": "coord",
+                             "optlevel": setting_inspector.get_value("xtb_setting.optlevel", ""),
+                             "charge": charge,
+                             "uhf": m - 1,
+                             "alpb": setting_inspector.get_value("xtb_setting.alpb", "h2o"),
+                             "etemp": setting_inspector.get_value("xtb_setting.struc_etemp", "4000")
+                             }).trv()
+        etrv = get_energy(os.path.join(wd, 'GTRV')) if staus == 0 else 0
+    else:etrv=0
+
 
     wd = create_folder(os.path.join(wd0,"struc", strucid, "xtb", "solv"))
     write_xyz(coord, "coord")
