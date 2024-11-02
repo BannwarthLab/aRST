@@ -24,8 +24,9 @@ def simulation_interA(reactants,  # reactants list
                                                     struc_rec,
                                                     allow_hydrogen=searching_setting.get("hydrogen", True),
                                                     allow_halogen=searching_setting.get("halogen", True),
-                                                    search_range=searching_setting.get("search_mode", 1)
-                                                    )  # react_d:  key= 5.93, value = {('1', '1'), [['0', '0']]}
+                                                    search_mode=searching_setting.get("search_mode", 1),
+                                                    )
+    # react_d:  key= 5.93, value = {('1', '1'), [['0', '0']]}
 
     # merge a reaction dict
     intera = {}  # intera:   key= 5.93, value = ('1','1',[['0', '0']])

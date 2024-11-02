@@ -73,6 +73,7 @@ def main():
     # read struc info and generate STRUC_rec
     STRUC_rec = {}
     REFSTRUC_rec = {}
+    REACTION_rec={}
     geom_d = setting_d["geom"]
     STRUC_inspector = DictionaryInspector(STRUC_rec)
     rcount,pcount = 0,0
@@ -148,6 +149,11 @@ def main():
         with open(f'{wd}/struc.json', "w") as f:
             f.write(json.dumps(convert_df2json(STRUC_rec), indent=2))
             f.write('\n')
+        if REFSTRUC_rec:
+            with open(f'{wd}/refstruc.json', "w") as f:
+                f.write(json.dumps(convert_df2json(REFSTRUC_rec), indent=2))
+                f.write('\n')
+
 
     elif args.ml_features:
         from aRST.script.reactivity import get_reactivity
