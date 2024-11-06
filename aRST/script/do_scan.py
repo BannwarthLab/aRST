@@ -12,7 +12,7 @@ from aRST.script.callsys import CallxTB
 
 def build_push_l(coord, at_l, nat1=0,d=0.95):
     # avoiding crossing push atomic pairs
-    if len(at_l) == 2:
+    if len(at_l) ==2:
 
         at1 = int(at_l[0][0])
         at2 = int(at_l[0][1]) + int(nat1)
@@ -22,6 +22,7 @@ def build_push_l(coord, at_l, nat1=0,d=0.95):
             current_atl = [[at1, at4], [at2, at3]]
         else:
             current_atl = [[at1, at2], [at3, at4]]
+        # current_atl = [[at1, at2]]
     else:
         current_atl = [[int(at_l[0][0]), int(at_l[0][1]) + nat1]]
 
