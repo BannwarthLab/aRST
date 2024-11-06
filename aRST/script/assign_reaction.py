@@ -501,7 +501,7 @@ class SingleCycleSearch:
                                  "alpb": setting_inspector.get_value("xtb_setting.alpb", "h2o"),
                                  "etemp": setting_inspector.get_value("xtb_setting.struc_etemp", "4000")
                                  }).solv()
-            esolv = get_energy(os.path.join(wd, 'GSOLV')) if staus == 0 else np.inf
+            esolv = get_energy(os.path.join(wd, 'GSOLV')) if staus == 0 else 0
             tmp_path_d[1][frindex]["solv"] = esolv
             tmp_path_d[1][frindex]["G_dft"] = esolv + etrv + sp_dft
         return tmp_path_d
