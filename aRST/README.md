@@ -88,10 +88,6 @@ besides essential input, (optional) adding detailed searching settings with
 [searching_setting.general]
 cycle = 1                           # int, number of searching cycle
 elim =  300                         # float, energy limitation to kill this reaction path, unit kcal/mol
-ml_method ="gfn2"/"stda"            # str, method for ml feature calculations
-ml_tc_method="BHandHLYP"            # str, if use stda, method for struc sp calculations in TC
-ml_tc_basis="vdzp"                  # str, if use stda, basis for struc sp calculations in TC
-ml_tc_epsilon=                      # float, if use stda, pcm solvent mode
 hydrogen = True                     # bool, searching range includs/excludes H atoms
 halogen = True                      # bool, searching range includs/excludes halogen atoms
 scan_mode = 0                       # 0(default): use xtb-scan simulating reactions
@@ -100,6 +96,21 @@ sep_mode = 0                        # 0(default): directly seperate fragments fr
                                     # 1: do unconstrain opt to scan-komplex and seperate fragments                                      
 mb_level =                          # None or "loose" to only screen with topology spectrum
 
+
+[searching_setting.reactivity]
+ml_method ="gfn2"/"stda"            # str, method for ml feature calculations
+##############################################
+MO_method = "orca"/"terachem"       # str, program to get molden file
+### if MO_method=terachem, you will need: ###
+ml_tc_functional="BHandHLYP"            # str, if use stda, method for struc sp calculations in TC
+ml_tc_basis="vdzp"                  # str, if use stda, basis for struc sp calculations in TC
+ml_tc_epsilon=                      # float, if use stda, pcm solvent mode
+##############################################
+### if MO_method=orca, you will need: ###
+ml_orca_functional="BHandHLYP"            # str, if use stda, method for struc sp calculations in ORCA
+ml_orca_basis="vdzp"                  # str, if use stda, basis for struc sp calculations in ORCA
+ml_orca_cpcm=                         # str, if use stda, cpcm solvent mode in ORCA
+##############################################
 
 [searching_setting.inter]
 number = 1                          # int, number of inermolecular reaction paths to be search in one cycle
@@ -134,7 +145,8 @@ step = 20                          # pushing/pulling steps
 xtb_wd = "/home/guests/ychen/public/xtbml/_build/xtb" 
 
 [orca_setting]
-method = "r2scan-3c"                # str, method for dft calculations
+functional = "r2scan-3c"                # str, method for dft calculations
+basis = None
 dftopt = False                      # bool, do dft opt
 solmode = "water"                   # str, CPCM solvent mode
 ncpu = 1                            # int, parallel calculations for orca

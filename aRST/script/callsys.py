@@ -1,3 +1,4 @@
+from os.path import join
 import os
 import shutil
 import subprocess
@@ -9,8 +10,8 @@ def remove_file(old_path, new_path):
     filelist = os.listdir(old_path)
 
     for file in filelist:
-        src = os.path.join(old_path, file)
-        dst = os.path.join(new_path, file)
+        src = join(old_path, file)
+        dst = join(new_path, file)
 
         shutil.move(src, dst)
 
@@ -20,7 +21,7 @@ class CallORCA:
         self.wd = wd
         self.command_d_inspertor = DictionaryInspector(command_d)
 
-    def orcasubprocess(self, cmd_string, writeenergy=True):
+    def orcasubprocess(self, cmd_string, writeenergy=True,removegbw=True):
         with open(f'{self.wd}/orca.out', 'w') as stdout_file, open(f'{self.wd}/orca_err.out', 'w') as stderr_file:
             p = subprocess.Popen(cmd_string, stdout=stdout_file, stderr=stderr_file, shell=True)
             p.wait()
@@ -32,7 +33,9 @@ class CallORCA:
                     if 'FINAL SINGLE' in line:
                         with open(f'{self.wd}/ENERGY', 'w') as f2:
                             f2.write(str(re.findall(r'\-?\d+\.?\d*', line)[0]))
-        extensions_to_remove = ['.gbw', '.densities', '.opt']
+        extensions_to_remove = [ '.densities', '.opt']
+        if removegbw:
+            extensions_to_remove.append('.gbw')
         for filename in os.listdir(f'{self.wd}'):
             if any(filename.endswith(ext) for ext in extensions_to_remove):
                 os.remove(filename)
@@ -40,7 +43,9 @@ class CallORCA:
 
     def generate_cmd_string(self):
         command_string = "! "
-        command_string += f"{self.command_d_inspertor.get_value('method', '')} "
+        command_string += f"{self.command_d_inspertor.get_value('functional', '')} "
+        if self.command_d_inspertor.get_value('basis', ''):
+            command_string += f"{self.command_d_inspertor.get_value('basis', '')} "
         command_string += f"{self.command_d_inspertor.get_value('caltyp', '')} "
         command_string += f"{self.command_d_inspertor.get_value('caltyp2', '')} "
         if self.command_d_inspertor.get_value('solmode', ''):
@@ -61,13 +66,13 @@ class CallORCA:
             raise Exception(f"{fn}.xyz in {self.wd} has wrong c,m,fn parameter with {[fn, c, m]}")
         return command_string
 
-    def call(self):
+    def call(self,removegbw=True):
         command_string = self.generate_cmd_string()
         with open(f'{self.wd}/orca.inp', 'w') as f:
             f.write(command_string)
 
         cmd = f'$ORCA orca.inp'
-        rc = self.orcasubprocess(cmd)
+        rc = self.orcasubprocess(cmd,removegbw=removegbw)
         return rc
 
 
@@ -144,9 +149,12 @@ class CallxTB:
         p1.wait()
         rc = p1.returncode
         if rc == 0:
-            cmd2 = f'TRVthermo --io xtb --rotthr 50 ' \
-                   f'--fxyz {self.command_d_inspertor.get_value("coordfn")}.xyz ' \
-                   f'--fvib freq.out > thermo.out'
+            cmd2 = f'TRVthermo --io xtb --rotthr 50 '
+            cmd2 += f'--fxyz xtbopt.xyz' if os.path.exists(
+                join(self.wd,"xtbopt.xyz")) else f'--fxyz {self.command_d_inspertor.get_value("coordfn")}.xyz '
+            cmd2 += f" --temp {self.command_d_inspertor.get_value('etemp')} " \
+                if self.command_d_inspertor.get_value('etemp') else ""
+            cmd2 += f' --fvib freq.out > thermo.out'
             p2 = subprocess.Popen(cmd2, shell=True)
             p2.wait()
             rc2 = p2.returncode
@@ -248,14 +256,14 @@ class CallTerachem:
         coordfn = self.command_d_inspertor.get_value("coordfn")
         c = self.command_d_inspertor.get_value("c")
         m = self.command_d_inspertor.get_value("m")
-        method = self.command_d_inspertor.get_value("method")
+        functional = self.command_d_inspertor.get_value("functional")
         basis = self.command_d_inspertor.get_value("basis")
         if m !=1:
-            method = "u"+method
+            functional = "u"+functional
 
-        with open(os.path.join(self.wd,"tc.inp"), 'w') as f:
+        with open(join(self.wd,"tc.inp"), 'w') as f:
             f.write(f"coordinates             {coordfn}.xyz\n"
-                    f"method         {method}\n"
+                    f"method         {functional}\n"
                     f"basis                   {basis}\n"
                     "dftgrid                 1\n"
                     "sphericalbasis          yes\n"
@@ -269,10 +277,10 @@ class CallTerachem:
                     f"spinmult                {m}\n"
                     )
         if epsilon is None:
-            with open(os.path.join(self.wd, "tc.inp"), 'a+') as f:
+            with open(join(self.wd, "tc.inp"), 'a+') as f:
                 f.write("run                     energy\n")
         else:
-            with open(os.path.join(self.wd, "tc.inp"), 'a+') as f:
+            with open(join(self.wd, "tc.inp"), 'a+') as f:
                 f.write("pcm			cosmo\n")
                 f.write(f"epsilon			{epsilon}\n")
                 f.write("run                     energy\n")
@@ -282,27 +290,44 @@ class CallTerachem:
         # write input
         self.wirte_input()
         # run
-        with open(os.path.join(self.wd,"tc.out"), 'w') as stdout_file, open('tc_err.out', 'w') as stderr_file:
+        with open(join(self.wd,"tc.out"), 'w') as stdout_file, open('tc_err.out', 'w') as stderr_file:
             p = subprocess.Popen(cmd, stdout=stdout_file, stderr=stderr_file, shell=True)
             p.wait()
             rc = p.returncode
         return rc
 
 class CallsTDA:
-    def __init__(self, coordfn):
+    def __init__(self,wd, coordfn):
+        self.wd = wd
         self.coordfn = coordfn
-
-    @staticmethod
-    def stdasubprocess(cmd):
-        with open('stda.out', 'w') as stdout_file, open('stda_err.out', 'w') as stderr_file:
-            p = subprocess.Popen(cmd, stdout=stdout_file, stderr=stderr_file, shell=True)
-            p.wait()
-            rc = p.returncode
-        return rc
 
     def callml(self, stdawd, sty):
         cmd = f"{stdawd} -f {self.coordfn} -ml_feature -sty {str(sty)}"
-        p = subprocess.Popen(cmd, stdout=open(f'stda.out', 'w'), stderr=subprocess.PIPE, shell=True)
+        p = subprocess.Popen(cmd, stdout=open(join(self.wd,f'stda.out'), 'w'), stderr=subprocess.PIPE, shell=True)
         p.wait()
         rc = p.returncode
         return rc
+
+class CallMultiwfn:
+    def __init__(self, wd,inputfn):
+        self.wd = wd
+        self.inputfn = inputfn
+
+    def write_cartesian_molden(self):
+        with open(join(self.wd,"cmd.in"),"w") as f:
+            f.write("100\n"
+                    "2\n"
+                    "6\n"
+                    "orca.molden\n"
+                    "0\n"
+                    "-10\n"
+                    )
+        cmd = f"/home/guests/ychen/Multiwfn/Multiwfn_noGUI {self.inputfn}"
+        with open(join(self.wd, "cmd.in"), "r") as cmd_in_file, open(join(self.wd,"multiwfn.out"), 'w') as out_file:
+            p = subprocess.Popen(cmd, stdin=cmd_in_file,stdout=out_file, stderr=subprocess.PIPE, shell=True)
+            p.wait()
+        rc = p.returncode
+        return rc
+
+
+

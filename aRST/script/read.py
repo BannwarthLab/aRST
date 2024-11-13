@@ -32,10 +32,11 @@ def refine_struc_info(wd0,strucid, struc_rec, setting_d, forcedftopt=False):
     m = struc_inspector.get_value(f"{strucid}.struc_info.general.multiplicity")
 
     # do QC calculations to get more struc properties
-    nel, sp_xtb, ele = None,None,None
-    ### do opt if required
+    nel, sp_xtb = None,None
+    constrain_l, ele = None,None
+
+    # do gfn opt if required
     if setting_inspector.get_value("xtb_setting.strucopt", False) and coord.shape[0] > 1:
-        # do gfn opt
         wd = create_folder(os.path.join(wd0, "struc", strucid, "xtb"))
         write_xyz(coord, "coord")
 
@@ -59,13 +60,14 @@ def refine_struc_info(wd0,strucid, struc_rec, setting_d, forcedftopt=False):
             constrain_l, ele = [], [str(coord.iloc[0, 0])]
             print(f'struc {strucid} opt at {setting_inspector.get_value("xtb_setting.method", "gfn2")} failed')
 
-
-    if forcedftopt or setting_inspector.get_value("orca_setting.dftopt") and coord.shape[0] > 1:
+    # do DFT opt if required
+    if (forcedftopt or setting_inspector.get_value("orca_setting.dftopt") )and coord.shape[0] > 1:
         dftopt = True
         # do dft opt
         wd = create_folder(os.path.join(wd0,"struc", strucid, "orca"))
         write_xyz(coord, "coord")
-        staus = CallORCA(wd, {"method": setting_inspector.get_value("orca_setting.method", "r2scan-3c"),
+        staus = CallORCA(wd, {"functional": setting_inspector.get_value("orca_setting.functional", "r2scan-3c"),
+                              "basis": setting_inspector.get_value("orca_setting.basis", " "),
                               "charge": charge,
                               "m": m,
                               "fn": "coord",
@@ -78,11 +80,11 @@ def refine_struc_info(wd0,strucid, struc_rec, setting_d, forcedftopt=False):
 
         else:
             print(f'struc {strucid} opt at '
-                            f'{setting_inspector.get_value("orca_setting.method", "r2scan-3c")} failed')
+                            f'{setting_inspector.get_value("orca_setting.functional", "r2scan-3c")} failed')
 
     ### do sp
     # do xtb sp
-    if not all([nel,sp_xtb,ele]) or dftopt:
+    if not all([_ is not None for _ in [nel,sp_xtb,ele,constrain_l]]):
         wd = create_folder(os.path.join(wd0, "struc", strucid, "xtb"))
         write_xyz(coord, "coord")
         staus = CallxTB(wd, {"method": setting_inspector.get_value("xtb_setting.method", "gfn2"),
@@ -107,7 +109,8 @@ def refine_struc_info(wd0,strucid, struc_rec, setting_d, forcedftopt=False):
     # do orca sp
     wd = create_folder(os.path.join(wd0, "struc", strucid, "orca"))
     write_xyz(coord, "coord")
-    staus = CallORCA(wd, {"method": setting_inspector.get_value("orca_setting.method", "r2scan-3c"),
+    staus = CallORCA(wd, {"functional": setting_inspector.get_value("orca_setting.functional", "r2scan-3c"),
+                          "basis": setting_inspector.get_value("orca_setting.basis", " "),
                           "charge": charge,
                           "m": m,
                           "fn": "coord",
@@ -120,7 +123,7 @@ def refine_struc_info(wd0,strucid, struc_rec, setting_d, forcedftopt=False):
     else:
         sp_orca = None
         raise Exception(f'struc {strucid} sp at '
-                        f'{setting_inspector.get_value("orca_setting.method", "r2scan-3c")} failed')
+                        f'{setting_inspector.get_value("orca_setting.functional", "r2scan-3c")} failed')
     endxyz = coord
 
     # getting molbar code

@@ -4,9 +4,9 @@ import shutil
 import numpy as np
 import pandas as pd
 from aRST.script.toolbox import create_folder, write_xyz, get_energy, seperate_fragment, read_topomol, get_molbarcode
-
+from aRST.script.MO_prepare import _get_reactive_features
 from aRST.script.dictionaryInspector import DictionaryInspector
-from aRST.script.callsys import CallxTB, CallORCA, CallTerachem, CallsTDA
+from aRST.script.callsys import CallxTB, CallORCA
 
 
 def ReactionSearch(wd, STRUC_rec, setting_d, REACTION_rec, step=0):
@@ -125,6 +125,7 @@ class SingleCycleSearch:
             else:
                 # defalut routine
                 pass
+
         # # check if H atom #todo fix xtb ml version for H radical
         # coord = STRUC_inspector.get_value(f"{struc}.struc_info.general.coord")
         # if coord.shape[0]==1 and coord.iloc[0,0] =="H":
@@ -142,78 +143,9 @@ class SingleCycleSearch:
         #     STRUC_inspector.set_value(f"{struc}.struc_info.reactivity.bo", wboe)
         #     return
 
-        # check setting for gfn ml or dft ml
-        keyword = setting_inspector.get_value("searching_setting.general.ml_method")
-        if not keyword or "gfn2" in keyword:  # gfn2 lvl
-            mlwd = create_folder(os.path.join(self.wd, "struc", struc, "xtb", "ml"))
-            if not os.path.exists(os.path.join(mlwd, "ml_feature.csv")):
-                # call ml
-                coord = STRUC_inspector.get_value(f"{struc}.struc_info.general.coord")
-                charge = STRUC_inspector.get_value(f"{struc}.struc_info.general.charge")
-                m = STRUC_inspector.get_value(f"{struc}.struc_info.general.multiplicity")
-                write_xyz(coord, "coord")
-                rc = CallxTB(mlwd, {"method": self.setting_d["xtb_setting"].get("method", "gfn2"),
-                                    "coordfn": "coord",
-                                    "optlevel": self.setting_d["xtb_setting"].get("optlevel", None),
-                                    "charge": charge,
-                                    "uhf": m - 1,
-                                    "alpb": self.setting_d["xtb_setting"].get("alpb", "h2o"),
-                                    "etemp": self.setting_d["xtb_setting"].get("struc_etemp", "4000"),
-                                    "xtbwd": self.setting_d["xtb_setting"].get("xtb_wd")
-                                    }).ml()
-                if rc == 0:
-                    pass
-                else:
-                    raise Exception(f"struc {struc} xtb ml failed")
-        elif keyword in ["gfn1,gfnff"]:  # need to call molden file first
-            mlwd = create_folder(os.path.join(self.wd, "struc", struc, "stda"))
-            if not os.path.exists(os.path.join(mlwd, "ml_feature.csv")):
-                coord = STRUC_inspector.get_value(f"{struc}.struc_info.general.coord")
-                charge = STRUC_inspector.get_value(f"{struc}.struc_info.general.charge")
-                m = STRUC_inspector.get_value(f"{struc}.struc_info.general.multiplicity")
-                write_xyz(coord, "coord")
-                rc = CallxTB(mlwd, {"method": self.setting_d["xtb_setting"].get("method", "gfn2"),
-                                    "coordfn": "coord",
-                                    "optlevel": self.setting_d["xtb_setting"].get("optlevel", None),
-                                    "charge": charge,
-                                    "uhf": m - 1,
-                                    "alpb": self.setting_d["xtb_setting"].get("alpb", "h2o"),
-                                    "etemp": self.setting_d["xtb_setting"].get("struc_etemp", "4000")
-                                    }).get_moldeninput()
-                if rc == 0:
-                    rc2 = CallsTDA("molden.input").callml(setting_inspector.get_value("stda_setting.stda_wd"), 0)
-                    if rc2 == 0:
-                        pass
-                    else:
-                        raise Exception(f"struc {struc} stda ml failed")
-                else:
-                    raise Exception(f"struc {struc} xtb get molden file failed")
-        else:  # call Terachem first
-            tcwd = create_folder(os.path.join(self.wd, "struc", struc, "tc"))
-            coord = STRUC_inspector.get_value(f"{struc}.struc_info.general.coord")
-            write_xyz(coord, "coord")
-            inputcmd_d = {"coordfn":"coord",
-                          "c": STRUC_inspector.get_value(f"{struc}.struc_info.general.charge"),
-                          "m":STRUC_inspector.get_value(f"{struc}.struc_info.general.multiplicity"),
-                          "method": setting_inspector.get_value("searching_setting.general.ml_tc_method"),
-                          "basis":setting_inspector.get_value("searching_setting.general.ml_tc_basis"),
-                          "epsilon":setting_inspector.get_value("searching_setting.general.ml_tc_epsilon"),
-                          }
+        # do ml
+        mlwd = _get_reactive_features(self.wd,struc,self.STRUC_rec,self.setting_d)
 
-            rc = CallTerachem(wd=tcwd,command_d=inputcmd_d).run()
-
-            if rc == 0:
-                mlwd = create_folder(os.path.join(self.wd,"struc", struc, "stda"))
-                shutil.copyfile(os.path.join(tcwd, "scr.coord", "coord.molden"),
-                                os.path.join(mlwd, "coord.molden"))
-                rc2 = CallsTDA("coord.molden").callml(setting_inspector.get_value("stda_setting.stda_wd"),3)
-                if rc2 == 0:
-                    pass
-                else:
-                    raise Exception(f"struc {struc} stda ml failed")
-
-            else:
-                raise Exception(f"struc {struc} tc molden failed")
 
         # read ml
         ml_feature = pd.read_csv(os.path.join(mlwd, "ml_feature.csv"), index_col=False)
@@ -370,7 +302,8 @@ class SingleCycleSearch:
         info_l = tmp_path_d[1]
         setting_inspector = DictionaryInspector(self.setting_d)
         dftopt = setting_inspector.get_value("orca_setting.dftopt", False)
-        spmethod = setting_inspector.get_value("orca_setting.method", "r2scan-3c")
+        functional = setting_inspector.get_value("orca_setting.functional", "r2scan-3c")
+        basis = setting_inspector.get_value("orca_setting.basis", "")
         for frindex in range(len(info_l)):
             frinfo_d = info_l[frindex]
             coord = frinfo_d["coord"]
@@ -383,7 +316,8 @@ class SingleCycleSearch:
                         wd = create_folder(
                             os.path.join(self.wd, "inter_fragments", frinfo_d['strucwd'], "orca", str(m)))
                         write_xyz(coord, "coord")
-                        staus = CallORCA(wd, {"method": spmethod,
+                        staus = CallORCA(wd, {"functional": functional,
+                                              "basis":basis,
                                               "charge": frinfo_d["charge"],
                                               "m": m,
                                               "fn": "coord",
@@ -402,7 +336,8 @@ class SingleCycleSearch:
                 else:  # do m = 2
                     wd = create_folder(os.path.join(self.wd, "inter_fragments", frinfo_d['strucwd'], "orca", str(2)))
                     write_xyz(coord, "coord")
-                    staus = CallORCA(wd, {"method": spmethod,
+                    staus = CallORCA(wd, {"functional": functional,
+                                          "basis":basis,
                                           "charge": frinfo_d["charge"],
                                           "m": 2,
                                           "fn": "coord",
@@ -431,7 +366,8 @@ class SingleCycleSearch:
                             wd = create_folder(os.path.join(self.wd, "inter_fragments", random_name, "orca", str(m)))
 
                         write_xyz(coord, "coord")
-                        staus = CallORCA(wd, {"method": spmethod,
+                        staus = CallORCA(wd, {"functional": functional,
+                                              "basis":basis,
                                               "charge": frinfo_d["charge"],
                                               "m": m,
                                               "fn": "coord",
@@ -454,7 +390,8 @@ class SingleCycleSearch:
                         tmp_path_d[1][frindex]["strucwd"] = random_name
                         wd = create_folder(os.path.join(self.wd, "inter_fragments", random_name, "orca", str(2)))
                     write_xyz(coord, "coord")
-                    staus = CallORCA(wd, {"method": spmethod,
+                    staus = CallORCA(wd, {"functional": functional,
+                                          "basis":basis,
                                           "charge": frinfo_d["charge"],
                                           "m": 2,
                                           "fn": "coord",
