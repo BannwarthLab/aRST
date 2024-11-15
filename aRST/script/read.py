@@ -23,7 +23,7 @@ def initial_struc_info(geom_d, strucid, keyname,struc_rec = {}):
         raise Exception("Can't read struc info from input file.")
 
 
-def refine_struc_info(wd0,strucid, struc_rec, setting_d, forcedftopt=False):
+def refine_struc_info(wd0,strucid, struc_rec, setting_d):
     struc_inspector = DictionaryInspector(struc_rec)
     setting_inspector = DictionaryInspector(setting_d)
     # get bisical properties
@@ -36,7 +36,7 @@ def refine_struc_info(wd0,strucid, struc_rec, setting_d, forcedftopt=False):
     constrain_l, ele = None,None
 
     # do gfn opt if required
-    if setting_inspector.get_value("xtb_setting.strucopt", False) and coord.shape[0] > 1:
+    if setting_inspector.get_value("read.general.gfn2opt", False) and coord.shape[0] > 1:
         wd = create_folder(os.path.join(wd0, "struc", strucid, "xtb"))
         write_xyz(coord, "coord")
 
@@ -61,6 +61,7 @@ def refine_struc_info(wd0,strucid, struc_rec, setting_d, forcedftopt=False):
             print(f'struc {strucid} opt at {setting_inspector.get_value("xtb_setting.method", "gfn2")} failed')
 
     # do DFT opt if required
+    forcedftopt = setting_inspector.get_value("read.general.dftopt", False)
     if (forcedftopt or setting_inspector.get_value("orca_setting.dftopt") )and coord.shape[0] > 1:
         dftopt = True
         # do dft opt

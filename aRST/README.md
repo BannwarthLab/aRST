@@ -85,6 +85,10 @@ Explore reaction pathes based on given reactants.
 besides essential input, (optional) adding detailed searching settings with
 
 ```
+[read.general]
+dftopt = False                      # bool, doing dftopt when first reading input coord
+gfn2opt = False                     # bool, doing gfn2opt when first reading input coord
+
 [searching_setting.general]
 cycle = 1                           # int, number of searching cycle
 elim =  300                         # float, energy limitation to kill this reaction path, unit kcal/mol
