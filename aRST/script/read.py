@@ -5,7 +5,8 @@ from aRST.script.callsys import CallxTB, CallORCA
 import pandas as pd
 
 
-def initial_struc_info(geom_d, strucid, keyname,struc_rec = {}):
+def initial_struc_info(wd0,geom_d, strucid, keyname,setting_d,struc_rec = {}):
+    os.chdir(wd0)
     geom_inspector = DictionaryInspector(geom_d)
     STRUC_inspector = DictionaryInspector(struc_rec)
     coord_fn = geom_inspector.get_value(f"{keyname}.name")
@@ -18,6 +19,7 @@ def initial_struc_info(geom_d, strucid, keyname,struc_rec = {}):
 
         if geom_inspector.get_value(f"{keyname}.at") is not None:
             STRUC_inspector.set_value(f"{strucid}.struc_info.general.at", geom_inspector.get_value(f"{keyname}.at"))
+        struc_rec = refine_struc_info(wd0,strucid,struc_rec,setting_d)
         return struc_rec
     else:
         raise Exception("Can't read struc info from input file.")

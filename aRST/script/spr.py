@@ -13,11 +13,13 @@ def build_gap_d(react_d, h_df, l_df, search_mode):
     """
     loop over Hdf and Ldf to build up atomic pairs
     """
+    h_colname = h_df.columns.tolist()
+    l_colname = l_df.columns.tolist()
 
     def wrap_build_dict(Lcol, Lindex, L, Hcol, Hindex, H, react_d):
         gap = np.round((L - H ) * 0.5, 3)
-        tmp_key = (str(Hcol), str(Lcol))
-        tmp_val = [str(Hindex), str(Lindex)]
+        tmp_key = (str(Hcol), str(Lcol)) # struc combi
+        tmp_val = [str(Hindex), str(Lindex)] # at combi
 
         # check if gap exist
         if gap not in react_d.keys():
@@ -47,27 +49,27 @@ def build_gap_d(react_d, h_df, l_df, search_mode):
         return react_d
 
     for index1, row1 in l_df.iterrows():  # loop row in L
-        for column1 in l_df.columns:  # loop col in L
-            L = l_df.at[index1, column1]
+        for icol1 in range(len(l_colname)): # loop col in L with indexing
+            L = l_df.iat[index1, icol1]
             if isinstance(L, pd.Series):  # reactants contains mulitple identical structures
                 L = L.iloc[0]
             if isinstance(L, str) or np.isnan(L) or np.isinf(L):
                 continue
             for index2, row2 in h_df.iterrows():  # loop row in H
-                for column2 in h_df.columns:  # loop col in H
-                    H = h_df.at[index2, column2]
+                for icol2 in range(len(h_colname)):  # loop col in H
+                    H = h_df.iat[index2, icol2]
                     if isinstance(H, pd.Series):  # reactants contains mulitple identical structures
                         H = H.iloc[0]
                     if isinstance(H, str) or np.isnan(H) or np.isinf(H):
                         continue
                     if search_mode == 0:
-                        if column2 == column1:  # struc1 = struc2
-                            react_d = wrap_build_dict(column1, index1, L, column2, index2, H, react_d)
+                        if icol1 == icol2:  # struc1 = struc2
+                            react_d = wrap_build_dict(l_colname[icol1], index1, L, h_colname[icol2], index2, H, react_d)
                     elif search_mode == 1:
-                        if column2 != column1:  # struc1 != struc2
-                            react_d = wrap_build_dict(column1, index1, L, column2, index2, H, react_d)
+                        if icol2 != icol1:  # struc1 != struc2
+                            react_d = wrap_build_dict(l_colname[icol1], index1, L, h_colname[icol2], index2, H, react_d)
                     elif search_mode == 2:
-                        react_d = wrap_build_dict(column1, index1, L, column2, index2, H, react_d)
+                        react_d = wrap_build_dict(l_colname[icol1], index1, L, h_colname[icol2], index2, H, react_d)
                     else:
                         raise Exception("unknow keyword in searching_setting.inter.search_mode, "
                                         "accept key includs int: 0,1,2.")
@@ -86,16 +88,16 @@ def SPR_HL(reactants,  # reactants id list
 
     struc_inspector = DictionaryInspector(struc_rec)
     # collecting HL values into dataframe
-    reactants_l = [i for i in reactants]
     maxnat = max(struc_inspector.get_value(f'{i}.struc_info.reactivity.ml').shape[0] for i in reactants)
-    HOAO_a = pd.DataFrame(columns=reactants_l, index=range(maxnat))
-    HOAO_b = pd.DataFrame(columns=reactants_l, index=range(maxnat))
-    LUAO_a = pd.DataFrame(columns=reactants_l, index=range(maxnat))
-    LUAO_b = pd.DataFrame(columns=reactants_l, index=range(maxnat))
-    column_names = ["HOAO_a (eV)", "HOAO_b (eV)", "LUAO_a (eV)", "LUAO_b (eV)"]
+    HOAO_a = pd.DataFrame(columns=reactants, index=range(maxnat))
+    HOAO_b = pd.DataFrame(columns=reactants, index=range(maxnat))
+    LUAO_a = pd.DataFrame(columns=reactants, index=range(maxnat))
+    LUAO_b = pd.DataFrame(columns=reactants, index=range(maxnat))
+    newcolumn_names = ["HOAO_a (eV)", "HOAO_b (eV)", "LUAO_a (eV)", "LUAO_b (eV)"]
     dfs = [HOAO_a, HOAO_b, LUAO_a, LUAO_b]
 
-    for strucid in reactants:
+    for istruc in range(len(reactants)):
+        strucid = reactants[istruc]
         mldf_original = struc_inspector.get_value(f'{strucid}.struc_info.reactivity.ml').copy()
 
         # remove all hydrogen/halogen if not allowed
@@ -120,11 +122,11 @@ def SPR_HL(reactants,  # reactants id list
             mldf_original.loc[hindex, "LUAO_a (eV)"] = np.inf
             mldf_original.loc[hindex, "LUAO_a (eV)"] = np.inf
 
-        for df, column_name in zip(dfs, column_names):
+        for df, column_name in zip(dfs, newcolumn_names):
             tmpl = list(mldf_original.loc[:,column_name])
             for j in range(maxnat - len(tmpl)):
                 tmpl.append(np.nan)
-            df.loc[:,strucid] = tmpl  # .reset_index(drop=True)
+            df.iloc[:,istruc] = tmpl  # .reset_index(drop=True)
 
             # # Convert all elements in the DataFrame to numeric, coercing errors to NaN
             # df.apply(pd.to_numeric, errors='coerce')

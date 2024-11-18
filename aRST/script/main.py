@@ -4,6 +4,7 @@
 # warnings.simplefilter("ignore", RuntimeWarning)
 
 import os
+import shutil
 import time
 import traceback
 
@@ -76,27 +77,57 @@ def main():
     REACTION_rec={}
     geom_d = setting_d["geom"]
     STRUC_inspector = DictionaryInspector(STRUC_rec)
-    rcount,pcount = 0,0
+    REFSTRUC_inspector = DictionaryInspector(REFSTRUC_rec)
+
+    reactants_ini = []
+    refproducts_ini = []
+    rcount, pcount = 0, 0
     for struckn in geom_d.keys():
         number = setting_inspertor.get_value(f"geom.{struckn}.number", 1)
         if "reactant" in struckn:
-            STRUC_rec = initial_struc_info(geom_d, str(rcount), struckn, STRUC_rec)
-            anchornr = rcount
-            rcount += 1
-            if number>1:
-                for i in range(number-1):
-                    STRUC_inspector.set_value(str(rcount),STRUC_inspector.get_value(str(rcount-1)).copy())
-                    STRUC_inspector.set_value(f"{rcount}.struc_info.general.sameas",str(anchornr))
-                    rcount+=1
+            if not reactants_ini:
+                STRUC_rec = initial_struc_info(wd,geom_d,str(rcount),struckn,setting_d,STRUC_rec)
+                reactants_ini = [str(rcount) for _ in range(setting_inspertor.get_value(f"geom.{struckn}.number", 1))]
+                rcount += 1
+            else:
+                tmp_STRUC_rec = initial_struc_info(wd,geom_d,str(rcount),struckn,setting_d,{})
+                tmp_mb = DictionaryInspector(tmp_STRUC_rec).get_value(f"{rcount}.struc_info.general.mb")
+                addtriger = True
+                if tmp_mb != "unknow":
+                    for struc in STRUC_rec.keys():
+                        if STRUC_inspector.get_value(f"{struc}.struc_info.general.mb") == tmp_mb:
+                            addtriger=False
+                            for _ in range(setting_inspertor.get_value(f"geom.{struckn}.number", 1)):
+                                reactants_ini.append(struc)
+                if addtriger:
+                    STRUC_rec[str(rcount)] = tmp_STRUC_rec[str(rcount)]
+                    for _ in range(setting_inspertor.get_value(f"geom.{struckn}.number", 1)):
+                        reactants_ini.append(str(rcount))
+                    rcount += 1
+                else:
+                    # del the tmp calculation folder
+                    tmp_struc_wd = os.path.join(wd,"struc", str(rcount), "xtb")
+                    if os.path.exists(tmp_struc_wd):
+                        shutil.rmtree(tmp_struc_wd,ignore_errors=True)
         elif "product" in struckn:
-            REFSTRUC_rec = initial_struc_info(geom_d, "p"+str(pcount), struckn, REFSTRUC_rec)
-            REFSTRUC_inspector = DictionaryInspector(REFSTRUC_rec)
-            anchornr = pcount
-            pcount += 1
-            if number > 1:
-                for i in range(number - 1):
-                    REFSTRUC_inspector.set_value("p"+str(pcount), REFSTRUC_inspector.get_value(str(pcount - 1)).copy())
-                    STRUC_inspector.set_value(f"p{pcount}.struc_info.general.sameas", str(anchornr))
+            if not refproducts_ini:
+                REFSTRUC_rec = initial_struc_info(wd,geom_d, str(pcount), struckn,setting_d, REFSTRUC_rec)
+                refproducts_ini = [str(pcount) for _ in range(setting_inspertor.get_value(f"geom.{struckn}.number", 1))]
+                pcount += 1
+            else:
+                tmp_REFSTRUC_rec = initial_struc_info(wd,geom_d, str(pcount), struckn,setting_d, {})
+                tmp_mb = DictionaryInspector(tmp_REFSTRUC_rec).get_value(f"{pcount}.struc_info.general.mb")
+                addtriger = True
+                if tmp_mb != "unknow":
+                    for struc in REFSTRUC_rec.keys():
+                        if REFSTRUC_inspector.get_value(f"{struc}.struc_info.general.mb") == tmp_mb:
+                            addtriger=False
+                            for _ in range(setting_inspertor.get_value(f"geom.{struckn}.number", 1)):
+                                refproducts_ini.append(struc)
+                if addtriger:
+                    REFSTRUC_rec[str(pcount)] = tmp_REFSTRUC_rec[str(rcount)]
+                    for _ in range(setting_inspertor.get_value(f"geom.{struckn}.number", 1)):
+                        refproducts_ini.append(str(pcount))
                     pcount += 1
 
     if args.time:
@@ -105,22 +136,8 @@ def main():
     # determine task
     if args.explore:
         os.chdir(wd)
-        # refine STRUC_rec
-        for strucid in STRUC_rec.keys():
-            if STRUC_inspector.get_value(f"{strucid}.struc_info.general.sameas") is not None:
-                sameid = STRUC_inspector.get_value(f"{strucid}.struc_info.general.sameas")
-                STRUC_inspector.set_value(strucid,sameid)
-            else:
-                STRUC_rec = refine_struc_info(wd,strucid,STRUC_rec,setting_d)
-        if REFSTRUC_rec:
-            for strucid in REFSTRUC_rec.keys():
-                if STRUC_inspector.get_value(f"{strucid}.struc_info.general.sameas") is not None:
-                    sameid = STRUC_inspector.get_value(f"{strucid}.struc_info.general.sameas")
-                    REFSTRUC_rec.set_value(strucid, sameid)
-                else:
-                    REFSTRUC_rec = refine_struc_info(wd,strucid, REFSTRUC_rec, setting_d)
         # receive reaction path discovery record
-        STRUC_rec, REACTION_rec = ReactionSearch(wd,STRUC_rec, setting_d, {})
+        STRUC_rec, REACTION_rec = ReactionSearch(wd,reactants_ini,refproducts_ini,STRUC_rec, setting_d, {})
         #  examine if found ref reaction path
         from collections import Counter
         STRUC_inspector = DictionaryInspector(STRUC_rec)

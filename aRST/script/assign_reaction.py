@@ -9,7 +9,7 @@ from aRST.script.dictionaryInspector import DictionaryInspector
 from aRST.script.callsys import CallxTB, CallORCA
 
 
-def ReactionSearch(wd, STRUC_rec, setting_d, REACTION_rec, step=0):
+def ReactionSearch(wd,reactants_ini,refproducts_ini, STRUC_rec, setting_d, REACTION_rec, step=0):
     setting_inspector = DictionaryInspector(setting_d)
     ncycle = setting_inspector.get_value("searching_setting.general.cycle", 1)
     print("ncycle=", ncycle)
@@ -19,7 +19,7 @@ def ReactionSearch(wd, STRUC_rec, setting_d, REACTION_rec, step=0):
         if not REACTION_rec:
             print("begin cycle 0")
             # cycle 0
-            reactants_l = [i for i in STRUC_rec.keys()]
+            reactants_l = reactants_ini
             singlecycle = SingleCycleSearch(STRUC_rec, REACTION_rec, setting_d, wd)
             explore_dl = singlecycle.explore(reactants_l, "0")
             for reactiontype_d in explore_dl:

@@ -1,3 +1,5 @@
+import os
+
 from aRST.script.dictionaryInspector import DictionaryInspector
 from aRST.script.toolbox import create_folder, write_xyz
 from os.path import join,exists
@@ -89,6 +91,8 @@ def _get_reactive_features(wd,struc,STRUC_rec,setting_d):
                 import subprocess
                 p = subprocess.Popen("orca_2mkl orca -molden", shell=True)
                 p.wait()
+                ### del .gbw file to keep i/o smaller
+                os.remove(join(orcawd,"orca.gbw"))
                 # transfom MOs from spherical coordinates to cartesian
                 rc = CallMultiwfn(orcawd,"orca.molden.input").write_cartesian_molden()
                 if rc == 0:

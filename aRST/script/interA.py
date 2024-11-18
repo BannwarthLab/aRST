@@ -180,7 +180,6 @@ def simulation_interA(reactants,  # reactants list
                                        "alpb": xtb_setting.get("alpb", "h2o"),
                                        "etemp": xtb_setting.get("scan_etemp", "4000")
                                        }).scan(constrain_setting)
-
             if status == 0:
                 endwd = scan_wd
                 if searching_setting.get("sep_mode", 0) !=0:
