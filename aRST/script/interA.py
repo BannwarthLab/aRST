@@ -1,6 +1,7 @@
 # Reaction simulation for intramolecular association
 import os
 import shutil
+import sys
 
 import numpy as np
 import pandas as pd
@@ -40,7 +41,6 @@ def simulation_interA(reactants,  # reactants list
 
     # resort intera to screen same scan
     def screen_identical_scan(input_d):
-        from collections import Counter
         # before: struc1: provide hoao struc2: provide luao
         # after: struc1 index <struc2 index
         out_d = {}

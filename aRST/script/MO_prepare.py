@@ -96,6 +96,7 @@ def _get_reactive_features(wd,struc,STRUC_rec,setting_d):
                 # transfom MOs from spherical coordinates to cartesian
                 rc = CallMultiwfn(orcawd,"orca.molden.input").write_cartesian_molden()
                 if rc == 0:
+                    os.remove(join(orcawd, "orca.molden.input"))
                     pass
                 else:
                     raise Exception(f"struc {struc} Multiwfn transform failed")

@@ -2,7 +2,7 @@
 spr = search possiable reaction site
 @Author  ：Ying Chen
 """
-
+import sys
 import traceback
 import numpy as np
 import pandas as pd
@@ -17,7 +17,7 @@ def build_gap_d(react_d, h_df, l_df, search_mode):
     l_colname = l_df.columns.tolist()
 
     def wrap_build_dict(Lcol, Lindex, L, Hcol, Hindex, H, react_d):
-        gap = np.round((L - H ) * 0.5, 3)
+        gap = np.round((L - H ), 3)
         tmp_key = (str(Hcol), str(Lcol)) # struc combi
         tmp_val = [str(Hindex), str(Lindex)] # at combi
 
@@ -160,7 +160,6 @@ def SPR_HL(reactants,  # reactants id list
     react_bb = build_gap_d({}, HOAO_b, LUAO_b, search_mode)
     react_ab = build_gap_d({}, HOAO_a, LUAO_b, search_mode)
     react_ba = build_gap_d({}, HOAO_b, LUAO_a, search_mode)
-
     return react_aa, react_bb, react_ab, react_ba
 
 
