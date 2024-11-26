@@ -269,6 +269,7 @@ class SingleCycleSearch:
                  "atomic_charge": pd.read_table(join(optwd, "charges"), header=None, sep='\s+'),
                  "charge": endxyz_info["charge"],
                  "nel": endxyz_info["nel"],
+                 "strucwd":random_name,
                  "atomic_connection": endxyz_info["atomic_connection"]})
 
         else:
@@ -581,8 +582,5 @@ class SingleCycleSearch:
         # move folder
         tmpwd = join(self.wd, "inter_fragments", inspector_2.get_value("strucwd"))
         tarwd = join(self.wd, "struc", newid)
-        # print(f"move {tmpwd} to {tarwd}")
-
-        if os.path.exists(tmpwd) and not os.path.exists(tarwd):
-            shutil.move(tmpwd, tarwd)
+        shutil.move(tmpwd, tarwd)
         return newid
