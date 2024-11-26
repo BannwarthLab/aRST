@@ -5,12 +5,12 @@ import sys
 
 import numpy as np
 import pandas as pd
-from aRST.script.toolbox import create_folder, write_xyz, read_topomol, round_charge
+from aRST.script.toolbox import create_folder, write_xyz, read_topomol
 from aRST.script.spr import SPR_HL
 from aRST.script.dictionaryInspector import DictionaryInspector
 from aRST.script.geom import Coord, alignment
-
-
+from aRST.script.callsys import CallxTB
+from aRST.script.do_scan import build_push_l
 def simulation_interA(reactants,  # reactants list
                       struc_rec,  # correspongding struc info in dict
                       searching_setting,
@@ -26,7 +26,7 @@ def simulation_interA(reactants,  # reactants list
                                                     allow_hydrogen=searching_setting.get("hydrogen", True),
                                                     allow_halogen=searching_setting.get("halogen", True),
                                                     search_mode=searching_setting.get("search_mode", 1),
-                                                    )
+                                                    concerted_pair=searching_setting.get("concerted_pair", False))
     # react_d:  key= 5.93, value = {('1', '1'), [['0', '0']]}
 
     # merge a reaction dict
@@ -76,7 +76,6 @@ def simulation_interA(reactants,  # reactants list
         return out_d
 
     intera = screen_identical_scan(intera)
-
     output_d = {}
 
     ###### perform simulation ######
@@ -124,11 +123,11 @@ def simulation_interA(reactants,  # reactants list
 
     #########  tmp hacked out  #########
 
-    from aRST.script.callsys import CallxTB
+
 
     if scanmode == 0:
         # standard xtbscan
-        from aRST.script.do_scan import build_push_l
+
         for gap in sorted(intera.keys())[:ninter]:
             scan_wd, \
             struc1, struc2, at_l, \
@@ -198,8 +197,10 @@ def simulation_interA(reactants,  # reactants list
                     if status2 == 0:
                         endwd = optwd
                 endxyz = pd.read_table(os.path.join(endwd, 'xtbopt.xyz'), header=None, skiprows=2, sep='\s+')
-                constrain_l, ele = read_topomol(os.path.join(endwd, 'xtbtopo.mol')) if os.path.exists(
-                    os.path.join(endwd, 'xtbtopo.mol')) else [], []
+                if os.path.exists(os.path.join(endwd, 'xtbtopo.mol')):
+                    constrain_l, ele = read_topomol(os.path.join(endwd, 'xtbtopo.mol'))
+                else:
+                    constrain_l, ele = [], []
                 bo = pd.read_csv(os.path.join(endwd, "wbo"), header=None, sep='\s+') if os.path.getsize(
                     os.path.join(endwd, "wbo")) != 0 else None
                 atcharge = pd.read_table(os.path.join(endwd, "charges"), header=None, sep='\s+')
@@ -220,7 +221,8 @@ def simulation_interA(reactants,  # reactants list
 
             if np.isinf(uhf):
                 shutil.copytree(os.path.join(wd, "scan", f"{reactionpath}_{count - 1}"),
-                                os.path.join(wd, "scan", f"{reactionpath}_{count}"))
+                                os.path.join(wd, "scan", f"{reactionpath}_{count}"),
+                                ignore=shutil.ignore_patterns('xtb*'))
                 scan_wd = os.path.join(wd, "scan", f"{reactionpath}_{count}")
                 os.chdir(scan_wd)
 
@@ -250,8 +252,10 @@ def simulation_interA(reactants,  # reactants list
                         if status2 == 0:
                             endwd = optwd
                     endxyz = pd.read_table(os.path.join(endwd, 'xtbopt.xyz'), header=None, skiprows=2, sep='\s+')
-                    constrain_l, ele = read_topomol(os.path.join(endwd, 'xtbtopo.mol')) if os.path.exists(
-                        os.path.join(endwd, 'xtbtopo.mol')) else [], []
+                    if os.path.exists(os.path.join(endwd, 'xtbtopo.mol')):
+                        constrain_l, ele = read_topomol(os.path.join(endwd, 'xtbtopo.mol'))
+                    else:
+                        constrain_l, ele = [], []
                     bo = pd.read_csv(os.path.join(endwd, "wbo"), header=None, sep='\s+') if os.path.getsize(
                         os.path.join(endwd, "wbo")) != 0 else None
                     atcharge = pd.read_table(os.path.join(endwd, "charges"), header=None, sep='\s+')
@@ -278,9 +282,16 @@ def simulation_interA(reactants,  # reactants list
             struc1, struc2, at_l, \
             alignedcoord, nat_coord1, charge, uhf, totnel, push_l = generate_reactive_complex(gap)
 
+            #########  tmp hacked in  #########
+            at_l = [at_l[0]]
+            with open(os.path.join(scan_wd, "atl"), "w") as f:
+                f.write("at1,at2,hlgap(eV)\n")
+                f.write("%d,%d,%.4f\n" % (int(at_l[0][0]), int(at_l[0][1]), gap))
+            #########  tmp hacked out  #########
+
             # get atomic connection
-            atom_connection1, ele1 = struc_inspector.get_value(f"{struc1}.struc_info.atomic_connection")
-            atom_connection2, ele2 = struc_inspector.get_value(f"{struc2}.struc_info.atomic_connection")
+            atom_connection1, ele1 = struc_inspector.get_value(f"{struc1}.struc_info.general.atomic_connection")
+            atom_connection2, ele2 = struc_inspector.get_value(f"{struc2}.struc_info.general.atomic_connection")
             for item in atom_connection2:
                 for at in item["atoms"]:
                     at += nat_coord1
@@ -293,19 +304,23 @@ def simulation_interA(reactants,  # reactants list
                 atom_connection.append({"atoms": [at1, at2], "value": value})
             coordinates = [list(alignedcoord.loc[line, 1:4]) for line in range(alignedcoord.shape[0])]
             mbxyz = get_endxyz_from_mb(atom_connection, coordinates, ele)
-            write_xyz(mbxyz, "coord0")
+            write_xyz(mbxyz, "coord_mb")
+            # constrained opt in gfn2
             status = CallxTB(scan_wd, {"method": xtb_setting.get("method", "gfn2"),
-                                       "coordfn": "coord0",
+                                       "coordfn": "coord_mb",
                                        "optlevel": xtb_setting.get("optlevel", None),
                                        "charge": charge,
-                                       "uhf": 1 if totnel % 2 != 0 else 2,
+                                       "uhf": uhf if not np.isinf(uhf) else 0,
                                        "alpb": xtb_setting.get("alpb", "h2o"),
-                                       "etemp": xtb_setting.get("scan_etemp", "4000")
-                                       }).opt()
+                                       "etemp": xtb_setting.get("scan_etemp", "4000"),
+                                       "k":xtb_setting.get("k", 1),
+                                       }).constrained_opt(newbond=atom_connection[-len(push_l):])
             if status == 0:
                 endxyz = pd.read_table(os.path.join(scan_wd, 'xtbopt.xyz'), header=None, skiprows=2, sep='\s+')
-                constrain_l, ele = read_topomol(os.path.join(scan_wd, 'xtbtopo.mol')) if os.path.exists(
-                    os.path.join(scan_wd, 'xtbtopo.mol')) else [], []
+                if os.path.exists(os.path.join(scan_wd, 'xtbtopo.mol')):
+                    constrain_l, ele = read_topomol(os.path.join(scan_wd, 'xtbtopo.mol'))
+                else:
+                    constrain_l, ele = [], []
                 if os.path.getsize(os.path.join(scan_wd, "wbo")) != 0:
                     bo = pd.read_csv(os.path.join(scan_wd, "wbo"), header=None, sep='\s+')
                 else:
@@ -318,12 +333,52 @@ def simulation_interA(reactants,  # reactants list
                                         {"atomic_charge": atcharge,
                                          "charge": charge,
                                          "nel": totnel,
-                                         "uhf": 1 if totnel % 2 != 0 else 2,
+                                         "uhf": uhf if not np.isinf(uhf) else 0,
                                          "coord": endxyz,
                                          "bo": bo,
                                          "atomic_connection": (constrain_l, ele)}  # endxyz info
                                         ]
             count += 1
+            if np.isinf(uhf):
+                shutil.copytree(os.path.join(wd, "scan", f"{reactionpath}_{count - 1}"),
+                                os.path.join(wd, "scan", f"{reactionpath}_{count}"),
+                                ignore=shutil.ignore_patterns('xtb*'))
+                scan_wd = os.path.join(wd, "scan", f"{reactionpath}_{count}")
+                os.chdir(scan_wd)
+                status = CallxTB(scan_wd, {"method": xtb_setting.get("method", "gfn2"),
+                                           "coordfn": "coord_mb",
+                                           "optlevel": xtb_setting.get("optlevel", None),
+                                           "charge": charge,
+                                           "uhf":2,
+                                           "alpb": xtb_setting.get("alpb", "h2o"),
+                                           "etemp": xtb_setting.get("scan_etemp", "4000"),
+                                           "k": xtb_setting.get("k", 1)
+                                           }).constrained_opt(newbond=atom_connection[-len(push_l):])
+                if status == 0:
+                    endxyz = pd.read_table(os.path.join(scan_wd, 'xtbopt.xyz'), header=None, skiprows=2, sep='\s+')
+                    if os.path.exists(os.path.join(scan_wd, 'xtbtopo.mol')):
+                        constrain_l, ele = read_topomol(os.path.join(scan_wd, 'xtbtopo.mol'))
+                    else:
+                        constrain_l, ele = [], []
+                    if os.path.getsize(os.path.join(scan_wd, "wbo")) != 0:
+                        bo = pd.read_csv(os.path.join(scan_wd, "wbo"), header=None, sep='\s+')
+                    else:
+                        bo = None
+                    atcharge = pd.read_table(os.path.join(scan_wd, "charges"), header=None, sep='\s+')
+                    output_d[f"{count}"] = [{"reactants": [struc1, struc2],
+                                             "unreacted": [st for st in reactants
+                                                           if st != struc1 and st != struc2]
+                                             if len(reactants) > 2 else []},  # reactants info
+                                            {"atomic_charge": atcharge,
+                                             "charge": charge,
+                                             "nel": totnel,
+                                             "uhf": 2,
+                                             "coord": endxyz,
+                                             "bo": bo,
+                                             "atomic_connection": (constrain_l, ele)}  # endxyz info
+                                            ]
+                count+=1
+
         return output_d
     else:
         raise Exception("unknown keyword for scan_mode, accecpted values include (0,1).")

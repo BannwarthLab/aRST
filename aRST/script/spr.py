@@ -9,15 +9,15 @@ import pandas as pd
 from aRST.script.dictionaryInspector import DictionaryInspector
 
 
-def build_gap_d(react_d, h_df, l_df, search_mode):
+def build_gap_d(react_d, h_df, l_df, search_mode,concerted_pair=False):
     """
     loop over Hdf and Ldf to build up atomic pairs
     """
     h_colname = h_df.columns.tolist()
     l_colname = l_df.columns.tolist()
 
-    def wrap_build_dict(Lcol, Lindex, L, Hcol, Hindex, H, react_d):
-        gap = np.round((L - H ), 3)
+    def wrap_build_dict(Lcol, Lindex, L, Hcol, Hindex, H, react_d,concerted_pair=False):
+        gap = np.round(np.round(L,2) - np.round(H,2),2)
         tmp_key = (str(Hcol), str(Lcol)) # struc combi
         tmp_val = [str(Hindex), str(Lindex)] # at combi
 
@@ -30,7 +30,7 @@ def build_gap_d(react_d, h_df, l_df, search_mode):
                 and tuple(list(tmp_key)[::-1]) not in react_d[gap].keys():
             react_d[gap][tmp_key] = [tmp_val]
         # degenrated pairs form same struc combinations
-        else:
+        elif concerted_pair:
             for current_key, current_item in react_d[gap].items():
                 if tmp_key == current_key and len(set(tmp_key)) == 1:
                     if tmp_val in current_item or tmp_val[::-1] in current_item:
@@ -64,12 +64,15 @@ def build_gap_d(react_d, h_df, l_df, search_mode):
                         continue
                     if search_mode == 0:
                         if icol1 == icol2:  # struc1 = struc2
-                            react_d = wrap_build_dict(l_colname[icol1], index1, L, h_colname[icol2], index2, H, react_d)
+                            react_d = wrap_build_dict(l_colname[icol1], index1, L, h_colname[icol2], index2, H,
+                                                      react_d,concerted_pair=concerted_pair)
                     elif search_mode == 1:
                         if icol2 != icol1:  # struc1 != struc2
-                            react_d = wrap_build_dict(l_colname[icol1], index1, L, h_colname[icol2], index2, H, react_d)
+                            react_d = wrap_build_dict(l_colname[icol1], index1, L, h_colname[icol2], index2, H,
+                                                      react_d,concerted_pair=concerted_pair)
                     elif search_mode == 2:
-                        react_d = wrap_build_dict(l_colname[icol1], index1, L, h_colname[icol2], index2, H, react_d)
+                        react_d = wrap_build_dict(l_colname[icol1], index1, L, h_colname[icol2], index2, H,
+                                                  react_d,concerted_pair=concerted_pair)
                     else:
                         raise Exception("unknow keyword in searching_setting.inter.search_mode, "
                                         "accept key includs int: 0,1,2.")
@@ -83,6 +86,7 @@ def SPR_HL(reactants,  # reactants id list
            search_mode=1,  # 0 : only search intramollecule reaction possibility;
            # 1: only intermolecular;
            # 2: both inter- and intra reaction possibility.
+           concerted_pair=False # switch on concerted_pair option
            ):
     # return: d[gap] = "degenerate number (int)|strucid1(without 0),strucid2|at1,at2|....."
 
@@ -156,10 +160,10 @@ def SPR_HL(reactants,  # reactants id list
 
     # build up reactive atomic pair dict
     react_aa, react_bb, react_ab, react_ba = {},{},{},{}
-    react_aa = build_gap_d({}, HOAO_a, LUAO_a, search_mode)
-    react_bb = build_gap_d({}, HOAO_b, LUAO_b, search_mode)
-    react_ab = build_gap_d({}, HOAO_a, LUAO_b, search_mode)
-    react_ba = build_gap_d({}, HOAO_b, LUAO_a, search_mode)
+    react_aa = build_gap_d({}, HOAO_a, LUAO_a, search_mode,concerted_pair=concerted_pair)
+    react_bb = build_gap_d({}, HOAO_b, LUAO_b, search_mode,concerted_pair=concerted_pair)
+    react_ab = build_gap_d({}, HOAO_a, LUAO_b, search_mode,concerted_pair=concerted_pair)
+    react_ba = build_gap_d({}, HOAO_b, LUAO_a, search_mode,concerted_pair=concerted_pair)
     return react_aa, react_bb, react_ab, react_ba
 
 

@@ -1,4 +1,6 @@
 import os
+import sys
+
 from aRST.script.dictionaryInspector import DictionaryInspector
 from aRST.script.toolbox import get_nelectron, create_folder, get_energy, write_xyz, read_topomol, get_molbarcode
 from aRST.script.callsys import CallxTB, CallORCA
@@ -54,9 +56,10 @@ def refine_struc_info(wd0,strucid, struc_rec, setting_d):
             coord = pd.read_table(os.path.join(wd, 'xtbopt.xyz'), header=None, skiprows=2, sep='\s+')
             nel = get_nelectron(os.path.join(wd, 'xtb.out'))
             sp_xtb = get_energy(os.path.join(wd, 'ENERGY'))
-            constrain_l, ele = read_topomol(os.path.join(wd, 'xtbtopo.mol')) if os.path.exists(
-                os.path.join(wd, 'xtbtopo.mol')) else [], []
-
+            if os.path.exists(os.path.join(wd, 'xtbtopo.mol')):
+                constrain_l, ele = read_topomol(os.path.join(wd, 'xtbtopo.mol'))
+            else:
+                constrain_l, ele = [], []
         else:
             nel, sp_xtb = None, None
             constrain_l, ele = [], [str(coord.iloc[0, 0])]
@@ -101,8 +104,10 @@ def refine_struc_info(wd0,strucid, struc_rec, setting_d):
         if staus == 0:
             nel = get_nelectron(os.path.join(wd, 'xtb.out'))
             sp_xtb = get_energy(os.path.join(wd, 'ENERGY'))
-            constrain_l, ele = read_topomol(os.path.join(wd, 'xtbtopo.mol')) if os.path.exists(
-                os.path.join(wd, 'xtbtopo.mol')) else [], []
+            if os.path.exists(os.path.join(wd, 'xtbtopo.mol')):
+                constrain_l, ele = read_topomol(os.path.join(wd, 'xtbtopo.mol'))
+            else:
+                constrain_l, ele = [], []
         else:
             nel, sp_xtb = None, None
             raise Exception(

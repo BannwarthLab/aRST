@@ -88,8 +88,10 @@ def simulation_intraD(reactants,  # reactants list
                                        }).scan(constrain_setting)
             if status == 0:
                 endxyz = pd.read_table(os.path.join(scan_wd, 'xtbopt.xyz'), header=None, skiprows=2, sep='\s+')
-                constrain_l, ele = read_topomol(os.path.join(scan_wd, 'xtbtopo.mol')) if os.path.exists(
-                            os.path.join(scan_wd, 'xtbtopo.mol')) else [],[]
+                if os.path.exists(os.path.join(scan_wd, 'xtbtopo.mol')):
+                    constrain_l, ele = read_topomol(os.path.join(scan_wd, 'xtbtopo.mol'))
+                else:
+                    constrain_l, ele = [], []
                 if os.path.getsize(os.path.join(scan_wd, "wbo")) != 0:
                     bo = pd.read_csv(os.path.join(scan_wd, "wbo"), header=None, sep='\s+')
                 else:
@@ -124,8 +126,10 @@ def simulation_intraD(reactants,  # reactants list
                                            }).scan(constrain_setting)
                 if status == 0:
                     endxyz = pd.read_table(os.path.join(scan_wd, 'xtbopt.xyz'), header=None, skiprows=2, sep='\s+')
-                    constrain_l, ele = read_topomol(os.path.join(scan_wd, 'xtbtopo.mol')) if os.path.exists(
-                            os.path.join(scan_wd, 'xtbtopo.mol')) else [],[]
+                    if os.path.exists(os.path.join(scan_wd, 'xtbtopo.mol')):
+                        constrain_l, ele = read_topomol(os.path.join(scan_wd, 'xtbtopo.mol'))
+                    else:
+                        constrain_l, ele = [], []
                     if os.path.getsize(os.path.join(scan_wd, "wbo")) != 0:
                         bo = pd.read_csv(os.path.join(scan_wd, "wbo"), header=None, sep='\s+')
                     else:
@@ -162,7 +166,7 @@ def simulation_intraD(reactants,  # reactants list
             write_xyz(coord, f"coord")
 
             # get atomic connection
-            atom_connection, ele = struc_inspector.get_value(f"{strucid}.struc_info.atomic_connection")
+            atom_connection, ele = struc_inspector.get_value(f"{strucid}.struc_info.general.atomic_connection")
             for item in atom_connection:
                 if item["atoms"] == info_l[1:3] or item["atoms"] == info_l[3:1]:
                     item["value"] *= 1.5
@@ -181,8 +185,10 @@ def simulation_intraD(reactants,  # reactants list
                                        }).opt()
             if status == 0:
                 endxyz = pd.read_table(os.path.join(scan_wd, 'xtbopt.xyz'), header=None, skiprows=2, sep='\s+')
-                constrain_l, ele = read_topomol(os.path.join(scan_wd, 'xtbtopo.mol')) if os.path.exists(
-                            os.path.join(scan_wd, 'xtbtopo.mol')) else [],[]
+                if os.path.exists(os.path.join(scan_wd, 'xtbtopo.mol')):
+                    constrain_l, ele = read_topomol(os.path.join(scan_wd, 'xtbtopo.mol'))
+                else:
+                    constrain_l, ele = [], []
                 if os.path.getsize(os.path.join(scan_wd, "wbo")) != 0:
                     bo = pd.read_csv(os.path.join(scan_wd, "wbo"), header=None, sep='\s+')
                 else:

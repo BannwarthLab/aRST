@@ -223,6 +223,25 @@ class CallxTB:
             rc=0
         return rc
 
+    def constrained_opt(self,newbond):
+        with open(f'{self.wd}/scan.inp', 'w') as f:
+            f.write(f'$constrain\n'
+                    f'force constant={self.command_d_inspertor.get_value("k")}\n')
+            for item in newbond:
+                at1,at2 = item["atoms"]
+                value = item["value"]
+                f.write('distance: %d,%d,%.2f\n'
+                        % (at1,at2,value))
+            f.write("$end")
+        cmd = self.generate_cmd_string(opt=True)
+        cmd += "--input scan.inp "
+        p = subprocess.Popen(cmd, stdout=open(f'{self.wd}/xtb.out', 'w'), stderr=subprocess.PIPE, shell=True)
+        p.wait()
+        rc = p.returncode
+        if rc != 0 and os.path.exists(f'{self.wd}/xtbopt.xyz'):
+            rc = 0
+        return rc
+
     def secondchance_opt(self):
         cmd_string = "xtb "
         coordfn = self.command_d_inspertor.get_value("coordfn")

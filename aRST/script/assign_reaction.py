@@ -1,6 +1,6 @@
 import os
 import shutil
-
+from os.path import join, exists
 import numpy as np
 import pandas as pd
 from aRST.script.toolbox import create_folder, write_xyz, get_energy, seperate_fragment, read_topomol, get_molbarcode
@@ -9,7 +9,7 @@ from aRST.script.dictionaryInspector import DictionaryInspector
 from aRST.script.callsys import CallxTB, CallORCA
 
 
-def ReactionSearch(wd,reactants_ini,refproducts_ini, STRUC_rec, setting_d, REACTION_rec, step=0):
+def ReactionSearch(wd, reactants_ini, refproducts_ini, STRUC_rec, setting_d, REACTION_rec, step=0):
     setting_inspector = DictionaryInspector(setting_d)
     ncycle = setting_inspector.get_value("searching_setting.general.cycle", 1)
     print("ncycle=", ncycle)
@@ -63,6 +63,7 @@ def ReactionSearch(wd,reactants_ini,refproducts_ini, STRUC_rec, setting_d, REACT
             step += 1
     return STRUC_rec, REACTION_rec
 
+
 def ReactionReactor(wd, STRUC_rec, setting_d, REACTION_rec, step=0, REFSTRUC_rec={}):
     import random
     setting_inspector = DictionaryInspector(setting_d)
@@ -77,7 +78,7 @@ def ReactionReactor(wd, STRUC_rec, setting_d, REACTION_rec, step=0, REFSTRUC_rec
         reactants_l = random.sample(list(STRUC_rec.keys()), 2)
         print("node = ", node)
         for prefix_rpid in node:
-            if len(node) ==1:
+            if len(node) == 1:
                 status = True
             else:
                 status = REACTION_rec[prefix_rpid][-1]
@@ -88,12 +89,13 @@ def ReactionReactor(wd, STRUC_rec, setting_d, REACTION_rec, step=0, REFSTRUC_rec
                     for count, info_d in reactiontype_d.items():
                         # get products geom
                         info_d = singlecycle.follow_up_treatment_gfn(info_d)
-                        # refine products info
-                        info_d = singlecycle.follow_up_treatment_energy(info_d)
-                        # now evaluate this reaction path
+                        # refine products info if this path is sus simulated
+                        if info_d[0]["bond_changed"]:
+                            info_d = singlecycle.follow_up_treatment_energy(info_d)
+                        # now evaluate this reaction path and # update rec
                         reaction_id = prefix_rpid + "_" + str(count)
-                        # update rec
                         STRUC_rec, REACTION_rec = singlecycle.evalueate_path(info_d, reaction_id)
+
                         singlecycle = SingleCycleSearch(STRUC_rec, REACTION_rec, setting_d, wd)
                 step += 1
     return STRUC_rec, REACTION_rec
@@ -118,7 +120,7 @@ class SingleCycleSearch:
             ml_df = pd.DataFrame(columns=['index', 'HOAO_a (eV)', 'HOAO_b (eV)', 'LUAO_a (eV)', 'LUAO_b (eV)', 'Atom'])
             if nel == 0:
                 # H+
-                ml_df.loc[0,:] = [0,-np.inf,-np.inf,-np.inf,-np.inf,1]
+                ml_df.loc[0, :] = [0, -np.inf, -np.inf, -np.inf, -np.inf, 1]
                 STRUC_inspector.set_value(f"{struc}.struc_info.reactivity.ml", ml_df)
                 STRUC_inspector.set_value(f"{struc}.struc_info.reactivity.bo", wboe)
                 return
@@ -144,11 +146,10 @@ class SingleCycleSearch:
         #     return
 
         # do ml
-        mlwd = _get_reactive_features(self.wd,struc,self.STRUC_rec,self.setting_d)
-
+        mlwd = _get_reactive_features(self.wd, struc, self.STRUC_rec, self.setting_d)
 
         # read ml
-        ml_feature = pd.read_csv(os.path.join(mlwd, "ml_feature.csv"), index_col=False)
+        ml_feature = pd.read_csv(join(mlwd, "ml_feature.csv"), index_col=False)
         ml_feature.insert(0, 'index', range(len(ml_feature)), allow_duplicates=False)
         ml_feature.set_index("index")
         if 'HOAO_a (eV)' in ml_feature.columns:
@@ -172,10 +173,10 @@ class SingleCycleSearch:
         STRUC_inspector.set_value(f"{struc}.struc_info.reactivity.ml", ml_df)
 
         # set bo
-        if os.path.exists(os.path.join(mlwd, "wboe")) and os.path.getsize(os.path.join(mlwd, "wboe")) != 0:
-            wboe = pd.read_csv(os.path.join(mlwd, "wboe"), header=None, sep='\s+')
-        elif os.path.exists(os.path.join(mlwd, "bde")) and os.path.getsize(os.path.join(mlwd, "bde")) != 0:
-            wboe = pd.read_csv(os.path.join(mlwd, "bde"), header=None, sep='\s+')
+        if os.path.exists(join(mlwd, "wboe")) and os.path.getsize(join(mlwd, "wboe")) != 0:
+            wboe = pd.read_csv(join(mlwd, "wboe"), header=None, sep='\s+')
+        elif os.path.exists(join(mlwd, "bde")) and os.path.getsize(join(mlwd, "bde")) != 0:
+            wboe = pd.read_csv(join(mlwd, "bde"), header=None, sep='\s+')
         else:
             wboe = None
         STRUC_inspector.set_value(f"{struc}.struc_info.reactivity.bo", wboe)
@@ -189,7 +190,7 @@ class SingleCycleSearch:
         for struc in reactants:
             if STRUC_inspector.get_value(f"{struc}.struc_info.reactivity.ml") is None or STRUC_inspector.get_value(
                     f"{struc}.struc_info.reactivity.bo") is None:
-                print("prepare ML features for struc ",struc)
+                print("prepare ML features for struc ", struc)
                 self.ML_prepare(struc)
 
         # starting searching
@@ -239,16 +240,18 @@ class SingleCycleSearch:
     def follow_up_treatment_gfn(self, tmp_path_d):
         import random
         import string
+        from collections import Counter
         # doing sep opt for inter_fragments
         # output_d[count] = ({reactants info},{endxyz info})
         endxyz_info = tmp_path_d[1]
         fragment_l = seperate_fragment(endxyz_info["coord"], endxyz_info["bo"], endxyz_info["atomic_charge"])
         tmp_path_d[1] = []
         setting_inspector = DictionaryInspector(self.setting_d)
+        addinfo_tmp = []
         if len(fragment_l) == 1:
             # unconstrained gfn2 opt
             random_name = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(5))
-            optwd = os.path.join(self.wd, "inter_fragments", random_name, "xtb")
+            optwd = join(self.wd, "inter_fragments", random_name, "xtb")
             create_folder(optwd)
             write_xyz(endxyz_info["coord"], "coord")
             status = CallxTB(optwd, {"method": setting_inspector.get_value("xtb_setting.method", "gfn2"),
@@ -259,24 +262,25 @@ class SingleCycleSearch:
                                      "alpb": setting_inspector.get_value("xtb_setting.alpb", "h2o"),
                                      "etemp": setting_inspector.get_value("xtb_setting.struc_etemp", "4000")
                                      }).opt()
+            addinfo_tmp.append(
+                {"coord": pd.read_table(join(optwd, 'xtbopt.xyz')
+                                        if exists(join(optwd, 'xtbopt.xyz')) else join(optwd, 'coord.xyz'),
+                                        header=None, skiprows=2, sep='\s+'),
+                 "atomic_charge": pd.read_table(join(optwd, "charges"), header=None, sep='\s+'),
+                 "charge": endxyz_info["charge"],
+                 "nel": endxyz_info["nel"],
+                 "atomic_connection": endxyz_info["atomic_connection"]})
 
-
-            tmp_path_d[1].append({"coord": pd.read_table(os.path.join(optwd, 'xtbopt.xyz'),
-                                                                     header=None, skiprows=2, sep='\s+'),
-                                  "atomic_charge": pd.read_table(os.path.join(optwd, "charges"),
-                                                                             header=None, sep='\s+'),
-                                  "charge": endxyz_info["charge"],
-                                  "nel": endxyz_info["nel"],
-                                  "atomic_connection": endxyz_info["atomic_connection"]})
-            return tmp_path_d
         else:
-
             # set a random folder to do opt
             for frindex in range(len(fragment_l)):
                 coord = fragment_l[frindex]["coord"]
+                optwd = None
+                random_name = None
+                constrain_l, ele = [], [str(coord.iloc[0, 0])]
                 if coord.shape[0] > 1:
                     random_name = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(5))
-                    optwd = os.path.join(self.wd, "inter_fragments", random_name, "xtb")
+                    optwd = join(self.wd, "inter_fragments", random_name, "xtb")
                     create_folder(optwd)
                     write_xyz(coord, "coord")
                     if fragment_l[frindex]["nel"] % 2 == 0:
@@ -292,26 +296,35 @@ class SingleCycleSearch:
                                              "etemp": setting_inspector.get_value("xtb_setting.struc_etemp", "4000")
                                              }).opt()
                     if status == 0:
-                        # # check here!!!!
-                        # print(fragment_l[frindex])
-                        # print(optwd)
-                        constrain_l, ele = read_topomol(os.path.join(optwd, 'xtbtopo.mol')) if os.path.exists(
-                            os.path.join(optwd, 'xtbtopo.mol')) else [],[]
-                        tmp_path_d[1].append({"coord": pd.read_table(os.path.join(optwd, 'xtbopt.xyz'),
-                                                                     header=None, skiprows=2, sep='\s+'),
-                                              "atomic_charge": pd.read_table(os.path.join(optwd, "charges"),
-                                                                             header=None, sep='\s+'),
-                                              "charge": fragment_l[frindex]["charge"],
-                                              "nel": fragment_l[frindex]["nel"],
-                                              "strucwd": random_name,
-                                              "atomic_connection": (constrain_l, ele)})
-                else:
-                    tmp_path_d[1].append({"coord": coord,
-                                          "atomic_charge": fragment_l[frindex]["atomic_charge"],
-                                          "charge": fragment_l[frindex]["charge"],
-                                          "nel": fragment_l[frindex]["nel"],
-                                          "atomic_connection": ([], [str(coord.iloc[0, 0])])})
-            return tmp_path_d
+                        if os.path.exists(os.path.join(optwd, 'xtbtopo.mol')):
+                            constrain_l, ele = read_topomol(os.path.join(optwd, 'xtbtopo.mol'))
+                        else:
+                            constrain_l, ele = [], []
+
+                addinfo_tmp.append(
+                    {"coord": pd.read_table(join(optwd, 'xtbopt.xyz'), header=None, skiprows=2, sep='\s+')
+                             if exists(join(optwd, 'xtbopt.xyz')) else coord,
+                     "atomic_charge": pd.read_table(join(optwd, "charges"), header=None, sep='\s+')
+                             if exists(join(optwd, 'charges')) else fragment_l[frindex]["atomic_charge"],
+                     "charge": fragment_l[frindex]["charge"],
+                     "nel": fragment_l[frindex]["nel"],
+                     "strucwd": random_name,
+                     "atomic_connection": (constrain_l, ele)})
+
+        # now evaluate if reaction simulation fall back to starting geom
+        reactants = tmp_path_d[0]["reactants"]
+        STRUC_inspector = DictionaryInspector(self.STRUC_rec)
+        reactants_mbl = [STRUC_inspector.get_value(f"{i}.struc_info.general.mb") for i in reactants]
+        products_mbl = [get_molbarcode(i["coord"],setting_inspector.get_value("searching_setting.general.mb_level"))
+                        for i in addinfo_tmp]
+        if Counter(products_mbl) == Counter(reactants_mbl):
+            bond_changed = False
+        else:
+            bond_changed = True
+        tmp_path_d[0]["bond_changed"] = bond_changed
+        for item in addinfo_tmp:
+            tmp_path_d[1].append(item)
+        return tmp_path_d
 
     def follow_up_treatment_energy(self, tmp_path_d):
         import random
@@ -331,10 +344,10 @@ class SingleCycleSearch:
                     sp_dft = np.inf
                     for m in [1, 3]:
                         wd = create_folder(
-                            os.path.join(self.wd, "inter_fragments", frinfo_d['strucwd'], "orca", str(m)))
+                            join(self.wd, "inter_fragments", frinfo_d['strucwd'], "orca", str(m)))
                         write_xyz(coord, "coord")
                         staus = CallORCA(wd, {"functional": functional,
-                                              "basis":basis,
+                                              "basis": basis,
                                               "charge": frinfo_d["charge"],
                                               "m": m,
                                               "fn": "coord",
@@ -342,19 +355,19 @@ class SingleCycleSearch:
                                               "caltyp2": "RKS" if m == 1 else "UKS",
                                               "solmode": setting_inspector.get_value("orca_setting.solmode", ""),
                                               "ncpu": setting_inspector.get_value("orca_setting.ncpu", 1)}).call()
-                        tmp_e = get_energy(os.path.join(wd, "ENERGY"))
+                        tmp_e = get_energy(join(wd, "ENERGY"))
                         if tmp_e < sp_dft:
                             sp_dft = tmp_e
                             final_m = m
-                            tmp_path_d[1][frindex]["coord"] = pd.read_table(os.path.join(wd, 'orca.xyz'),
+                            tmp_path_d[1][frindex]["coord"] = pd.read_table(join(wd, 'orca.xyz'),
                                                                             header=None, skiprows=2, sep='\s+')
                             tmp_path_d[1][frindex]["sp_dft"] = tmp_e
                             tmp_path_d[1][frindex]["m"] = final_m
                 else:  # do m = 2
-                    wd = create_folder(os.path.join(self.wd, "inter_fragments", frinfo_d['strucwd'], "orca", str(2)))
+                    wd = create_folder(join(self.wd, "inter_fragments", frinfo_d['strucwd'], "orca", str(2)))
                     write_xyz(coord, "coord")
                     staus = CallORCA(wd, {"functional": functional,
-                                          "basis":basis,
+                                          "basis": basis,
                                           "charge": frinfo_d["charge"],
                                           "m": 2,
                                           "fn": "coord",
@@ -362,7 +375,7 @@ class SingleCycleSearch:
                                           "caltyp2": "UKS",
                                           "solmode": setting_inspector.get_value("orca_setting.solmode", ""),
                                           "ncpu": setting_inspector.get_value("orca_setting.ncpu", 1)}).call()
-                    sp_dft = get_energy(os.path.join(wd, "ENERGY"))
+                    sp_dft = get_energy(join(wd, "ENERGY"))
                     tmp_path_d[1][frindex]["sp_dft"] = sp_dft
                     tmp_path_d[1][frindex]["m"] = 2
 
@@ -375,16 +388,16 @@ class SingleCycleSearch:
                     for m in [1, 3]:
                         if "strucwd" in frinfo_d.keys():
                             wd = create_folder(
-                                os.path.join(self.wd, "inter_fragments", frinfo_d['strucwd'], "orca", str(m)))
+                                join(self.wd, "inter_fragments", frinfo_d['strucwd'], "orca", str(m)))
                         else:
                             random_name = ''.join(
                                 random.choice(string.ascii_uppercase + string.digits) for _ in range(5))
                             tmp_path_d[1][frindex]["strucwd"] = random_name
-                            wd = create_folder(os.path.join(self.wd, "inter_fragments", random_name, "orca", str(m)))
+                            wd = create_folder(join(self.wd, "inter_fragments", random_name, "orca", str(m)))
 
                         write_xyz(coord, "coord")
                         staus = CallORCA(wd, {"functional": functional,
-                                              "basis":basis,
+                                              "basis": basis,
                                               "charge": frinfo_d["charge"],
                                               "m": m,
                                               "fn": "coord",
@@ -392,7 +405,7 @@ class SingleCycleSearch:
                                               "caltyp2": "RKS" if m == 1 else "UKS",
                                               "solmode": setting_inspector.get_value("orca_setting.solmode", ""),
                                               "ncpu": setting_inspector.get_value("orca_setting.ncpu", 1)}).call()
-                        tmp_e = get_energy(os.path.join(wd, "ENERGY"))
+                        tmp_e = get_energy(join(wd, "ENERGY"))
                         if tmp_e < sp_dft:
                             sp_dft = tmp_e
                             final_m = m
@@ -401,14 +414,14 @@ class SingleCycleSearch:
                 else:
                     if "strucwd" in frinfo_d.keys():
                         wd = create_folder(
-                            os.path.join(self.wd, "inter_fragments", frinfo_d['strucwd'], "orca", str(2)))
+                            join(self.wd, "inter_fragments", frinfo_d['strucwd'], "orca", str(2)))
                     else:
                         random_name = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(5))
                         tmp_path_d[1][frindex]["strucwd"] = random_name
-                        wd = create_folder(os.path.join(self.wd, "inter_fragments", random_name, "orca", str(2)))
+                        wd = create_folder(join(self.wd, "inter_fragments", random_name, "orca", str(2)))
                     write_xyz(coord, "coord")
                     staus = CallORCA(wd, {"functional": functional,
-                                          "basis":basis,
+                                          "basis": basis,
                                           "charge": frinfo_d["charge"],
                                           "m": 2,
                                           "fn": "coord",
@@ -416,7 +429,7 @@ class SingleCycleSearch:
                                           "caltyp2": "UKS",
                                           "solmode": setting_inspector.get_value("orca_setting.solmode", ""),
                                           "ncpu": setting_inspector.get_value("orca_setting.ncpu", 1)}).call()
-                    sp_dft = get_energy(os.path.join(wd, "ENERGY"))
+                    sp_dft = get_energy(join(wd, "ENERGY"))
                     tmp_path_d[1][frindex]["sp_dft"] = sp_dft
                     tmp_path_d[1][frindex]["m"] = 2
             else:
@@ -429,7 +442,7 @@ class SingleCycleSearch:
             coord = tmp_path_d[1][frindex]["coord"]
             # trv
             if coord.shape[0] > 1:
-                wd = create_folder(os.path.join(self.wd, "inter_fragments", frinfo_d['strucwd'], "xtb", "trv"))
+                wd = create_folder(join(self.wd, "inter_fragments", frinfo_d['strucwd'], "xtb", "trv"))
                 write_xyz(coord, "coord")
                 staus = CallxTB(wd, {"method": setting_inspector.get_value("xtb_setting.method", "gfn2"),
                                      "coordfn": "coord",
@@ -439,13 +452,13 @@ class SingleCycleSearch:
                                      "etemp": setting_inspector.get_value("xtb_setting.struc_etemp", "4000"),
                                      "alpb": setting_inspector.get_value("xtb_setting.alpb", "h2o"),
                                      }).trv()
-                etrv = get_energy(os.path.join(wd, 'GTRV')) if staus == 0 else 0
+                etrv = get_energy(join(wd, 'GTRV')) if staus == 0 else 0
             else:
-                etrv=0
+                etrv = 0
             tmp_path_d[1][frindex]["trv"] = etrv
 
             # solv
-            wd = create_folder(os.path.join(self.wd, "inter_fragments", frinfo_d['strucwd'], "xtb", "solv"))
+            wd = create_folder(join(self.wd, "inter_fragments", frinfo_d['strucwd'], "xtb", "solv"))
             write_xyz(coord, "coord")
             staus = CallxTB(wd, {"method": setting_inspector.get_value("xtb_setting.method", "gfn2"),
                                  "coordfn": "coord",
@@ -455,7 +468,7 @@ class SingleCycleSearch:
                                  "alpb": setting_inspector.get_value("xtb_setting.alpb", "h2o"),
                                  "etemp": setting_inspector.get_value("xtb_setting.struc_etemp", "4000")
                                  }).solv()
-            esolv = get_energy(os.path.join(wd, 'GSOLV')) if staus == 0 else 0
+            esolv = get_energy(join(wd, 'GSOLV')) if staus == 0 else 0
             tmp_path_d[1][frindex]["solv"] = esolv
             tmp_path_d[1][frindex]["G_dft"] = esolv + etrv + sp_dft
         return tmp_path_d
@@ -466,72 +479,82 @@ class SingleCycleSearch:
         STRUC_inspector = DictionaryInspector(self.STRUC_rec)
         REACTION_inspector = DictionaryInspector(self.REACTION_rec)
         reactants_info = tmp_path_d[0]
+        simstatus = reactants_info["bond_changed"]
         reactants_l = reactants_info["reactants"]
         unreact_l = reactants_info["unreacted"]
         reactants_mbl = [STRUC_inspector.get_value(f"{i}.struc_info.general.mb") for i in reactants_l]
         unreact_mbl = [STRUC_inspector.get_value(f"{i}.struc_info.general.mb") for i in unreact_l]
-        products_mbl = [get_molbarcode(tmp_path_d[1][frindex]["coord"], mblevel) for frindex in
-                        range(len(tmp_path_d[1]))]
-        # record all successful paths (reactants != products) and
-        # marked with stuts Ture: allowed to explore further; False: ended in this run.
+        if simstatus:
+            products_mbl = [get_molbarcode(tmp_path_d[1][frindex]["coord"], mblevel) for frindex in
+                            range(len(tmp_path_d[1]))]
+            # record all successful paths (reactants != products) and
+            # marked with stuts Ture: allowed to explore further; False: ended in this run.
 
-        # check if reactants = products
-        if not "unknow" in products_mbl:
-            if Counter(products_mbl) == Counter(reactants_mbl):
-                REACTION_inspector.set_value(reaction_id, [{"reactants": reactants_l,
-                                                            "unreacted": unreact_l,
-                                                            "products": reactants_l,
-                                                            "delta_G": 0},
-                                                           False])
+            # check if reactants = products
+            if not "unknow" in products_mbl:
+                if Counter(products_mbl) == Counter(reactants_mbl):
+                    REACTION_inspector.set_value(reaction_id, [{"reactants": reactants_l,
+                                                                "unreacted": unreact_l,
+                                                                "products": reactants_l,
+                                                                "delta_G": 0},
+                                                               False])
 
-                return self.STRUC_rec, self.REACTION_rec
+                    return self.STRUC_rec, self.REACTION_rec
 
-        status = True
+            status = True
 
-        # check if reaction exist
-        if not "unknow" in products_mbl and not "unknow" in reactants_mbl:
-            for refid,item in self.REACTION_rec.items():
-                info_d = item[0]
-                refreactants = info_d["reactants"]
-                refprodcts = info_d["products"]
-                refunreact = info_d["unreacted"]
-                ref_rmbl = [STRUC_inspector.get_value(f"{i}.struc_info.general.mb") for i in refreactants]
-                ref_pmbl = [STRUC_inspector.get_value(f"{i}.struc_info.general.mb") for i in refprodcts]
-                ref_umbl = [STRUC_inspector.get_value(f"{i}.struc_info.general.mb") for i in refunreact]
+            # check if reaction exist
+            if not "unknow" in products_mbl and not "unknow" in reactants_mbl:
+                for refid, item in self.REACTION_rec.items():
+                    info_d = item[0]
+                    refreactants = info_d["reactants"]
+                    refprodcts = info_d["products"]
+                    refunreact = info_d["unreacted"]
+                    ref_rmbl = [STRUC_inspector.get_value(f"{i}.struc_info.general.mb") for i in refreactants]
+                    ref_pmbl = [STRUC_inspector.get_value(f"{i}.struc_info.general.mb") for i in refprodcts]
+                    ref_umbl = [STRUC_inspector.get_value(f"{i}.struc_info.general.mb") for i in refunreact]
 
-                if Counter(products_mbl) == Counter(ref_pmbl) and Counter(reactants_mbl) == Counter(ref_rmbl):
-                    # test unreactants too
-                    if Counter(unreact_mbl) == Counter(ref_umbl):
-                        status = False
+                    if Counter(products_mbl) == Counter(ref_pmbl) and Counter(reactants_mbl) == Counter(ref_rmbl):
+                        # test unreactants too
+                        if Counter(unreact_mbl) == Counter(ref_umbl):
+                            status = False
 
-        # check if reaction energy < thres.
-        G0 = sum([STRUC_inspector.get_value(f"{i}.struc_info.energy.G_dft") for i in reactants_l])
-        G1 = sum([tmp_path_d[1][frindex]["G_dft"] for frindex in range(len(tmp_path_d[1]))])
-        delta_G = (G1 - G0) * 627.503
-        if delta_G > DictionaryInspector(self.setting_d).get_value("searching_setting.general.elim",300):
-            status = False
+            # check if reaction energy < thres.
+            G0 = sum([STRUC_inspector.get_value(f"{i}.struc_info.energy.G_dft") for i in reactants_l])
+            G1 = sum([tmp_path_d[1][frindex]["G_dft"] for frindex in range(len(tmp_path_d[1]))])
+            delta_G = (G1 - G0) * 627.503
+            if delta_G > DictionaryInspector(self.setting_d).get_value("searching_setting.general.elim", 300):
+                status = False
 
-        # prepare to record reaction info
-        # check according to mb if add new struc from products in struc.rec
-        products_l = []
-        for frindex in range(len(tmp_path_d[1])):
-            pmb = products_mbl[frindex]
-            addtriger = True
-            if pmb != "unknow":
-                for struc in self.STRUC_rec.keys():
-                    if STRUC_inspector.get_value(f"{struc}.struc_info.general.mb") == pmb:
-                        products_l.append(struc)
-                        addtriger = False
-            if addtriger:
-                newstrucid = self.add_newstruc(tmp_path_d[1][frindex])
-                products_l.append(newstrucid)
+            # prepare to record reaction info
+            # check according to mb if add new struc from products in struc.rec
+            products_l = []
+            for frindex in range(len(tmp_path_d[1])):
+                pmb = products_mbl[frindex]
+                addtriger = True
+                if pmb != "unknow":
+                    for struc in self.STRUC_rec.keys():
+                        if STRUC_inspector.get_value(f"{struc}.struc_info.general.mb") == pmb:
+                            products_l.append(struc)
+                            addtriger = False
+                if addtriger:
+                    newstrucid = self.add_newstruc(tmp_path_d[1][frindex])
+                    products_l.append(newstrucid)
 
-        # add reaction info into reaction rec
-        REACTION_inspector.set_value(reaction_id, [{"reactants": reactants_l,
-                                                    "unreacted": unreact_l,
-                                                    "products": products_l,
-                                                    "delta_G": delta_G},
-                                                   status])
+            # add reaction info into reaction rec
+            REACTION_inspector.set_value(reaction_id, [{"reactants": reactants_l,
+                                                        "unreacted": unreact_l,
+                                                        "products": products_l,
+                                                        "delta_G": delta_G,
+                                                        "bond_changed":True},
+                                                       status])
+        else:
+            REACTION_inspector.set_value(reaction_id, [{"reactants": reactants_l,
+                                                        "unreacted": unreact_l,
+                                                        "products": reactants_l,
+                                                        "delta_G": 0,
+                                                        "bond_changed": False},
+                                                       False])
         return self.STRUC_rec, self.REACTION_rec
 
     def add_newstruc(self, strucinfo_d):
@@ -556,8 +579,8 @@ class SingleCycleSearch:
         inspector_1.set_value(f"{newid}.struc_info.energy.G_dft", inspector_2.get_value("G_dft"))
 
         # move folder
-        tmpwd = os.path.join(self.wd, "inter_fragments", inspector_2.get_value("strucwd"))
-        tarwd = os.path.join(self.wd, "struc", newid)
+        tmpwd = join(self.wd, "inter_fragments", inspector_2.get_value("strucwd"))
+        tarwd = join(self.wd, "struc", newid)
         # print(f"move {tmpwd} to {tarwd}")
 
         if os.path.exists(tmpwd) and not os.path.exists(tarwd):

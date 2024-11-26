@@ -111,8 +111,10 @@ def simulation_interA(reactants,  # reactants list
 
             if status == 0:
                 endxyz = pd.read_table(os.path.join(scan_wd, 'xtbopt.xyz'), header=None, skiprows=2, sep='\s+')
-                constrain_l, ele = read_topomol(os.path.join(scan_wd, 'xtbtopo.mol')) if os.path.exists(
-                            os.path.join(scan_wd, 'xtbtopo.mol')) else [],[]
+                if os.path.exists(os.path.join(scan_wd, 'xtbtopo.mol')):
+                    constrain_l, ele = read_topomol(os.path.join(scan_wd, 'xtbtopo.mol'))
+                else:
+                    constrain_l, ele = [], []
                 if os.path.getsize(os.path.join(scan_wd, "wbo")) != 0:
                     bo = pd.read_csv(os.path.join(scan_wd, "wbo"), header=None, sep='\s+')
                 else:
@@ -151,7 +153,7 @@ def simulation_interA(reactants,  # reactants list
             push_l = build_push_l(coord, at_l)
 
             # get atomic connection
-            atom_connection, ele = struc_inspector.get_value(f"{strucid}.struc_info.atomic_connection")
+            atom_connection, ele = struc_inspector.get_value(f"{strucid}.struc_info.general.atomic_connection")
             for item in push_l:
                 at1, at2 = int(item[0]), int(item[1])
                 value = float(item[3])
@@ -169,8 +171,10 @@ def simulation_interA(reactants,  # reactants list
                                        }).opt()
             if status == 0:
                 endxyz = pd.read_table(os.path.join(scan_wd, 'xtbopt.xyz'), header=None, skiprows=2, sep='\s+')
-                constrain_l, ele = read_topomol(os.path.join(scan_wd, 'xtbtopo.mol')) if os.path.exists(
-                            os.path.join(scan_wd, 'xtbtopo.mol')) else [],[]
+                if os.path.exists(os.path.join(scan_wd, 'xtbtopo.mol')):
+                    constrain_l, ele = read_topomol(os.path.join(scan_wd, 'xtbtopo.mol'))
+                else:
+                    constrain_l, ele = [], []
                 if os.path.getsize(os.path.join(scan_wd, "wbo")) != 0:
                     bo = pd.read_csv(os.path.join(scan_wd, "wbo"), header=None, sep='\s+')
                 else:

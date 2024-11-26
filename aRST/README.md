@@ -126,6 +126,7 @@ search_mode = 1                     # 0: only search association possibility bet
 loose_bond =                        # bool (defalut as False), loose a bit the weakest bond in the struc
 maxovlap =                          # bool (defalut as False), different alignment direction
 aligning_distance = 5               # int, scale of aligning distance
+concerted_pair= False               # bool, create concerted pair in simulations (good for DA reactions)
 
 [searching_setting.disso]
 number = 1                          # int, number of inermolecular reaction paths to be search in one cycle
