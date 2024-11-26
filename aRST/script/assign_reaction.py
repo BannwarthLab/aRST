@@ -244,15 +244,33 @@ class SingleCycleSearch:
         endxyz_info = tmp_path_d[1]
         fragment_l = seperate_fragment(endxyz_info["coord"], endxyz_info["bo"], endxyz_info["atomic_charge"])
         tmp_path_d[1] = []
+        setting_inspector = DictionaryInspector(self.setting_d)
         if len(fragment_l) == 1:
-            tmp_path_d[1].append({"coord": endxyz_info["coord"],
-                                  "atomic_charge": endxyz_info["atomic_charge"],
+            # unconstrained gfn2 opt
+            random_name = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(5))
+            optwd = os.path.join(self.wd, "inter_fragments", random_name, "xtb")
+            create_folder(optwd)
+            write_xyz(endxyz_info["coord"], "coord")
+            status = CallxTB(optwd, {"method": setting_inspector.get_value("xtb_setting.method", "gfn2"),
+                                     "coordfn": "coord",
+                                     "optlevel": setting_inspector.get_value("xtb_setting.optlevel", None),
+                                     "charge": endxyz_info["charge"],
+                                     "uhf": endxyz_info["uhf"],
+                                     "alpb": setting_inspector.get_value("xtb_setting.alpb", "h2o"),
+                                     "etemp": setting_inspector.get_value("xtb_setting.struc_etemp", "4000")
+                                     }).opt()
+
+
+            tmp_path_d[1].append({"coord": pd.read_table(os.path.join(optwd, 'xtbopt.xyz'),
+                                                                     header=None, skiprows=2, sep='\s+'),
+                                  "atomic_charge": pd.read_table(os.path.join(optwd, "charges"),
+                                                                             header=None, sep='\s+'),
                                   "charge": endxyz_info["charge"],
                                   "nel": endxyz_info["nel"],
                                   "atomic_connection": endxyz_info["atomic_connection"]})
             return tmp_path_d
         else:
-            setting_inspector = DictionaryInspector(self.setting_d)
+
             # set a random folder to do opt
             for frindex in range(len(fragment_l)):
                 coord = fragment_l[frindex]["coord"]
@@ -261,7 +279,6 @@ class SingleCycleSearch:
                     optwd = os.path.join(self.wd, "inter_fragments", random_name, "xtb")
                     create_folder(optwd)
                     write_xyz(coord, "coord")
-
                     if fragment_l[frindex]["nel"] % 2 == 0:
                         uhf = 0
                     else:

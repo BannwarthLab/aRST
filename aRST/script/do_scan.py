@@ -10,7 +10,7 @@ from aRST.script.geom import Coord
 from aRST.script.callsys import CallxTB
 
 
-def build_push_l(coord, at_l, nat1=0,d=0.95):
+def build_push_l(coord, at_l, nat1=0,d=0.98):
     # avoiding crossing push atomic pairs
     if len(at_l) ==2:
 

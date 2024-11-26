@@ -101,6 +101,7 @@ def simulation_intraD(reactants,  # reactants list
                                         {"atomic_charge": atcharge,
                                          "charge":round_charge(sum(atcharge),0.5),
                                          "nel": nel,
+                                         "uhf": uhf if not np.isinf(uhf) else 0,
                                          "coord": endxyz,
                                          "bo": bo,
                                          "atomic_connection": (constrain_l, ele)
@@ -134,8 +135,9 @@ def simulation_intraD(reactants,  # reactants list
                                              "unreacted": [st for st in reactants if st != strucid]
                                              if len(reactants) > 1 else []},  # reactants info
                                             {"atomic_charge": atcharge,
-                                             "charge":round_charge(sum(atcharge),0.5),
+                                             "charge":charge,
                                              "nel": nel,
+                                             "uhf": 2,
                                              "coord": endxyz,
                                              "bo": bo,
                                              "atomic_connection": (constrain_l, ele)
@@ -190,7 +192,7 @@ def simulation_intraD(reactants,  # reactants list
                                          "unreacted": [st for st in reactants if st != strucid]
                                          if len(reactants) > 1 else []},  # reactants info
                                         {"atomic_charge": atcharge,
-                                         "charge":round_charge(sum(atcharge),0.5),
+                                         "charge":charge,
                                          "nel": nel,
                                          "coord": endxyz,
                                          "bo": bo,

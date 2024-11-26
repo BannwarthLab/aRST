@@ -209,8 +209,9 @@ def simulation_interA(reactants,  # reactants list
                                                        if st != struc1 and st != struc2]
                                          if len(reactants) > 2 else []},  # reactants info
                                         {"atomic_charge": atcharge,
-                                         "charge": round_charge(sum(atcharge), 0.5),
+                                         "charge": charge,
                                          "nel": totnel,
+                                         "uhf":uhf if not np.isinf(uhf) else 0,
                                          "coord": endxyz,
                                          "bo": bo,
                                          "atomic_connection": (constrain_l, ele)}  # endxyz info
@@ -260,8 +261,9 @@ def simulation_interA(reactants,  # reactants list
                                                            if st != struc1 and st != struc2]
                                              if len(reactants) > 2 else []},  # reactants info
                                             {"atomic_charge": atcharge,
-                                             "charge": round_charge(sum(atcharge), 0.5),
+                                             "charge": charge,
                                              "nel": totnel,
+                                             "uhf": 2,
                                              "coord": endxyz,
                                              "bo": bo,
                                              "atomic_connection": (constrain_l, ele)}  # endxyz info
@@ -314,8 +316,9 @@ def simulation_interA(reactants,  # reactants list
                                                        if st != struc1 and st != struc2]
                                          if len(reactants) > 2 else []},  # reactants info
                                         {"atomic_charge": atcharge,
-                                         "charge": round_charge(sum(atcharge), 0.5),
+                                         "charge": charge,
                                          "nel": totnel,
+                                         "uhf": 1 if totnel % 2 != 0 else 2,
                                          "coord": endxyz,
                                          "bo": bo,
                                          "atomic_connection": (constrain_l, ele)}  # endxyz info

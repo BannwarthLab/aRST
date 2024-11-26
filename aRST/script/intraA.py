@@ -122,8 +122,9 @@ def simulation_interA(reactants,  # reactants list
                                          "unreacted": [st for st in reactants if st != strucid]
                                          if len(reactants) > 1 else []},  # reactants info
                                         {"atomic_charge": atcharge,
-                                         "charge":round_charge(sum(atcharge),0.5),
+                                         "charge":charge,
                                          "nel": nel,
+                                         "uhf": uhf,
                                          "coord": endxyz,
                                          "bo": bo,
                                          "atomic_connection": (constrain_l, ele)}  # endxyz info
@@ -179,7 +180,7 @@ def simulation_interA(reactants,  # reactants list
                                          "unreacted": [st for st in reactants if st != strucid]
                                          if len(reactants) > 1 else []},  # reactants info
                                         {"atomic_charge": atcharge,
-                                         "charge":round_charge(sum(atcharge),0.5),
+                                         "charge":charge,
                                          "nel": nel,
                                          "coord": endxyz,
                                          "bo": bo,
