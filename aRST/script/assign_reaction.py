@@ -266,10 +266,11 @@ class SingleCycleSearch:
                 {"coord": pd.read_table(join(optwd, 'xtbopt.xyz')
                                         if exists(join(optwd, 'xtbopt.xyz')) else join(optwd, 'coord.xyz'),
                                         header=None, skiprows=2, sep='\s+'),
-                 "atomic_charge": pd.read_table(join(optwd, "charges"), header=None, sep='\s+'),
+                 "atomic_charge": pd.read_table(join(optwd, "charges"), header=None, sep='\s+')
+                 if status==0 else endxyz_info["atomic_charge"],
                  "charge": endxyz_info["charge"],
                  "nel": endxyz_info["nel"],
-                 "strucwd":random_name,
+                 "strucwd": random_name,
                  "atomic_connection": endxyz_info["atomic_connection"]})
 
         else:
@@ -277,13 +278,12 @@ class SingleCycleSearch:
             for frindex in range(len(fragment_l)):
                 coord = fragment_l[frindex]["coord"]
                 optwd = None
-                random_name = None
                 constrain_l, ele = [], [str(coord.iloc[0, 0])]
+                random_name = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(5))
+                optwd = join(self.wd, "inter_fragments", random_name, "xtb")
+                create_folder(optwd)
+                write_xyz(coord, "coord")
                 if coord.shape[0] > 1:
-                    random_name = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(5))
-                    optwd = join(self.wd, "inter_fragments", random_name, "xtb")
-                    create_folder(optwd)
-                    write_xyz(coord, "coord")
                     if fragment_l[frindex]["nel"] % 2 == 0:
                         uhf = 0
                     else:
@@ -303,10 +303,13 @@ class SingleCycleSearch:
                             constrain_l, ele = [], []
 
                 addinfo_tmp.append(
-                    {"coord": pd.read_table(join(optwd, 'xtbopt.xyz'), header=None, skiprows=2, sep='\s+')
-                             if exists(join(optwd, 'xtbopt.xyz')) else coord,
-                     "atomic_charge": pd.read_table(join(optwd, "charges"), header=None, sep='\s+')
-                             if exists(join(optwd, 'charges')) else fragment_l[frindex]["atomic_charge"],
+                    {"coord": pd.read_table(join(optwd, 'xtbopt.xyz'),
+                                            header=None, skiprows=2, sep='\s+')
+                                            if (optwd is not None and exists(join(optwd, 'xtbopt.xyz'))) else coord,
+                     "atomic_charge": pd.read_table(join(optwd, "charges"),
+                                                    header=None, sep='\s+')
+                                                    if (optwd is not None and exists(join(optwd, 'charges')))
+                                                    else fragment_l[frindex]["atomic_charge"],
                      "charge": fragment_l[frindex]["charge"],
                      "nel": fragment_l[frindex]["nel"],
                      "strucwd": random_name,
@@ -316,7 +319,7 @@ class SingleCycleSearch:
         reactants = tmp_path_d[0]["reactants"]
         STRUC_inspector = DictionaryInspector(self.STRUC_rec)
         reactants_mbl = [STRUC_inspector.get_value(f"{i}.struc_info.general.mb") for i in reactants]
-        products_mbl = [get_molbarcode(i["coord"],setting_inspector.get_value("searching_setting.general.mb_level"))
+        products_mbl = [get_molbarcode(i["coord"], setting_inspector.get_value("searching_setting.general.mb_level"))
                         for i in addinfo_tmp]
         if Counter(products_mbl) == Counter(reactants_mbl):
             bond_changed = False
@@ -387,14 +390,8 @@ class SingleCycleSearch:
                     sp_dft = np.inf
                     final_m = None
                     for m in [1, 3]:
-                        if "strucwd" in frinfo_d.keys():
-                            wd = create_folder(
-                                join(self.wd, "inter_fragments", frinfo_d['strucwd'], "orca", str(m)))
-                        else:
-                            random_name = ''.join(
-                                random.choice(string.ascii_uppercase + string.digits) for _ in range(5))
-                            tmp_path_d[1][frindex]["strucwd"] = random_name
-                            wd = create_folder(join(self.wd, "inter_fragments", random_name, "orca", str(m)))
+                        wd = create_folder(
+                            join(self.wd, "inter_fragments", frinfo_d['strucwd'], "orca", str(m)))
 
                         write_xyz(coord, "coord")
                         staus = CallORCA(wd, {"functional": functional,
@@ -413,13 +410,8 @@ class SingleCycleSearch:
                             tmp_path_d[1][frindex]["sp_dft"] = tmp_e
                             tmp_path_d[1][frindex]["m"] = final_m
                 else:
-                    if "strucwd" in frinfo_d.keys():
-                        wd = create_folder(
-                            join(self.wd, "inter_fragments", frinfo_d['strucwd'], "orca", str(2)))
-                    else:
-                        random_name = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(5))
-                        tmp_path_d[1][frindex]["strucwd"] = random_name
-                        wd = create_folder(join(self.wd, "inter_fragments", random_name, "orca", str(2)))
+                    wd = create_folder(
+                        join(self.wd, "inter_fragments", frinfo_d['strucwd'], "orca", str(2)))
                     write_xyz(coord, "coord")
                     staus = CallORCA(wd, {"functional": functional,
                                           "basis": basis,
@@ -497,7 +489,8 @@ class SingleCycleSearch:
                     REACTION_inspector.set_value(reaction_id, [{"reactants": reactants_l,
                                                                 "unreacted": unreact_l,
                                                                 "products": reactants_l,
-                                                                "delta_G": 0},
+                                                                "delta_G": 0,
+                                                                "bond_changed": True},
                                                                False])
 
                     return self.STRUC_rec, self.REACTION_rec
@@ -547,7 +540,7 @@ class SingleCycleSearch:
                                                         "unreacted": unreact_l,
                                                         "products": products_l,
                                                         "delta_G": delta_G,
-                                                        "bond_changed":True},
+                                                        "bond_changed": True},
                                                        status])
         else:
             REACTION_inspector.set_value(reaction_id, [{"reactants": reactants_l,
