@@ -106,6 +106,9 @@ def refine_struc_info(wd0,strucid, struc_rec, setting_d):
             sp_xtb = get_energy(os.path.join(wd, 'ENERGY'))
             if os.path.exists(os.path.join(wd, 'xtbtopo.mol')):
                 constrain_l, ele = read_topomol(os.path.join(wd, 'xtbtopo.mol'))
+            elif coord.shape[0]==1:
+                constrain_l=[]
+                ele = [coord.iloc[0,0]]
             else:
                 constrain_l, ele = [], []
         else:

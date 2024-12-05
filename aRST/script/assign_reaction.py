@@ -299,8 +299,6 @@ class SingleCycleSearch:
                     if status == 0:
                         if os.path.exists(os.path.join(optwd, 'xtbtopo.mol')):
                             constrain_l, ele = read_topomol(os.path.join(optwd, 'xtbtopo.mol'))
-                        else:
-                            constrain_l, ele = [], []
 
                 addinfo_tmp.append(
                     {"coord": pd.read_table(join(optwd, 'xtbopt.xyz'),
