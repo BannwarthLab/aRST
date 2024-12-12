@@ -157,44 +157,6 @@ def write_xyz(xyz, name):
         f.write('\n')
 
 
-
-# def get_charge(coord_new, coord_old, chargefile):
-#     context = pd.read_table(chargefile, header=None, sep='\s+')
-#
-#     nat_l = []
-#     coord_new = coord_new.round(4)
-#     coord_old = coord_old.round(4)
-#     try:
-#         for i in range(coord_new.shape[0]):
-#             new = [coord_new.iloc[i, 1], coord_new.iloc[i, 2], coord_new.iloc[i, 3]]
-#             for j in range(coord_old.shape[0]):
-#                 old = [coord_old.iloc[j, 1], coord_old.iloc[j, 2], coord_old.iloc[j, 3]]
-#                 if new == old:
-#                     nat_l.append(j)
-#     except IndexError:
-#         print(chargefile)
-#     charge = 0
-#     for i in nat_l:
-#         charge += float(context.iloc[i, 0])
-#
-#     # tmp set homogeneous dissociation
-#     a = int(math.modf(charge)[1])
-#     if abs(charge - a) >= 0.5:
-#         return int(np.round(charge))
-#     else:
-#         return a
-
-# def get_total_charge(chargefile):
-#     context = pd.read_table(chargefile, header=None, sep='\s+')
-#     charge=0
-#     for i in range(context.shape[0]):
-#         charge+=float(context.iloc[i, 0])
-#     return int(charge)
-
-
-
-
-
 def get_nelectron(xtboutwd):
     with open(f'{xtboutwd}', 'r') as f:
         l = []
@@ -245,22 +207,6 @@ def lowestgeom(infile):
         return outlist
 
 
-# def sum_energy(fragments,level,struc_inspector):
-#     energy = None
-#     tmp = [struc_inspector.get_value(f"{k}.struc_info.energy.{level}") for k in fragments]
-#     print("fragments:",fragments)
-#     print("energy:",tmp)
-#     if not any(element is None for element in tmp):
-#         energy= sum(tmp)
-#     return energy
-
-# def get_reactionenergy(reactants, products, level,struc_inspector):
-#     ereaction = None
-#     ereactants = sum_energy(reactants, level,struc_inspector)
-#     eproducts = sum_energy(products, level,struc_inspector)
-#     if ereactants is not None and eproducts is not None:
-#         ereaction = eproducts - ereactants
-#     return ereaction
 
 def read_topomol(molfile, nat1=None):
     from aRST.script.geom import r0
