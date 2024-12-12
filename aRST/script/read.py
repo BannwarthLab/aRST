@@ -1,4 +1,5 @@
 import os
+import shutil
 import sys
 
 from aRST.script.dictionaryInspector import DictionaryInspector
@@ -6,8 +7,83 @@ from aRST.script.toolbox import get_nelectron, create_folder, get_energy, write_
 from aRST.script.callsys import CallxTB, CallORCA
 import pandas as pd
 
+def read_geom_d(wd,setting_d):
+    geom_d = setting_d["geom"]
+    setting_inspertor = DictionaryInspector(setting_d)
+    # read struc info and generate STRUC_rec
+    STRUC_rec = {}
+    REFSTRUC_rec = {}
+    REACTION_rec = {}
+    STRUC_inspector = DictionaryInspector(STRUC_rec)
+    REFSTRUC_inspector = DictionaryInspector(REFSTRUC_rec)
+    reactants_ini = []
+    refproducts_ini = []
+    rcount, pcount = 0, 0
+    jumprefine = setting_inspertor.get_value(f"read.general.jumprefine", False)
 
-def initial_struc_info(wd0,geom_d, strucid, keyname,setting_d,struc_rec = {}):
+    if jumprefine:
+        nreactants = len([_ for _ in geom_d.keys() if "reactant" in _])
+        for n in range(nreactants):
+            struckn = list(geom_d.keys())[n]
+            STRUC_rec = initial_struc_info(wd, geom_d, str(n), struckn, setting_d, STRUC_rec,
+                                           jumprefine=jumprefine)
+            reactants_ini.append(str(n))
+        return reactants_ini,refproducts_ini,STRUC_rec,REFSTRUC_rec,REFSTRUC_rec,REACTION_rec
+    for struckn in geom_d.keys():
+        number = setting_inspertor.get_value(f"geom.{struckn}.number", 1)
+        if "reactant" in struckn:
+            if not reactants_ini:
+                STRUC_rec = initial_struc_info(wd, geom_d, str(rcount), struckn, setting_d, STRUC_rec,
+                                               jumprefine=jumprefine)
+                reactants_ini = [str(rcount) for _ in range(setting_inspertor.get_value(f"geom.{struckn}.number", 1))]
+                rcount += 1
+            else:
+                tmp_STRUC_rec = initial_struc_info(wd, geom_d, str(rcount), struckn, setting_d, {},
+                                                   jumprefine=jumprefine)
+                tmp_mb = DictionaryInspector(tmp_STRUC_rec).get_value(f"{rcount}.struc_info.general.mb")
+                addtriger = True
+                if tmp_mb != "unknow":
+                    for struc in STRUC_rec.keys():
+                        if STRUC_inspector.get_value(f"{struc}.struc_info.general.mb") == tmp_mb:
+                            addtriger = False
+                            for _ in range(setting_inspertor.get_value(f"geom.{struckn}.number", 1)):
+                                reactants_ini.append(struc)
+                if addtriger:
+                    STRUC_rec[str(rcount)] = tmp_STRUC_rec[str(rcount)]
+                    for _ in range(setting_inspertor.get_value(f"geom.{struckn}.number", 1)):
+                        reactants_ini.append(str(rcount))
+                    rcount += 1
+                else:
+                    # del the tmp calculation folder
+                    tmp_struc_wd = os.path.join(wd, "struc", str(rcount), "xtb")
+                    if os.path.exists(tmp_struc_wd):
+                        shutil.rmtree(tmp_struc_wd, ignore_errors=True)
+        elif "product" in struckn:
+            if not refproducts_ini:
+                REFSTRUC_rec = initial_struc_info(wd, geom_d, str(pcount), struckn, setting_d, REFSTRUC_rec,
+                                                  jumprefine=jumprefine)
+                refproducts_ini = [str(pcount) for _ in range(setting_inspertor.get_value(f"geom.{struckn}.number", 1))]
+                pcount += 1
+            else:
+                tmp_REFSTRUC_rec = initial_struc_info(wd, geom_d, str(pcount), struckn, setting_d, {},
+                                                      jumprefine=jumprefine)
+                tmp_mb = DictionaryInspector(tmp_REFSTRUC_rec).get_value(f"{pcount}.struc_info.general.mb")
+                addtriger = True
+                if tmp_mb != "unknow":
+                    for struc in REFSTRUC_rec.keys():
+                        if REFSTRUC_inspector.get_value(f"{struc}.struc_info.general.mb") == tmp_mb:
+                            addtriger = False
+                            for _ in range(setting_inspertor.get_value(f"geom.{struckn}.number", 1)):
+                                refproducts_ini.append(struc)
+                if addtriger:
+                    REFSTRUC_rec[str(pcount)] = tmp_REFSTRUC_rec[str(rcount)]
+                    for _ in range(setting_inspertor.get_value(f"geom.{struckn}.number", 1)):
+                        refproducts_ini.append(str(pcount))
+                    pcount += 1
+    return reactants_ini,refproducts_ini,STRUC_rec,REFSTRUC_rec,REFSTRUC_rec,REACTION_rec
+
+
+def initial_struc_info(wd0,geom_d, strucid, keyname,setting_d,struc_rec = {},jumprefine=False):
     os.chdir(wd0)
     geom_inspector = DictionaryInspector(geom_d)
     STRUC_inspector = DictionaryInspector(struc_rec)
@@ -21,7 +97,9 @@ def initial_struc_info(wd0,geom_d, strucid, keyname,setting_d,struc_rec = {}):
 
         if geom_inspector.get_value(f"{keyname}.at") is not None:
             STRUC_inspector.set_value(f"{strucid}.struc_info.general.at", geom_inspector.get_value(f"{keyname}.at"))
-        struc_rec = refine_struc_info(wd0,strucid,struc_rec,setting_d)
+        #
+        if not jumprefine:
+            struc_rec = refine_struc_info(wd0,strucid,struc_rec,setting_d)
         return struc_rec
     else:
         raise Exception("Can't read struc info from input file.")
