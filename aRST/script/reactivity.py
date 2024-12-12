@@ -2,7 +2,7 @@ import os.path
 from aRST.script.toolbox import create_folder
 from aRST.script.dictionaryInspector import DictionaryInspector
 from aRST.script.assign_reaction import SingleCycleSearch
-from aRST.script.spr import SPR_HL, SPR_dissociation,build_bo_d
+from aRST.script.spr import SPR_HL, SPR_dissociation,build_bo_d,find_identical_at
 import json
 
 
@@ -18,46 +18,33 @@ def get_reactivity(wd, STRUC_rec, setting_d, reactants):
 
     if len(reactants) > 1 and setting_inspector.get_value("searching_setting.inter"):
         # get interA reaction possibility
+        from aRST.script.interA import add_intera,screen_identical_scan
+
         react_aa, react_bb, react_ab, react_ba = SPR_HL(reactants,
                                                         STRUC_rec,
-                                                        allow_hydrogen=setting_inspector.get_value(
-                                                            "searching_setting.inter.hydrogen", True),
-                                                        allow_halogen=setting_inspector.get_value(
-                                                            "searching_setting.inter.halogen", True),
-                                                        search_range=setting_inspector.get_value(
-                                                            "searching_setting.inter.search_mode", 1)
-                                                        )  # react_d:  key= 5.93, value = {('1', '1'), [['0', '0']]}
+                                                        allow_hydrogen=setting_inspector.get_value("searching_setting.inter.hydrogen", True),
+                                                        allow_halogen=setting_inspector.get_value("searching_setting.inter.halogen", True),
+                                                        search_mode=setting_inspector.get_value("searching_setting.inter.search_mode", 1),
+                                                        )
+
 
         print("starting to search inter-association possibility:")
         print("allow_hydrogen:",setting_inspector.get_value("searching_setting.inter.hydrogen", True))
         print("allow_halogen:", setting_inspector.get_value("searching_setting.inter.halogen", True))
         print("search_range:", setting_inspector.get_value("searching_setting.inter.number", 1))
         print("write jason and txt file in ", os.path.join("reactivity", "interA"))
-        print("for jason dict: "
-              "{'hoao-luao gap':[struc index1, struc index2,[[at index 1,at index2],[possible eq atomic combination]]]")
         print("\n")
         if any([react_d for react_d in [react_aa, react_bb, react_ab, react_ba]]):
             outputwd = create_folder(os.path.join(wd, "reactivity", "interA"))
             name_l = ["aa", "bb", "ab", "ba"]
+            identical_atom_d = find_identical_at(reactants,STRUC_rec)
             for react_d, name in zip([react_aa, react_bb, react_ab, react_ba], name_l):
                 if react_d:
-                    # build up a tmp inter_d
-                    intera = {}
-                    key_l = sorted(react_d.keys())[:setting_inspector.get_value(
-                                                            "searching_setting.inter.number", 10)]
-                    for current_key in key_l:
-                        current_item = react_d[current_key]
-                        for struc_combi, at_l in current_item.items():
-                            struc1, struc2 = struc_combi
-                            intera[current_key] = struc1, struc2, at_l
+                    intera = add_intera({}, react_d)
+                    intera = screen_identical_scan(intera, identical_atom_d)
                     with open(f'{outputwd}/{name}.json', "w") as f:
                         f.write(json.dumps(intera, indent=2))
                         f.write('\n')
-                    with open(f'{outputwd}/top_{name}', "w") as f:
-                        f.write("    gap,    STRUC1,    STRUC2,         at_l\n")
-                        for gap in sorted(intera.keys())[:10]:
-                            struc1, struc2, at_l = intera[gap]
-                            f.write(f"%8.3f,%8d,%8d,      {at_l}\n" % (gap, int(struc1), int(struc2)))
         else:
             raise Exception(f"no possible interA possibilities can be found in reactants list: {reactants}.")
 
