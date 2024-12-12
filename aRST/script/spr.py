@@ -82,18 +82,6 @@ def refine_react_l(react_l,identical_atom_d):
                         searchitem["HOAO"]=item["HOAO"]
                         searchitem["LUAO"] = item["LUAO"]
                         break
-    # # del duplicated pairs (for concerted push)
-    # for item in out_react_l:
-    #     allpairs = item["at_combi"]
-    #     pairs = []
-    #     used_l1 = used_l2 = []
-    #     for pairitem in allpairs:
-    #         pat1,pat2 = pairitem
-    #         if pat1 not in used_l1 and pat2 not in used_l2:
-    #             pairs.append([str(pat1),str(pat2)])
-    #             used_l1.append(pat1)
-    #             used_l2.append(pat2)
-    #     item["at_combi"]=pairs
     return out_react_l
 
 
