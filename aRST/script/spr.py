@@ -4,79 +4,98 @@ spr = search possiable reaction site
 """
 import sys
 import traceback
+from itertools import product
 import numpy as np
 import pandas as pd
 from aRST.script.dictionaryInspector import DictionaryInspector
 
 
-def build_gap_d(react_d, h_df, l_df, search_mode,concerted_pair=False):
+def build_react_l(h_df, l_df, search_mode):
     """
     loop over Hdf and Ldf to build up atomic pairs
     """
-    h_colname = h_df.columns.tolist()
-    l_colname = l_df.columns.tolist()
-
-    def wrap_build_dict(Lcol, Lindex, L, Hcol, Hindex, H, react_d,concerted_pair=False):
-        gap = np.round(np.round(L,2) - np.round(H,2),2)
-        tmp_key = (str(Hcol), str(Lcol)) # struc combi
-        tmp_val = [str(Hindex), str(Lindex)] # at combi
-
-        # check if gap exist
-        if gap not in react_d.keys():
-            react_d[gap] = {}
-            react_d[gap][tmp_key] = [tmp_val]
-        # degenrated pairs form different struc combinations
-        elif tmp_key not in react_d[gap].keys() \
-                and tuple(list(tmp_key)[::-1]) not in react_d[gap].keys():
-            react_d[gap][tmp_key] = [tmp_val]
-        # degenrated pairs form same struc combinations
-        elif concerted_pair:
-            for current_key, current_item in react_d[gap].items():
-                if tmp_key == current_key and len(set(tmp_key)) == 1:
-                    if tmp_val in current_item or tmp_val[::-1] in current_item:
-                        continue
-                if tmp_key == current_key and tmp_val \
-                        not in current_item:
-                    # same atom not allow to appear twice e.g. [['2', '1'], ['3', '1']]
-                    if tmp_val[0] not in [k[0] for k in current_item] \
-                            and tmp_val[1] not in [k[1] for k in current_item]:
-                        current_item.append(tmp_val)
-                elif tuple(list(tmp_key)[::-1]) == current_key and tmp_val[::-1] \
-                        not in current_item:
-                    if tmp_val[0] not in [k[0] for k in current_item] \
-                            and tmp_val[1] not in [k[1] for k in current_item]:
-                        current_item.append(tmp_val[::-1])
-        return react_d
-
-    for index1, row1 in l_df.iterrows():  # loop row in L
-        for icol1 in range(len(l_colname)): # loop col in L with indexing
-            L = l_df.iat[index1, icol1]
-            if isinstance(L, pd.Series):  # reactants contains mulitple identical structures
-                L = L.iloc[0]
-            if isinstance(L, str) or np.isnan(L) or np.isinf(L):
+    react_l = []
+    for istruc_l, row_l in l_df.items():
+        for istruc_h, row_h in h_df.items():
+            # test search_mode
+            if search_mode==0 and istruc_l!=istruc_h: # only search struc1 == struc2
                 continue
-            for index2, row2 in h_df.iterrows():  # loop row in H
-                for icol2 in range(len(h_colname)):  # loop col in H
-                    H = h_df.iat[index2, icol2]
-                    if isinstance(H, pd.Series):  # reactants contains mulitple identical structures
-                        H = H.iloc[0]
+            elif search_mode==1 and istruc_l==istruc_h: # only search struc1 != struc2
+                continue
+
+            # loop row to get H and L values
+            for iat_l,L in  row_l.items():
+                if isinstance(L, str) or np.isnan(L) or np.isinf(L):
+                    continue
+                for iat_h,H in  row_h.items():
                     if isinstance(H, str) or np.isnan(H) or np.isinf(H):
                         continue
-                    if search_mode == 0:
-                        if icol1 == icol2:  # struc1 = struc2
-                            react_d = wrap_build_dict(l_colname[icol1], index1, L, h_colname[icol2], index2, H,
-                                                      react_d,concerted_pair=concerted_pair)
-                    elif search_mode == 1:
-                        if icol2 != icol1:  # struc1 != struc2
-                            react_d = wrap_build_dict(l_colname[icol1], index1, L, h_colname[icol2], index2, H,
-                                                      react_d,concerted_pair=concerted_pair)
-                    elif search_mode == 2:
-                        react_d = wrap_build_dict(l_colname[icol1], index1, L, h_colname[icol2], index2, H,
-                                                  react_d,concerted_pair=concerted_pair)
+                    gap = np.round(np.round(L, 2) - np.round(H, 2), 2)
+                    if int(istruc_l)>=int(istruc_h):
+                        react_l.append({"struc_combi":[str(istruc_h),str(istruc_l)],
+                                        "at_combi":[str(iat_h),str(iat_l)],
+                                        "HOAO":H,
+                                        "LUAO": L,
+                                        "gap": gap})
                     else:
-                        raise Exception("unknow keyword in searching_setting.inter.search_mode, "
-                                        "accept key includs int: 0,1,2.")
-    return react_d
+                        react_l.append({"struc_combi": [str(istruc_l), str(istruc_h)],
+                                        "at_combi": [str(iat_l), str(iat_h)],
+                                        "HOAO": H,
+                                        "LUAO": L,
+                                        "gap": gap})
+    return react_l
+
+
+def refine_react_l(react_l,identical_atom_d):
+    # merge degenrate pairs and only keep lowest gap
+    out_react_l = []
+    used_combi = []
+    for item in react_l:
+        struc1,struc2 = item["struc_combi"]
+        at1,at2  = item["at_combi"]
+        if tuple([struc1,struc2,(at1,at2)]) not in used_combi:
+            # add all degenrated pair
+            degenerate_at1=[at1]
+            degenerate_at2 = [at2]
+            for tmp in identical_atom_d[struc1]:
+                if at1 in tmp["atom"]:
+                    degenerate_at1 = tmp["atom"]
+                    break
+            for tmp in identical_atom_d[struc2]:
+                if at2 in tmp["atom"]:
+                    degenerate_at2 = tmp["atom"]
+                    break
+            all_combi = list(product(degenerate_at1, degenerate_at2))
+            for combi in all_combi:
+                used_combi.append(tuple([struc1,struc2,combi]))
+            item["at_combi"]=all_combi
+            out_react_l.append(item)
+        else:
+            #change gap
+            for searchitem in out_react_l:
+                search_allcombi = searchitem["at_combi"]
+                if tuple([at1,at2]) in search_allcombi:
+                    currentgap = item["gap"]
+                    oldgap = searchitem["gap"]
+                    if currentgap<oldgap:
+                        searchitem["gap"]=currentgap
+                        searchitem["HOAO"]=item["HOAO"]
+                        searchitem["LUAO"] = item["LUAO"]
+                        break
+    # # del duplicated pairs (for concerted push)
+    # for item in out_react_l:
+    #     allpairs = item["at_combi"]
+    #     pairs = []
+    #     used_l1 = used_l2 = []
+    #     for pairitem in allpairs:
+    #         pat1,pat2 = pairitem
+    #         if pat1 not in used_l1 and pat2 not in used_l2:
+    #             pairs.append([str(pat1),str(pat2)])
+    #             used_l1.append(pat1)
+    #             used_l2.append(pat2)
+    #     item["at_combi"]=pairs
+    return out_react_l
+
 
 
 def SPR_HL(reactants,  # reactants id list
@@ -86,9 +105,10 @@ def SPR_HL(reactants,  # reactants id list
            search_mode=1,  # 0 : only search intramollecule reaction possibility;
            # 1: only intermolecular;
            # 2: both inter- and intra reaction possibility.
-           concerted_pair=False # switch on concerted_pair option
+           spr_mode=0 #0(default): globally compre both same spin and oppo spin HL combinations
+                                    # 1: only compre same spin (HL_aa and HL_bb)
+                                    # 2: only compre opposite spin (HL_ab and HL_ba)
            ):
-    # return: d[gap] = "degenerate number (int)|strucid1(without 0),strucid2|at1,at2|....."
 
     struc_inspector = DictionaryInspector(struc_rec)
     # collecting HL values into dataframe
@@ -127,44 +147,60 @@ def SPR_HL(reactants,  # reactants id list
             mldf_original.loc[hindex, "LUAO_a (eV)"] = np.inf
 
         for df, column_name in zip(dfs, newcolumn_names):
-            tmpl = list(mldf_original.loc[:,column_name])
+            tmpl = list(mldf_original.loc[:, column_name])
             for j in range(maxnat - len(tmpl)):
                 tmpl.append(np.nan)
-            df.iloc[:,istruc] = tmpl  # .reset_index(drop=True)
+            df.iloc[:, istruc] = tmpl  # .reset_index(drop=True)
 
-            # # Convert all elements in the DataFrame to numeric, coercing errors to NaN
-            # df.apply(pd.to_numeric, errors='coerce')
+    identical_atom_d = find_identical_at(reactants,struc_rec)
 
-    # # prescreen HL values with a thres range
-    # for df in [HOAO_a, HOAO_b]:
-    #     lim = 10  # eV
-    #     max_value = pd.to_numeric(df.values.flatten(), errors='coerce').max()
-    #     non_nan_count = df.notna().sum().sum()
-    #     mask_count = (df < max_value - lim).sum().sum()
-    #     while mask_count > int(0.8 * non_nan_count):  # make sure df always has more than 20 % of original data
-    #         lim += 5
-    #         mask_count = (df < max_value - lim).sum().sum()
-    #     df=df.where(df < max_value - lim, -np.inf)
-    #     df=df.where(df.applymap(lambda x: isinstance(x, str)), -np.inf)
-    #
-    # for df in [LUAO_a, LUAO_b]:
-    #     lim = 10  # eV
-    #     min_value = pd.to_numeric(df.values.flatten(), errors='coerce').min()
-    #     non_nan_count = df.notna().sum().sum()
-    #     mask_count = (df > min_value + lim).sum().sum()
-    #     while mask_count > int(0.8 * non_nan_count):  # make sure df always has more than 20 % of original data
-    #         lim += 5
-    #         mask_count = (df > min_value + lim).sum().sum()
-    #     df=df.where(df > min_value + lim, np.inf)
-    #     df=df.where(df.applymap(lambda x: isinstance(x, str)), np.inf)
+    final_react = []
+    if spr_mode==1:
+        react_aa = build_react_l(HOAO_a, LUAO_a, search_mode)
+        react_bb = build_react_l(HOAO_b, LUAO_b, search_mode)
+        for react in [react_aa, react_bb]:
+            final_react.extend(react)
+    elif spr_mode==2:
+        react_ab = build_react_l(HOAO_a, LUAO_b, search_mode)
+        react_ba = build_react_l(HOAO_b, LUAO_a, search_mode)
+        for react in [react_ab, react_ba]:
+            final_react.extend(react)
 
-    # build up reactive atomic pair dict
-    react_aa, react_bb, react_ab, react_ba = {},{},{},{}
-    react_aa = build_gap_d({}, HOAO_a, LUAO_a, search_mode,concerted_pair=concerted_pair)
-    react_bb = build_gap_d({}, HOAO_b, LUAO_b, search_mode,concerted_pair=concerted_pair)
-    react_ab = build_gap_d({}, HOAO_a, LUAO_b, search_mode,concerted_pair=concerted_pair)
-    react_ba = build_gap_d({}, HOAO_b, LUAO_a, search_mode,concerted_pair=concerted_pair)
-    return react_aa, react_bb, react_ab, react_ba
+    else:
+        react_aa = build_react_l(HOAO_a, LUAO_a, search_mode)
+        react_bb = build_react_l(HOAO_b, LUAO_b, search_mode)
+        react_ab = build_react_l(HOAO_a, LUAO_b, search_mode)
+        react_ba = build_react_l(HOAO_b, LUAO_a, search_mode)
+
+        for react in [react_aa,react_bb,react_ab,react_ba]:
+            final_react.extend(react)
+
+    final_react = sorted(refine_react_l(final_react,identical_atom_d), key=lambda x: x['gap'])
+    return final_react
+
+
+def find_identical_at(reactants, struc_rec, tol=0.01):
+    struc_inspector = DictionaryInspector(struc_rec)
+    out = {}
+    for istruc in range(len(reactants)):
+        out[str(istruc)] = []
+        strucid = reactants[istruc]
+        mldf_original = struc_inspector.get_value(f'{strucid}.struc_info.reactivity.ml').copy()
+        hoao = mldf_original.loc[:, "HOAO_a (eV)"].tolist()
+        hoaos_with_indices = sorted(enumerate(hoao), key=lambda x: x[1])
+        indexed_groups = []
+        current_group = [hoaos_with_indices[0]]
+        for num_with_index in hoaos_with_indices[1:]:  # Iterate through the rest
+            if abs(num_with_index[1] - current_group[-1][1]) <= tol:  # Check tolerance
+                current_group.append(num_with_index)  # Add to current group
+            else:
+                indexed_groups.append(current_group)  # Save current group
+                current_group = [num_with_index]  # Start a new group
+
+        indexed_groups.append(current_group)  # Add the last group
+        out[str(istruc)] = [{"atom": [str(item[0]) for item in group], "hoao": [item[1] for item in group]}
+                       for group in indexed_groups]
+    return out
 
 
 def SPR_dissociation(reactants,  # reactants id list
@@ -229,213 +265,3 @@ def build_bo_d(reactants,
                     bo[strucid].append(value)
     return bo
 
-# def spr_intra_new(reactants,  # reactants id list
-#                   struc_inspector,  # struc dict record
-#                   allow_hydrogen=True,  # if search range including hydrogen elements
-#                   allow_halogen=True,  # if search range including halogen elements
-#                   search_mode=0  # 0: use wboe; 1: use MBO
-#                   ):
-#     dis_d = {}
-#     if mode == 0:  # use bo as measurement
-#         colunmnr = 3
-#     else:
-#         colunmnr = 2  # use bde as measurement
-#
-#     for smi in reactants:
-#         try:
-#             wboe = rec[smi]['wboe']
-#             mlfeatures = rec[smi]['ml_feature']
-#             if isinstance(wboe, pd.DataFrame):
-#                 tmp = {}
-#                 for i in range(wboe.shape[0]):
-#                     dagp = wboe.iloc[i, colunmnr]
-#                     at_1, at_2 = wboe.iloc[i, 0], wboe.iloc[i, 1]
-#                     # try:
-#                     #     cn_1 = int(mlfeatures.loc[at_1 - 1, 'coordination number'])
-#                     # except:
-#                     #     cn_1 = 0
-#                     # try:
-#                     #     cn_2 = int(mlfeatures.loc[at_2 - 1, 'coordination number'])
-#                     # except:
-#                     #     cn_2 = 0
-#                     ele_1 = mlfeatures.loc[at_1 - 1, 'Atom']
-#                     ele_2 = mlfeatures.loc[at_2 - 1, 'Atom']
-#                     if not hydrogen and (int(ele_1) == 1 or int(ele_2) == 1):
-#                         pass
-#                     elif colunmnr == 3 and (dagp <= 0.3 or dagp > 1.2):
-#                         pass
-#                     else:
-#                         tmp[dagp] = [smi, at_1, at_2]
-#                 # if not tmp:  # only h-bonds in struc
-#                 #     for i in range(wboe.shape[0]):
-#                 #         dagp = wboe.iloc[i, colunmnr]
-#                 #         at_1, at_2 = wboe.iloc[i, 0], wboe.iloc[i, 1]
-#                 #         tmp[dagp] = [smi, at_1, at_2]
-#                 dis_d.update(tmp)
-#         except:
-#             pass
-#             traceback.print_exc()
-#             # print(f'{wd_pre}/{smi}')
-#     return dis_d
-
-
-# def spr_inter_new(reactants, rec):
-#     hoaoa_d = {}
-#     at_l1 = []
-#     hoaob_d = {}
-#     at_l2 = []
-#
-#     luaoa_d = {}
-#     at_l3 = []
-#     luaob_d = {}
-#     at_l4 = []
-#
-#     # find max in hoao and min in luao
-#     if 'HOAO_a (eV)' in list(rec[reactants[0]]['ml_feature'].columns):
-#         HOAO_a = [list(rec[k]['ml_feature']['HOAO_a (eV)']) for k in reactants]
-#         HOAO_b = [list(rec[k]['ml_feature']['HOAO_b (eV)']) for k in reactants]
-#         LUAO_a = [list(rec[k]['ml_feature']['LUAO_a (eV)']) for k in reactants]
-#         LUAO_b = [list(rec[k]['ml_feature']['LUAO_b (eV)']) for k in reactants]
-#     else:
-#         HOAO_a = [list(rec[k]['ml_feature']['HOAO (eV)']) for k in reactants]
-#         HOAO_b = [list(rec[k]['ml_feature']['HOAO (eV)']) for k in reactants]
-#         LUAO_a = [list(rec[k]['ml_feature']['LUAO (eV)']) for k in reactants]
-#         LUAO_b = [list(rec[k]['ml_feature']['LUAO (eV)']) for k in reactants]
-#     # replace the missing data
-#     HOAO_a = fill_miss_data(HOAO_a, 'h')
-#     HOAO_b = fill_miss_data(HOAO_b, 'h')
-#     LUAO_a = fill_miss_data(LUAO_a, 'l')
-#     LUAO_b = fill_miss_data(LUAO_b, 'l')
-#
-#     max_a = max([max(k) for k in HOAO_a])
-#     max_b = max([max(k) for k in HOAO_b])
-#     min_a = min([min(k) for k in LUAO_a])
-#     min_b = min([min(k) for k in LUAO_b])
-#
-#     # form target atom df
-#     for i in range(len(reactants)):
-#         hoaoa_d[i] = {}
-#         hoaob_d[i] = {}
-#         luaoa_d[i] = {}
-#         luaob_d[i] = {}
-#
-#         hoaoa_l = HOAO_a[i]
-#         hoaob_l = HOAO_b[i]
-#         luaoa_l = LUAO_a[i]
-#         luaob_l = LUAO_b[i]
-#
-#         lim = 500
-#         # lim = 5
-#         target_hoao_a = [k for k in hoaoa_l if max_a - k < lim]
-#         target_hoao_b = [k for k in hoaob_l if max_b - k < lim]
-#         target_luao_a = [k for k in luaoa_l if k - min_a < lim]
-#         target_luao_b = [k for k in luaob_l if k - min_b < lim]
-#         for x in target_hoao_a:
-#             if hoaoa_l.count(x) > 1:
-#                 at_x = -1
-#                 for c in range(0, hoaoa_l.count(x)):
-#                     at_x = hoaoa_l.index(x, at_x + 1)
-#                     hoaoa_d[i][at_x] = x
-#                     at_l1.append(at_x)
-#             else:
-#                 at_x = hoaoa_l.index(x)
-#                 hoaoa_d[i][at_x] = x
-#                 at_l1.append(at_x)
-#
-#         for y in target_hoao_b:
-#             if hoaob_l.count(y) > 1:
-#                 at_y = -1
-#                 for c in range(0, hoaob_l.count(y)):
-#                     at_y = hoaob_l.index(y, at_y + 1)
-#                     hoaob_d[i][at_y] = y
-#                     at_l2.append(at_y)
-#             else:
-#                 at_y = hoaob_l.index(y)
-#                 hoaob_d[i][at_y] = y
-#                 at_l2.append(at_y)
-#         at_l1 = list(set(at_l1))
-#         at_l2 = list(set(at_l2))
-#
-#         for x in target_luao_a:
-#             if luaoa_l.count(x) > 1:
-#                 at_x = -1
-#                 for c in range(0, luaoa_l.count(x)):
-#                     at_x = luaoa_l.index(x, at_x + 1)
-#                     luaoa_d[i][at_x] = x
-#                     at_l3.append(at_x)
-#             else:
-#                 at_x = luaoa_l.index(x)
-#                 luaoa_d[i][at_x] = x
-#                 at_l3.append(at_x)
-#         for y in target_luao_b:
-#             if luaob_l.count(y) > 1:
-#                 at_y = -1
-#                 for c in range(0, luaob_l.count(y)):
-#                     at_y = luaob_l.index(y, at_y + 1)
-#                     luaob_d[i][at_y] = y
-#                     at_l4.append(at_y)
-#             else:
-#                 at_y = luaob_l.index(y)
-#                 luaob_d[i][at_y] = y
-#                 at_l4.append(at_y)
-#
-#         at_l3 = list(set(at_l3))
-#         at_l4 = list(set(at_l4))
-#
-#     hoaoa_df = pd.DataFrame(hoaoa_d, index=[i for i in at_l1], columns=[i for i in range(len(reactants))])
-#     hoaob_df = pd.DataFrame(hoaob_d, index=[i for i in at_l2], columns=[i for i in range(len(reactants))])
-#     luaoa_df = pd.DataFrame(luaoa_d, index=[i for i in at_l3], columns=[i for i in range(len(reactants))])
-#     luaob_df = pd.DataFrame(luaob_d, index=[i for i in at_l4], columns=[i for i in range(len(reactants))])
-#
-#     react_ss = {}
-#     react_ss = build_gap_d(react_ss, hoaoa_df, luaoa_df)
-#     # react_ss = litgap(react_ss, hoaoa_df, luaoa_df)
-#
-#     react_ss = build_gap_d(react_ss, hoaob_df, luaob_df)
-#
-#     # react_ss = litgap(react_ss, hoaob_df, luaob_df)
-#
-#     react_os = {}
-#     react_os = build_gap_d(react_os, hoaoa_df, luaob_df)
-#     # react_os = litgap(react_os, hoaoa_df, luaob_df)
-#     react_os = build_gap_d(react_os, hoaob_df, luaoa_df)
-#     # react_os = litgap(react_os, hoaob_df, luaoa_df)
-#
-#     # for print out
-#     for i in [hoaoa_df, hoaob_df, luaoa_df, luaob_df]:
-#         i.columns = [rec[reactants[i]]['mb'].split('|')[2] for i in range(len(reactants))]
-#     hoaoa_df.index.name = 'HOAO_a'
-#     hoaob_df.index.name = 'HOAO_b'
-#     luaoa_df.index.name = 'LUAO_a'
-#     luaob_df.index.name = 'LUAO_b'
-#     return react_os, react_ss, hoaoa_df, hoaob_df, luaoa_df, luaob_df
-
-#
-# def spr_intraassoci(mlfeatures, wboe):
-#     bonds = [[wboe.iloc[i, 0], wboe.iloc[i, 1]] for i in range(wboe.shape[0]) if 0.6 < wboe.iloc[i, 3]]
-#     intraasso_os = {}
-#     intraasso_ss = {}
-#     ha = list(mlfeatures['HOAO_a (eV)'])
-#     hb = list(mlfeatures['HOAO_b (eV)'])
-#     la = list(mlfeatures['LUAO_a (eV)'])
-#     lb = list(mlfeatures['LUAO_b (eV)'])
-#     for i in range(len(ha)):
-#         for j in range(len(ha)):
-#             if i != j:
-#                 # simple replace if there is degenerated pair
-#                 intraasso_ss[np.round(la[i] - ha[j], 3)] = [i + 1, j + 1]
-#                 intraasso_ss[np.round(lb[i] - hb[j], 3)] = [i + 1, j + 1]
-#                 intraasso_os[np.round(la[i] - hb[j], 3)] = [i + 1, j + 1]
-#                 intraasso_os[np.round(lb[i] - ha[j], 3)] = [i + 1, j + 1]
-#
-#     tmpd1 = intraasso_os.copy()
-#     for i in list(tmpd1.keys()):
-#         value = tmpd1[i]
-#         if value in bonds or reversed(value) in bonds:
-#             del intraasso_os[i]
-#     tmpd2 = intraasso_ss.copy()
-#     for i in list(tmpd2.keys()):
-#         value = tmpd2[i]
-#         if value in bonds or reversed(value) in bonds:
-#             del intraasso_ss[i]
-#     return intraasso_os, intraasso_ss
