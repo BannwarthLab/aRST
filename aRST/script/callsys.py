@@ -34,11 +34,15 @@ class CallORCA:
                         with open(f'{self.wd}/ENERGY', 'w') as f2:
                             f2.write(str(re.findall(r'\-?\d+\.?\d*', line)[0]))
         extensions_to_remove = [ '.densities', '.opt']
+        keep_list = ['.xyz', '.inp','.in','.out','.input', '.molden','.gbw']
         if removegbw:
-            extensions_to_remove.append('.gbw')
+            keep_list.remove('.gbw')
         for filename in os.listdir(f'{self.wd}'):
-            if any(filename.endswith(ext) for ext in extensions_to_remove):
+            if filename =="ENERGY":
+                continue
+            if not any(filename.endswith(ext) for ext in keep_list):
                 os.remove(filename)
+
         return rc
 
     def generate_cmd_string(self):

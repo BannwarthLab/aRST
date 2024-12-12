@@ -1,4 +1,5 @@
 # Reaction simulation for intramolecular association
+import json
 import os
 import shutil
 import sys
@@ -6,11 +7,87 @@ import sys
 import numpy as np
 import pandas as pd
 from aRST.script.toolbox import create_folder, write_xyz, read_topomol
-from aRST.script.spr import SPR_HL
+from aRST.script.spr import SPR_HL, find_identical_at
 from aRST.script.dictionaryInspector import DictionaryInspector
 from aRST.script.geom import Coord, alignment
 from aRST.script.callsys import CallxTB
 from aRST.script.do_scan import build_push_l
+
+
+# def add_intera(intera, react_d):
+#     for current_key, current_item in react_d.items():
+#         if current_key not in intera.keys():
+#             # add new key in intera
+#             for struc_combi, at_l in current_item.items():
+#                 struc1, struc2 = struc_combi
+#                 if struc1 >= struc2:
+#                     new_atl = []
+#                     for item in at_l:
+#                         new_atl.append(list(reversed(item)))
+#                     intera[current_key] = struc2, struc1, new_atl
+#                 else:
+#                     intera[current_key] = struc1, struc2, at_l
+#         else:
+#             # add new pairs in intera
+#             for struc_combi, at_l in current_item.items():
+#                 oldstruc1, oldstruc2, oldat_l = intera[current_key]
+#                 struc1, struc2 = struc_combi
+#                 if struc1 >= struc2 and (struc2 == oldstruc1 and struc1 == oldstruc2):
+#                     for item in at_l:
+#                         if list(reversed(item)) not in oldat_l:
+#                             oldat_l.append(list(reversed(item)))
+#                     intera[current_key] = struc2, struc1, oldat_l
+#                 elif struc1 < struc2 and (struc1 == oldstruc1 and struc2 == oldstruc2):
+#                     for item in at_l:
+#                         if list(item) not in oldat_l:
+#                             oldat_l.append(list(item))
+#                     intera[current_key] = struc1, struc2, oldat_l
+#     return intera
+#
+# def screen_identical_scan(input_d,identical_atom_d):
+#     out_d = {}
+#     for gap in list(sorted(input_d.keys())):
+#         s1,s2,atl = input_d[gap]
+#         pair0 = atl[0]
+#         at1,at2 = pair0
+#         if not out_d:
+#             identl1 = identl2 = None
+#             for item in identical_atom_d[s1]:
+#                 if at1 in item["atom"]:
+#                     identl1 = item["atom"]
+#             for item in identical_atom_d[s2]:
+#                 if at2 in item["atom"]:
+#                     identl2 = item["atom"]
+#             for currentat1 in identl1:
+#                 for currentat2 in identl2:
+#                     if [currentat1,currentat2] not in atl:
+#                         atl.append([currentat1,currentat2])
+#             out_d[gap] = s1,s2,atl
+#         else:
+#             newpush = True
+#             for currentgap in out_d.keys():
+#                 if not newpush:
+#                     break
+#                 currents1,currents2, currentatl = out_d[currentgap]
+#                 if currents1==s1 and s2 ==currents2:
+#                     for item in atl:
+#                         if item in currentatl:
+#                             newpush=False
+#                             break
+#             if newpush:
+#                 identl1 = identl2 = None
+#                 for item in identical_atom_d[s1]:
+#                     if at1 in item["atom"]:
+#                         identl1 = item["atom"]
+#                 for item in identical_atom_d[s2]:
+#                     if at2 in item["atom"]:
+#                         identl2 = item["atom"]
+#                 for currentat1 in identl1:
+#                     for currentat2 in identl2:
+#                         if [currentat1, currentat2] not in atl:
+#                             atl.append([currentat1, currentat2])
+#                 out_d[gap] = s1, s2, atl
+#     return out_d
 def simulation_interA(reactants,  # reactants list
                       struc_rec,  # correspongding struc info in dict
                       searching_setting,
@@ -21,79 +98,48 @@ def simulation_interA(reactants,  # reactants list
 
     struc_inspector = DictionaryInspector(struc_rec)
     ###### rangking reactivity ######
-    react_aa, react_bb, react_ab, react_ba = SPR_HL(reactants,
-                                                    struc_rec,
-                                                    allow_hydrogen=searching_setting.get("hydrogen", True),
-                                                    allow_halogen=searching_setting.get("halogen", True),
-                                                    search_mode=searching_setting.get("search_mode", 1),
-                                                    concerted_pair=searching_setting.get("concerted_pair", False))
-    # react_d:  key= 5.93, value = {('1', '1'), [['0', '0']]}
+    react_l = SPR_HL(reactants,
+                     struc_rec,
+                     allow_hydrogen=searching_setting.get("hydrogen", True),
+                     allow_halogen=searching_setting.get("halogen", True),
+                     search_mode=searching_setting.get("search_mode", 1),
+                     spr_mode=searching_setting.get("spr_mode", 0)
+                     )
 
-    # merge a reaction dict
-    intera = {}  # intera:   key= 5.93, value = ('1','1',[['0', '0']])
-    for react_d in [react_aa, react_bb, react_ab, react_ba]:
-        for current_key, current_item in react_d.items():
-            for struc_combi, at_l in current_item.items():
-                struc1, struc2 = struc_combi
-                intera[current_key] = struc1, struc2, at_l
-    if not intera:
-        raise Exception(f"no possible interA possibilities can be found in reactants list: {reactants}.")
 
-    # resort intera to screen same scan
-    def screen_identical_scan(input_d):
-        # before: struc1: provide hoao struc2: provide luao
-        # after: struc1 index <struc2 index
-        out_d = {}
-        for gap in sorted(input_d.keys()):
-            if gap not in out_d.keys():
-                tmps1, tmps2 = input_d[gap][:2]
-                if int(tmps1) <= int(tmps2):
-                    s1 = tmps1
-                    s2 = tmps2
-                    atl = input_d[gap][2]
-                else:
-                    s1 = tmps2
-                    s2 = tmps1
-                    atl = []
-                    for item in input_d[gap][2]:
-                        if not atl:
-                            atl.append(list(reversed(item)))
-                        elif int(list(reversed(item))[0]) <=int(atl[0][0]):
-                            atl.insert(0,list(reversed(item)))
-                        else:atl.append(list(reversed(item)))
-
-                trigger = True
-                for item in out_d.values():
-                    if len(item[2]) !=len(atl):
-                        continue
-                    else:
-                        if item[2][0] == atl[0]:
-                            trigger=False
-                            break
-
-                if trigger:
-                    out_d[gap] = s1, s2, atl
-        return out_d
-
-    intera = screen_identical_scan(intera)
-    output_d = {}
+    cut = 2 if searching_setting.get("concerted_pair", False) else 1
+    for item in react_l:
+        allpairs = item["at_combi"]
+        pairs = []
+        used_l1 = used_l2 = []
+        for pairitem in allpairs:
+            pat1,pat2 = pairitem
+            if pat1 not in used_l1 and pat2 not in used_l2:
+                pairs.append([str(pat1),str(pat2)])
+                used_l1.append(pat1)
+                used_l2.append(pat2)
+        pairs=pairs[:cut]
+        item["at_combi"] = pairs
 
     ###### perform simulation ######
     # prepare for reaction simulation
-    def generate_reactive_complex(gap):
+    def generate_reactive_complex(entry):
         # prepare scan_wd
         scan_wd = os.path.join(wd, "scan", f"{reactionpath}_{count}")
         create_folder(scan_wd)
 
         # prepare scan_xyz
-        struc1, struc2 = intera[gap][0], intera[gap][1]
+
+        struc1, struc2 = entry["struc_combi"]
         coord1 = struc_inspector.get_value(f"{struc1}.struc_info.general.coord")
         coord2 = struc_inspector.get_value(f"{struc2}.struc_info.general.coord")
         nat_coord1 = int(coord1.shape[0])
 
         # generate reactiv complex
-        at_l = intera[gap][2]
-        at1, at2 = int(at_l[0][0]), int(at_l[0][1])
+        at_l = entry["at_combi"]
+        at1,at2 =at_l[0]
+        at1=int(at1)
+        at2=int(at2)
         alignedcoord = alignment(coord1, coord2, at1, at2,
                                  extra_setting={"maxovlap": searching_setting.get("maxovlap", False),
                                                 "aligning_distance": searching_setting.get("aligning_distance", 5)})
@@ -116,29 +162,26 @@ def simulation_interA(reactants,  # reactants list
 
     scanmode = searching_setting.get("scan_mode", 0)
     ninter = searching_setting.get("number", 1)
+    output_d = {}
 
     #########  tmp hacked in  #########
     if ninter == "all":
-        ninter = len(intera.keys())
+        ninter = len(react_l)
 
     #########  tmp hacked out  #########
-
-
 
     if scanmode == 0:
         # standard xtbscan
 
-        for gap in sorted(intera.keys())[:ninter]:
+        for entry in react_l[:ninter]:
             scan_wd, \
             struc1, struc2, at_l, \
-            alignedcoord, nat_coord1, charge, uhf, totnel, push_l = generate_reactive_complex(gap)
+            alignedcoord, nat_coord1, charge, uhf, totnel, push_l = generate_reactive_complex(entry)
 
-            #########  tmp hacked in  #########
-            at_l = [at_l[0]]
+
             with open(os.path.join(scan_wd, "atl"), "w") as f:
-                f.write("at1,at2,hlgap(eV)\n")
-                f.write("%d,%d,%.4f\n" % (int(at_l[0][0]), int(at_l[0][1]), gap))
-            #########  tmp hacked out  #########
+                f.write(json.dumps(entry))
+
 
             # preparing scan inp
             constrain_setting = {
@@ -181,7 +224,7 @@ def simulation_interA(reactants,  # reactants list
                                        }).scan(constrain_setting)
             if status == 0:
                 endwd = scan_wd
-                if searching_setting.get("sep_mode", 0) !=0:
+                if searching_setting.get("sep_mode", 0) != 0:
                     # do a unconstarined opt
                     optwd = os.path.join(scan_wd, "opt")
                     create_folder(optwd)
@@ -212,7 +255,7 @@ def simulation_interA(reactants,  # reactants list
                                         {"atomic_charge": atcharge,
                                          "charge": charge,
                                          "nel": totnel,
-                                         "uhf":uhf if not np.isinf(uhf) else 0,
+                                         "uhf": uhf if not np.isinf(uhf) else 0,
                                          "coord": endxyz,
                                          "bo": bo,
                                          "atomic_connection": (constrain_l, ele)}  # endxyz info
@@ -277,17 +320,15 @@ def simulation_interA(reactants,  # reactants list
     elif scanmode == 1:  # use molbar FF
         from aRST.script.do_scan import get_endxyz_from_mb
 
-        for gap in sorted(intera.keys())[:ninter]:
+        for entry in react_l[:ninter]:
+
             scan_wd, \
             struc1, struc2, at_l, \
-            alignedcoord, nat_coord1, charge, uhf, totnel, push_l = generate_reactive_complex(gap)
+            alignedcoord, nat_coord1, charge, uhf, totnel, push_l = generate_reactive_complex(entry)
 
-            #########  tmp hacked in  #########
             at_l = [at_l[0]]
             with open(os.path.join(scan_wd, "atl"), "w") as f:
-                f.write("at1,at2,hlgap(eV)\n")
-                f.write("%d,%d,%.4f\n" % (int(at_l[0][0]), int(at_l[0][1]), gap))
-            #########  tmp hacked out  #########
+                f.write(json.dumps(entry))
 
             # get atomic connection
             atom_connection1, ele1 = struc_inspector.get_value(f"{struc1}.struc_info.general.atomic_connection")
@@ -313,7 +354,7 @@ def simulation_interA(reactants,  # reactants list
                                        "uhf": uhf if not np.isinf(uhf) else 0,
                                        "alpb": xtb_setting.get("alpb", "h2o"),
                                        "etemp": xtb_setting.get("scan_etemp", "4000"),
-                                       "k":xtb_setting.get("k", 1),
+                                       "k": xtb_setting.get("k", 1),
                                        }).constrained_opt(newbond=atom_connection[-len(push_l):])
             if status == 0:
                 endxyz = pd.read_table(os.path.join(scan_wd, 'xtbopt.xyz'), header=None, skiprows=2, sep='\s+')
@@ -349,7 +390,7 @@ def simulation_interA(reactants,  # reactants list
                                            "coordfn": "coord_mb",
                                            "optlevel": xtb_setting.get("optlevel", None),
                                            "charge": charge,
-                                           "uhf":2,
+                                           "uhf": 2,
                                            "alpb": xtb_setting.get("alpb", "h2o"),
                                            "etemp": xtb_setting.get("scan_etemp", "4000"),
                                            "k": xtb_setting.get("k", 1)
@@ -377,7 +418,7 @@ def simulation_interA(reactants,  # reactants list
                                              "bo": bo,
                                              "atomic_connection": (constrain_l, ele)}  # endxyz info
                                             ]
-                count+=1
+                count += 1
 
         return output_d
     else:

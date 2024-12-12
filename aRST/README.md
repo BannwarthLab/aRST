@@ -96,6 +96,9 @@ cycle = 1                           # int, number of searching cycle
 elim =  300                         # float, energy limitation to kill this reaction path, unit kcal/mol
 hydrogen = True                     # bool, searching range includs/excludes H atoms
 halogen = True                      # bool, searching range includs/excludes halogen atoms
+spr_mode = 0                        # 0(default): globally compre both same spin and oppo spin HL combinations
+                                    # 1: only compre same spin (HL_aa and HL_bb)
+                                    # 2: only compre opposite spin (HL_ab and HL_ba)
 scan_mode = 0                       # 0(default): use xtb-scan simulating reactions
                                     # 1: use molbar FF simulating reactions
 sep_mode = 0                        # 0(default): directly seperate fragments from scan-komplex  

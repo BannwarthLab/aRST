@@ -16,16 +16,16 @@ def get_reactivity(wd, STRUC_rec, setting_d, reactants):
                 f"{struc}.struc_info.reactivity.bo") is None:
             singlecycle.ML_prepare(struc)
 
-    if len(reactants) > 1 and setting_inspector.get_value("searching_setting.inter"):
+    if len(reactants) > 1:
         # get interA reaction possibility
-        from aRST.script.interA import add_intera,screen_identical_scan
+        react_l = SPR_HL(reactants,
+                         STRUC_rec,
+                         allow_hydrogen=setting_inspector.get_value("searching_setting.inter.hydrogen", True),
+                         allow_halogen=setting_inspector.get_value("searching_setting.inter.halogen", True),
+                         search_mode=setting_inspector.get_value("searching_setting.inter.search_mode", 1),
+                         spr_mode=setting_inspector.get_value("searching_setting.inter.spr_mode", 0)
+                         )
 
-        react_aa, react_bb, react_ab, react_ba = SPR_HL(reactants,
-                                                        STRUC_rec,
-                                                        allow_hydrogen=setting_inspector.get_value("searching_setting.inter.hydrogen", True),
-                                                        allow_halogen=setting_inspector.get_value("searching_setting.inter.halogen", True),
-                                                        search_mode=setting_inspector.get_value("searching_setting.inter.search_mode", 1),
-                                                        )
 
 
         print("starting to search inter-association possibility:")
@@ -34,17 +34,10 @@ def get_reactivity(wd, STRUC_rec, setting_d, reactants):
         print("search_range:", setting_inspector.get_value("searching_setting.inter.number", 1))
         print("write jason and txt file in ", os.path.join("reactivity", "interA"))
         print("\n")
-        if any([react_d for react_d in [react_aa, react_bb, react_ab, react_ba]]):
-            outputwd = create_folder(os.path.join(wd, "reactivity", "interA"))
-            name_l = ["aa", "bb", "ab", "ba"]
-            identical_atom_d = find_identical_at(reactants,STRUC_rec)
-            for react_d, name in zip([react_aa, react_bb, react_ab, react_ba], name_l):
-                if react_d:
-                    intera = add_intera({}, react_d)
-                    intera = screen_identical_scan(intera, identical_atom_d)
-                    with open(f'{outputwd}/{name}.json', "w") as f:
-                        f.write(json.dumps(intera, indent=2))
-                        f.write('\n')
+        if react_l:
+            with open(os.path.join(wd, "reactivity_interA"), "w") as f:
+                for entry in react_l:
+                    f.write(json.dumps(entry))
         else:
             raise Exception(f"no possible interA possibilities can be found in reactants list: {reactants}.")
 
