@@ -3,7 +3,7 @@ import json
 import os
 import shutil
 import sys
-
+import copy
 import numpy as np
 import pandas as pd
 from aRST.script.toolbox import create_folder, write_xyz, read_topomol
@@ -14,80 +14,6 @@ from aRST.script.callsys import CallxTB
 from aRST.script.do_scan import build_push_l
 
 
-# def add_intera(intera, react_d):
-#     for current_key, current_item in react_d.items():
-#         if current_key not in intera.keys():
-#             # add new key in intera
-#             for struc_combi, at_l in current_item.items():
-#                 struc1, struc2 = struc_combi
-#                 if struc1 >= struc2:
-#                     new_atl = []
-#                     for item in at_l:
-#                         new_atl.append(list(reversed(item)))
-#                     intera[current_key] = struc2, struc1, new_atl
-#                 else:
-#                     intera[current_key] = struc1, struc2, at_l
-#         else:
-#             # add new pairs in intera
-#             for struc_combi, at_l in current_item.items():
-#                 oldstruc1, oldstruc2, oldat_l = intera[current_key]
-#                 struc1, struc2 = struc_combi
-#                 if struc1 >= struc2 and (struc2 == oldstruc1 and struc1 == oldstruc2):
-#                     for item in at_l:
-#                         if list(reversed(item)) not in oldat_l:
-#                             oldat_l.append(list(reversed(item)))
-#                     intera[current_key] = struc2, struc1, oldat_l
-#                 elif struc1 < struc2 and (struc1 == oldstruc1 and struc2 == oldstruc2):
-#                     for item in at_l:
-#                         if list(item) not in oldat_l:
-#                             oldat_l.append(list(item))
-#                     intera[current_key] = struc1, struc2, oldat_l
-#     return intera
-#
-# def screen_identical_scan(input_d,identical_atom_d):
-#     out_d = {}
-#     for gap in list(sorted(input_d.keys())):
-#         s1,s2,atl = input_d[gap]
-#         pair0 = atl[0]
-#         at1,at2 = pair0
-#         if not out_d:
-#             identl1 = identl2 = None
-#             for item in identical_atom_d[s1]:
-#                 if at1 in item["atom"]:
-#                     identl1 = item["atom"]
-#             for item in identical_atom_d[s2]:
-#                 if at2 in item["atom"]:
-#                     identl2 = item["atom"]
-#             for currentat1 in identl1:
-#                 for currentat2 in identl2:
-#                     if [currentat1,currentat2] not in atl:
-#                         atl.append([currentat1,currentat2])
-#             out_d[gap] = s1,s2,atl
-#         else:
-#             newpush = True
-#             for currentgap in out_d.keys():
-#                 if not newpush:
-#                     break
-#                 currents1,currents2, currentatl = out_d[currentgap]
-#                 if currents1==s1 and s2 ==currents2:
-#                     for item in atl:
-#                         if item in currentatl:
-#                             newpush=False
-#                             break
-#             if newpush:
-#                 identl1 = identl2 = None
-#                 for item in identical_atom_d[s1]:
-#                     if at1 in item["atom"]:
-#                         identl1 = item["atom"]
-#                 for item in identical_atom_d[s2]:
-#                     if at2 in item["atom"]:
-#                         identl2 = item["atom"]
-#                 for currentat1 in identl1:
-#                     for currentat2 in identl2:
-#                         if [currentat1, currentat2] not in atl:
-#                             atl.append([currentat1, currentat2])
-#                 out_d[gap] = s1, s2, atl
-#     return out_d
 def simulation_interA(reactants,  # reactants list
                       struc_rec,  # correspongding struc info in dict
                       searching_setting,
@@ -111,7 +37,8 @@ def simulation_interA(reactants,  # reactants list
     for item in react_l:
         allpairs = item["at_combi"]
         pairs = []
-        used_l1 = used_l2 = []
+        used_l1 = []
+        used_l2 = []
         for pairitem in allpairs:
             pat1,pat2 = pairitem
             if pat1 not in used_l1 and pat2 not in used_l2:
@@ -319,9 +246,8 @@ def simulation_interA(reactants,  # reactants list
         return output_d
     elif scanmode == 1:  # use molbar FF
         from aRST.script.do_scan import get_endxyz_from_mb
-
-        for entry in react_l[:ninter]:
-
+        for entry in react_l[1:ninter]:
+            atom_connection, coordinates, ele=[],[],[]
             scan_wd, \
             struc1, struc2, at_l, \
             alignedcoord, nat_coord1, charge, uhf, totnel, push_l = generate_reactive_complex(entry)
@@ -333,15 +259,16 @@ def simulation_interA(reactants,  # reactants list
             # get atomic connection
             atom_connection1, ele1 = struc_inspector.get_value(f"{struc1}.struc_info.general.atomic_connection")
             atom_connection2, ele2 = struc_inspector.get_value(f"{struc2}.struc_info.general.atomic_connection")
-            for item in atom_connection2:
-                for at in item["atoms"]:
-                    at += nat_coord1
+            add_atom_connection2 = copy.deepcopy(atom_connection2)
+            for item in add_atom_connection2:
+                for at in range(len(item["atoms"])):
+                    item["atoms"][at]+= nat_coord1
 
-            atom_connection = atom_connection1 + atom_connection2
+            atom_connection = atom_connection1 + add_atom_connection2
             ele = ele1 + ele2
             for item in push_l:
                 at1, at2 = int(item[0]), int(item[1])
-                value = float(item[3])
+                value = np.round(float(item[3]),2)
                 atom_connection.append({"atoms": [at1, at2], "value": value})
             coordinates = [list(alignedcoord.loc[line, 1:4]) for line in range(alignedcoord.shape[0])]
             mbxyz = get_endxyz_from_mb(atom_connection, coordinates, ele)

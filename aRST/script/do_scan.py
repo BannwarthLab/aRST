@@ -1,10 +1,12 @@
+import importlib
 import os
-
+import sys
 import numpy as np
 import pandas as pd
+import importlib
 from aRST.script.toolbox import  write_xyz
-
 from molbar.barcode import idealize_structure_from_coordinates
+import copy
 from collections import Counter
 from aRST.script.geom import Coord
 from aRST.script.callsys import CallxTB
@@ -35,108 +37,27 @@ def build_push_l(coord, at_l, nat1=0,d=0.98):
 
     return push_l
 
-
-# def standard_scan(scan_wd, coord, at_l, charge, uhf, xtb_setting, mode=2, d=None, tmpat1=None, tmpat2=None,
-#                   tmpr=None):
-#     os.chdir(scan_wd)
-#     level = xtb_setting.get('xtblevel', 'gfn2')
-#     alpb = xtb_setting.get('alpb', None)
-#     etemp = xtb_setting.get("etemp", str(300))
-#
-#     write_xyz(coord, "coord")
-#
-#     if mode == 0:
-#         # intraA
-#
-#         current_at_l = at_l
-#         push_l = [(str(k[0] + 1),  # at1 (index starts with 1)
-#                    str(k[1] + 1),  # at2 (index starts with 1)
-#                    str(np.round(Coord(coord).get_ats_distance(k[0], k[1]), 2)),  # d_12
-#                    str(Coord(coord).get_rr_distance(k[0])) +
-#                    str(Coord(coord).get_rr_distance(k[1]))) for k in current_at_l]  # rr_12
-#
-#     elif mode == 1:
-#
-#         write_xyz(coord, "coord")
-#         at1, at2 = at_l[0], at_l[1]
-#         # d = searching_setting.get("ddissociation", 2)
-#         d = 2
-#         d12 = np.round(Coord(coord).get_ats_distance(int(at1), int(at2)), 3)
-#
-#         push_l = [(str(int(at1) + 1),  # at1
-#                    str(int(at2) + 1),  # at2
-#                    str(d12),  # d_12
-#                    str(d * d12))]  # 2 * d_12
-#
-#     else:
-#         write_xyz(coord, "coord")
-#
-#     struc_callxtb = CallxTB(level, "coord", charge, uhf, alpb, etemp)
-#     scan_setting = {
-#         "constrain":
-#             {"k": xtb_setting.get("constrain_strength", str(1)),
-#              "distance": [str(int(tmpat1) + 1),
-#                           str(int(tmpat2) + 1),
-#                           str(tmpr * 1.5)] if tmpr is not None else None  # tmpr is a loosed bond
-#              },
-#         "scan":
-#             {"mode": "concerted" if len(at_l) == 2 else None,
-#              "distance": push_l if push_l else None,
-#              "step": xtb_setting.get("scan_step", str(20))}
-#     }
-#     rc = struc_callxtb.call_scan(scan_setting)
-#     if rc == 0:
-#         # scan success
-#         return True
-#     else:
-#         return False
-#
-# else:
-#
-#
-#
-#
-# struc_callxtb = CallxTB(level, "coord", charge, uhf, alpb, etemp)
-# scan_setting = {
-#     "constrain": {
-#         "k": xtb_setting.get("constrain_strength", str(1)),
-#         "distance": [str(int(tmpat1) + 1),
-#                      str(int(tmpat2) + 1),
-#                      str(tmpr * 1.5)] if tmpr is not None else None  # tmpr is a loosed bond
-#     },
-#     "scan": {
-#         "mode": "concerted" if len(at_l) == 2 else None,
-#         "distance": at_l if at_l else None,  # here at_l is push_l
-#         "step": xtb_setting.get("scan_step", str(20))
-#     }
-# }
-# rc = struc_callxtb.call_scan(scan_setting)
-# if rc == 0:
-#     # scan success
-#     return True
-# else:
-#     return False
-
-
 def get_endxyz_from_mb(constrain_l, coordinates, ele):
-    extra_constraints = {'bond_order_assignment': True,
-                         'cycle_detection': True,
-                         'set_edges': False,  # False if no bonds should be constrained automatically.
-                         'set_angles': True,  # False if no angles should be constrained automatically.
-                         'set_dihedrals': False,  # False if no dihedrals should be constrained automatically.
-                         'set_repulsion': False,  # False if no coulomb term should be used automatically.
-                         'repulsion_charge': 100.0,
-                         # Charged used for the Coulomb term in the Force field, every atom-atom pair uses the same charge, only reasonable opt mode (standalone force-field optimization). Defaults to 100.0
-                         'constraints': {'bonds': constrain_l}
-                         # atoms: list of atoms that define the dihedral, value is the ideal dihedral angle in degrees, atom indexing starts with 1.
-                         }
-    _ = idealize_structure_from_coordinates(coordinates, ele, input_constraint=extra_constraints)
-    coord_l, ele = _[1], _[2]
+    # Define constraints
+    extra_constraints = {
+        'bond_order_assignment': True,
+        'cycle_detection': True,
+        'set_edges': False,
+        'set_angles': True,
+        'set_dihedrals': False,
+        'set_repulsion': False,
+        'repulsion_charge': 100.0,
+        'constraints': {'bonds': constrain_l}
+    }
 
+    # Call the idealization function
+    res = idealize_structure_from_coordinates(coordinates, ele, input_constraint=extra_constraints)
+    coord_l, ele = res[1], res[2]
+
+    # Format results into a dataframe
     coord = pd.DataFrame(coord_l, columns=['X', 'Y', 'Z'])
     coord.insert(0, 'Symbol', ele)
     coord.columns = [''] * len(coord.columns)
-
     return coord
 
 
