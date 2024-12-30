@@ -9,7 +9,7 @@ setup(
     author_email = "ying.chen@pc.rwth-aachen.de",
     description = ("an automated Reaction Search Tool"),
     license = "unkown",
-    url = "https://git.rwth-aachen.de/bannwarthlab/reaction_discovery_python_script",
+    url = "https://git.rwth-aachen.de/bannwarthlab/aRST",
     packages=find_packages(include=['aRST']),
     exclude_package_date={'':['.gitignore']},
     # long_description=read('README'),

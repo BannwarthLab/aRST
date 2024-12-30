@@ -142,6 +142,7 @@ def SPR_HL(reactants,  # reactants id list
 
     identical_atom_d = find_identical_at(reactants,struc_rec)
 
+
     final_react = []
     if spr_mode==1:
         react_aa = build_react_l(HOAO_a, LUAO_a, search_mode)

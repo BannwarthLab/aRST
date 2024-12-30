@@ -345,7 +345,7 @@ class CallMultiwfn:
                     "0\n"
                     "-10\n"
                     )
-        cmd = f"/home/guests/ychen/Multiwfn/Multiwfn_noGUI {self.inputfn}"
+        cmd = f"/home/ychen/Multiwfn/Multiwfn_noGUI {self.inputfn}"
         with open(join(self.wd, "cmd.in"), "r") as cmd_in_file, open(join(self.wd,"multiwfn.out"), 'w') as out_file:
             p = subprocess.Popen(cmd, stdin=cmd_in_file,stdout=out_file, stderr=subprocess.PIPE, shell=True)
             p.wait()

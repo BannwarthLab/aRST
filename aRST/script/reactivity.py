@@ -38,6 +38,7 @@ def get_reactivity(wd, STRUC_rec, setting_d, reactants):
             with open(os.path.join(wd, "reactivity_interA"), "w") as f:
                 for entry in react_l:
                     f.write(json.dumps(entry))
+                    f.write('\n')
         else:
             raise Exception(f"no possible interA possibilities can be found in reactants list: {reactants}.")
 
