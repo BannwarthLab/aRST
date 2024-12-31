@@ -246,7 +246,7 @@ def simulation_interA(reactants,  # reactants list
         return output_d
     elif scanmode == 1:  # use molbar FF
         from aRST.script.do_scan import get_endxyz_from_mb
-        for entry in react_l[1:ninter]:
+        for entry in react_l[:ninter]:
             atom_connection, coordinates, ele=[],[],[]
             scan_wd, \
             struc1, struc2, at_l, \
