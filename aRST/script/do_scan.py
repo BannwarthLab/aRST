@@ -37,13 +37,13 @@ def build_push_l(coord, at_l, nat1=0,d=0.98):
 
     return push_l
 
-def get_endxyz_from_mb(constrain_l, coordinates, ele):
+def get_endxyz_from_mb(constrain_l, coordinates, ele,set_angles=True):
     # Define constraints
     extra_constraints = {
         'bond_order_assignment': True,
         'cycle_detection': True,
         'set_edges': False,
-        'set_angles': True,
+        'set_angles': set_angles,
         'set_dihedrals': False,
         'set_repulsion': False,
         'repulsion_charge': 100.0,

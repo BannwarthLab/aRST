@@ -266,13 +266,23 @@ def simulation_interA(reactants,  # reactants list
 
             atom_connection = atom_connection1 + add_atom_connection2
             ele = ele1 + ele2
+            with open(os.path.join(scan_wd, "newbond"), "w") as f:
+                f.write("")
+
             for item in push_l:
                 at1, at2 = int(item[0]), int(item[1])
                 value = np.round(float(item[3]),2)
                 atom_connection.append({"atoms": [at1, at2], "value": value})
+                with open(os.path.join(scan_wd, "newbond"), "a+") as f:
+                    f.write(json.dumps({"atoms": [at1, at2], "value": value}))
             coordinates = [list(alignedcoord.loc[line, 1:4]) for line in range(alignedcoord.shape[0])]
-            mbxyz = get_endxyz_from_mb(atom_connection, coordinates, ele)
+            mbxyz0 = get_endxyz_from_mb(atom_connection, coordinates, ele, set_angles=False)
+            write_xyz(mbxyz0, "coord_mb0")
+            mbxyz0=pd.read_table(os.path.join(scan_wd, "coord_mb0.xyz"), header=None, skiprows=2, sep='\s+')
+            coordinates = [list(mbxyz0.loc[line, 1:4]) for line in range(mbxyz0.shape[0])]
+            mbxyz = get_endxyz_from_mb(atom_connection, coordinates, ele, set_angles=True)
             write_xyz(mbxyz, "coord_mb")
+
             # constrained opt in gfn2
             status = CallxTB(scan_wd, {"method": xtb_setting.get("method", "gfn2"),
                                        "coordfn": "coord_mb",
