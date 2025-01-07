@@ -32,7 +32,6 @@ def simulation_interA(reactants,  # reactants list
                      spr_mode=searching_setting.get("spr_mode", 0)
                      )
 
-
     cut = 2 if searching_setting.get("concerted_pair", False) else 1
     for item in react_l:
         allpairs = item["at_combi"]

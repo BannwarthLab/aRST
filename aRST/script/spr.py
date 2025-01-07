@@ -15,13 +15,20 @@ def build_react_l(h_df, l_df, search_mode):
     loop over Hdf and Ldf to build up atomic pairs
     """
     react_l = []
-    for istruc_l, row_l in l_df.items():
-        for istruc_h, row_h in h_df.items():
-            # test search_mode
-            if search_mode==0 and istruc_l!=istruc_h: # only search struc1 == struc2
+    for il, (istruc_l, row_l) in enumerate(l_df.items()):
+        for ih, (istruc_h, row_h) in enumerate(h_df.items()):
+            # Test search_mode
+            if search_mode == 0 and il != ih:  # only search struc1 == struc2
                 continue
-            elif search_mode==1 and istruc_l==istruc_h: # only search struc1 != struc2
+            elif search_mode == 1 and il == ih:  # only search struc1 != struc2
                 continue
+    # for istruc_l, row_l in l_df.items():
+    #     for istruc_h, row_h in h_df.items():
+    #         # test search_mode
+    #         if search_mode==0 and istruc_l!=istruc_h: # only search struc1 == struc2
+    #             continue
+    #         elif search_mode==1 and istruc_l==istruc_h: # only search struc1 != struc2
+    #             continue
 
             # loop row to get H and L values
             for iat_l,L in  row_l.items():
