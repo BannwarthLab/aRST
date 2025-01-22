@@ -148,15 +148,6 @@ maxovlap =                          # bool(default as False), different alignmen
 aligning_distance = 5               # int, scale of aligning distance
 concerted_pair= False               # bool, create concerted pair in simulations (good for DA reactions)
 
-[searching_setting.disso]
-number = 1                          # int, number of inermolecular reaction paths to be search in one cycle
-mode="bo/wboe"                      # str, searching mode              
-pulling_distance =                  # int, scale of pulling distance
-
-[searching_setting.intra]
-number =                            # int, number of inermolecular reaction paths to be search in one cycle
-loose_bond =                        # bool(default as False), loose a bit the weakest bond in the structure
-
 
 [xtb_setting]
 strucopt=False                     # bool, do xtb preopt for structure

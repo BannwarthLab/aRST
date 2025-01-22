@@ -224,11 +224,11 @@ class SingleCycleSearch:
 
         # intraA
         if setting_inspector.get_value("searching_setting.intra"):
-            from aRST.script.intraA import simulation_interA
+            from aRST.script.intraA import simulation_intraA
             merged_setting = {**setting_inspector.get_value("searching_setting.intra"),
                               **setting_inspector.get_value("searching_setting.general")}
             print("starting searching intraA posiibilities")
-            output_intraA = simulation_interA(reactants,  # reactants list
+            output_intraA = simulation_intraA(reactants,  # reactants list
                                               self.STRUC_rec,  # correspongding struc info in dict
                                               merged_setting,
                                               setting_inspector.get_value("xtb_setting"),

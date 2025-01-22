@@ -111,27 +111,3 @@ def _get_reactive_features(wd,struc,STRUC_rec,setting_d):
             else:
                 raise Exception(f"struc {struc} stda ml failed")
 
-
-    # elif keyword in ["gfn1,gfnff"]:  # need to call molden file first
-    #     mlwd = create_folder(os.path.join(self.wd, "struc", struc, "stda"))
-    #     if not os.path.exists(os.path.join(mlwd, "ml_feature.csv")):
-    #         coord = STRUC_inspector.get_value(f"{struc}.struc_info.general.coord")
-    #         charge = STRUC_inspector.get_value(f"{struc}.struc_info.general.charge")
-    #         m = STRUC_inspector.get_value(f"{struc}.struc_info.general.multiplicity")
-    #         write_xyz(coord, "coord")
-    #         rc = CallxTB(mlwd, {"method": self.setting_d["xtb_setting"].get("method", "gfn2"),
-    #                             "coordfn": "coord",
-    #                             "optlevel": self.setting_d["xtb_setting"].get("optlevel", None),
-    #                             "charge": charge,
-    #                             "uhf": m - 1,
-    #                             "alpb": self.setting_d["xtb_setting"].get("alpb", "h2o"),
-    #                             "etemp": self.setting_d["xtb_setting"].get("struc_etemp", "4000")
-    #                             }).get_moldeninput()
-    #         if rc == 0:
-    #             rc2 = CallsTDA("molden.input").callml(setting_inspector.get_value("stda_setting.stda_wd"), 0)
-    #             if rc2 == 0:
-    #                 pass
-    #             else:
-    #                 raise Exception(f"struc {struc} stda ml failed")
-    #         else:
-    #             raise Exception(f"struc {struc} xtb get molden file failed")

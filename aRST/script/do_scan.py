@@ -1,6 +1,5 @@
 import os
 import pandas as pd
-from molbar.barcode import idealize_structure_from_coordinates
 from collections import Counter
 from aRST.script.geom import Coord
 
@@ -32,6 +31,7 @@ def build_push_l(coord, at_l, nat1=0,d=0.98):
     return push_l
 
 def get_endxyz_from_mb(constrain_l, coordinates, ele,set_angles=True):
+    from molbar.idealize import idealize_structure_from_coordinates
     # Define constraints
     extra_constraints = {
         'bond_order_assignment': True,
