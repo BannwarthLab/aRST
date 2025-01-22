@@ -178,6 +178,9 @@ ncpu = 1                            # int, parallel calculations for orca
 
 [stda_setting]
 stda_wd = "path/to/modified/stda/version"
+
+[mwfn_setting]
+mwfn_wd = "path/to/mwfn/"    # change settings.ini/iloadasCart= 1
 ```
 
 If products are known, you can add following structure infomation, aRST will compare each simulated reaction path results for products.

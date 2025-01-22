@@ -4,7 +4,7 @@ import shutil
 import string
 import random
 import numpy as np
-import pandas as pd
+
 
 
 def create_folder(wd):
@@ -264,55 +264,3 @@ def get_molbarcode(coord,molbarlevel=None):
             mb = "CL"
     return mb
 
-# def collect_sp_xyz(rec, reckey, wd, typ):
-#     speh = float('inf')
-#     if typ == 'gfn2':
-#         if os.path.isfile(f'{wd}/ENERGY'):
-#             with open(f'{wd}/ENERGY', 'r') as f:
-#                 speh = float(f.readlines()[0])
-#         if 'sp_gfn2' not in rec[reckey].keys() or rec[reckey]['sp_gfn2'] > speh:
-#             rec[reckey]['sp_gfn2'] = speh
-#             if os.path.isfile(f'{wd}/xtbopt.xyz'):
-#                 rec[reckey]['coord'] = pd.read_table(f'{wd}/xtbopt.xyz', header=None, skiprows=2, sep='\s+')
-#             else:
-#                 rec[reckey]['coord'] = pd.read_table(f'{wd}/coord.xyz', header=None, skiprows=2, sep='\s+')
-#             nat = rec[reckey]['coord'].shape[0]
-#             if nat == 1 and rec[reckey]['coord'].iloc[0, 0] in ["H", "h"]:
-#                 rec[reckey]['sp_gfn2'] = 0
-#     else:
-#         if os.path.isfile(f'{wd}/ENERGY'):
-#             with open(f'{wd}/ENERGY', 'r') as f:
-#                 speh = float(f.readlines()[0])
-#         if 'sp_dft' not in rec[reckey].keys() or rec[reckey]['sp_dft'] > speh:
-#             rec[reckey]['sp_dft'] = speh
-#             if os.path.isfile(f'{wd}/orca.xyz'):
-#                 rec[reckey]['coord'] = pd.read_table(f'{wd}/orca.xyz', header=None, skiprows=2, sep='\s+')
-#             else:
-#                 rec[reckey]['coord'] = pd.read_table(f'{wd}/coord.xyz', header=None, skiprows=2, sep='\s+')
-#             nat = rec[reckey]['coord'].shape[0]
-#             if nat == 1 and rec[reckey]['coord'].iloc[0, 0] in ["H", "h"] and rec[reckey]['charge'] == 1:
-#                 rec[reckey]['sp_dft'] = 0
-#                 rec[reckey]['m'] = 0
-#             else:
-#                 with open(f'{wd}/orca.inp', 'r') as f:
-#                     string = f.read()
-#                 pattern = r'\* xyzfile -?\d+ (\d+) coord\.xyz'
-#                 m = re.search(pattern, string).group(1)
-#                 rec[reckey]['m'] = int(m)
-#     return rec
-
-
-# def collect_g_xyz(rec, reckey, wd):
-#     speh1 = 0
-#     speh2 = 0
-#     if os.path.isfile(f'{wd}/gfn2_trv/GTRV'):
-#         with open(f'{wd}/gfn2_trv/GTRV', 'r') as f:
-#             speh1 = float(f.readlines()[0])
-#     if os.path.isfile(f'{wd}/gfn2_solv/GSOLV'):
-#         with open(f'{wd}/gfn2_solv/GSOLV', 'r') as f:
-#             speh2 = float(f.readlines()[0])
-#     sp = rec[reckey]['sp_dft']
-#     rec[reckey]['g'] = sp + speh1 + speh2
-#     rec[reckey]['trv'] = speh1
-#     rec[reckey]['solv'] = speh2
-#     return rec

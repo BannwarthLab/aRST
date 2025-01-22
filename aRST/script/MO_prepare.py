@@ -94,7 +94,8 @@ def _get_reactive_features(wd,struc,STRUC_rec,setting_d):
                 ### del .gbw file to keep i/o smaller
                 os.remove(join(orcawd,"orca.gbw"))
                 # transfom MOs from spherical coordinates to cartesian
-                rc = CallMultiwfn(orcawd,"orca.molden.input").write_cartesian_molden()
+                rc = CallMultiwfn(orcawd,"orca.molden.input").write_cartesian_molden(
+                    setting_inspector.get_value("mwfn_setting.mwfn_wd"))
                 if rc == 0:
                     os.remove(join(orcawd, "orca.molden.input"))
                     pass

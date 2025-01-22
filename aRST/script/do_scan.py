@@ -1,15 +1,9 @@
-import importlib
 import os
-import sys
-import numpy as np
 import pandas as pd
-import importlib
-from aRST.script.toolbox import  write_xyz
 from molbar.barcode import idealize_structure_from_coordinates
-import copy
 from collections import Counter
 from aRST.script.geom import Coord
-from aRST.script.callsys import CallxTB
+
 
 
 def build_push_l(coord, at_l, nat1=0,d=0.98):
@@ -60,39 +54,6 @@ def get_endxyz_from_mb(constrain_l, coordinates, ele,set_angles=True):
     coord.columns = [''] * len(coord.columns)
     return coord
 
-
-# def evaluate_bo_after_mbff(wd, level, coord, charge, uhf, alpb, etemp, tmp_at_connection, wbolim=0.9):
-#     # do sp to get wbo
-#     Trigger = False
-#
-#     os.chdir(os.path.abspath(wd))
-#     write_xyz(coord, f"coord")
-#
-#     rc = CallxTB(level, "coord", charge, uhf, alpb, etemp).callopt()
-#     if rc==0:
-#         BO = {}
-#         wboe = pd.read_csv(os.path.join(wd, "wbo"), header=None, sep='\s+')
-#         for index in range(wboe.shape[0]):
-#             dgap = wboe.iloc[index, 2]
-#             if dgap >= wbolim:
-#                 at_1, at_2 = wboe.iloc[index, 0], wboe.iloc[index, 1]
-#                 value = [at_1, at_2]
-#                 if dgap not in BO.keys():
-#                     BO[dgap] = [value]
-#                 else:
-#                     BO[dgap].append(value)
-#         if tmp_at_connection is not None:
-#             for item in BO.values():
-#                 for atl1 in item:
-#                     for atl2 in tmp_at_connection:
-#                         if Counter(atl1) == Counter(atl2):
-#                             Trigger = True
-#         else:
-#             Trigger = True  # opt sussess
-#
-#     return Trigger
-
-
 def get_bo(wbopath,tmp_at_connection):
     wboe = pd.read_csv(os.path.join(wbopath, "wbo"), header=None, sep='\s+')
     BO = {}
@@ -115,11 +76,3 @@ def get_bo(wbopath,tmp_at_connection):
                         bo = key
                         continue
     return bo
-
-# def get_bl(coord,tmp_at_connection):
-#     at1 = tmp_at_connection[0][0]-1
-#     at2 = tmp_at_connection[0][1]-1
-#
-#     d = np.round(Coord(coord).get_ats_distance(at1, at2), 2)
-#     return d
-
