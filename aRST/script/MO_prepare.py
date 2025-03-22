@@ -37,6 +37,8 @@ def _get_reactive_features(wd,struc,STRUC_rec,setting_d):
                 return mlwd
             else:
                 raise Exception(f"struc {struc} xtb ml failed")
+        else:return mlwd
+
     else:
         # DFT based
         keyword2 = str.upper(setting_inspector.get_value("searching_setting.reactivity.MO_method"))

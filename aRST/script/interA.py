@@ -31,6 +31,15 @@ def simulation_interA(reactants,  # reactants list
                      search_mode=searching_setting.get("search_mode", 1),
                      spr_mode=searching_setting.get("spr_mode", 0)
                      )
+    if searching_setting.get("printall", False):
+        with open(os.path.join(wd, "react_all"), "w") as f:
+            f.write("[\n")
+            for item in react_l[:-1]:
+                f.write(json.dumps(item))
+                f.write(",\n")
+            f.write(json.dumps(react_l[-1]))
+            f.write("\n]")
+
 
     cut = 2 if searching_setting.get("concerted_pair", False) else 1
     for item in react_l:

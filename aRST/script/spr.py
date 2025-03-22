@@ -199,8 +199,9 @@ def SPR_dissociation(reactants,  # reactants id list
                      search_mode=0  # 0: use wboe; 1: use MBO
                      ):
     struc_inspector = DictionaryInspector(struc_rec)
-    BO = {}
-    for strucid in reactants:
+    final_react=[]
+    for strucid in list(set(reactants)):
+        react_l=[]
         wboe = struc_inspector.get_value(f'{strucid}.struc_info.reactivity.bo')
         ml = struc_inspector.get_value(f'{strucid}.struc_info.reactivity.ml')
         if wboe is not None:
@@ -209,8 +210,7 @@ def SPR_dissociation(reactants,  # reactants id list
                     dgap = wboe.iloc[index, 3]  # MBO
                     if dgap <= 0.3:
                         continue
-                else:
-                    dgap = wboe.iloc[index, 2]  # energy-baesd MBO
+                else:dgap = wboe.iloc[index, 2]  # energy-baesd MBO
                 at1, at2 = wboe.iloc[index, :2]  # index starting from 1
                 ele1, ele2 = ml.loc[at1 - 1, 'Atom'], ml.loc[at2 - 1, 'Atom']
 
@@ -220,13 +220,32 @@ def SPR_dissociation(reactants,  # reactants id list
                 if not allow_halogen:
                     if int(ele1) in [9, 17, 35, 53, 85] or int(ele2) in [9, 17, 35, 53, 85]:
                         continue
-                value = [strucid, at1 - 1, at2 - 1, dgap]
-                if dgap not in BO.keys():
-                    BO[dgap] = [value]
-                else:
-                    BO[dgap].append(value)
-    return BO
+                # check for degenrated
+                degenrate=False
+                for item in react_l:
+                    if abs(item["dgap"] - dgap) < 0.01: # yes
+                        item["at_combi"].append([str(at1), str(at2)])
+                        degenrate=True
+                        break
+                if not degenrate:
+                    react_l.append({"struc": str(strucid),
+                                    "at_combi": [str(at1), str(at2)],
+                                    "dgap": dgap})
+        final_react.extend(react_l)
+        # refine final_react to avoid cutting 2 bonds from same atom
+        for item in final_react:
+            newat_combi = []
+            used_atl = []
+            for item2 in item["at_combi"]:
+                at1,at2 = item2
+                if at1 not in used_atl and at2 not in used_atl:
+                    newat_combi.append(str(at1), str(at2))
+                    used_atl.append(at1)
+                    used_atl.append(at2)
+            item["at_combi"] = newat_combi
+        final_react = sorted(final_react, key=lambda x: x['dgap'])
 
+    return final_react
 
 def build_bo_d(reactants,
                struc_rec,  # struc dict record

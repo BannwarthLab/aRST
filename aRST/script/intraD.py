@@ -1,13 +1,14 @@
 # Reaction simulation for intramolecular association
 import os
 import shutil
-
+import json
 import numpy as np
 import pandas as pd
-from aRST.script.toolbox import create_folder, write_xyz, read_topomol,round_charge
+from aRST.script.toolbox import create_folder, write_xyz, read_topomol, round_charge
 from aRST.script.spr import SPR_dissociation
 from aRST.script.dictionaryInspector import DictionaryInspector
 from aRST.script.geom import Coord
+from aRST.script.callsys import CallxTB
 
 
 def simulation_intraD(reactants,  # reactants list
@@ -18,65 +19,83 @@ def simulation_intraD(reactants,  # reactants list
                       reactionpath,  # str numbering for prior path
                       count=0):  # :return: output_d[count] = [{reactants info},{endxyz info}]
 
-
     struc_inspector = DictionaryInspector(struc_rec)
     output_d = {}
 
     ###### rangking reactivity ######
-    BO = SPR_dissociation(reactants,  # reactants id list
-                          struc_rec,  # struc dict record
-                          allow_hydrogen=searching_setting.get("hydrogen", True),
-                          allow_halogen=searching_setting.get("halogen", True),
-                          search_mode=0 if str.lower(searching_setting.get("mode", "wboe")) == "wboe" else 1)
-    if not BO:
-        raise Exception(f"no possible dissociation possibilities can be found in reactants list: {reactants}.")
+    ovwrite_at1 = searching_setting.get("at1", False)
+    ovwrite_at2 = searching_setting.get("at2", False)
+
+
+    #todo
+    # react_l = SPR_dissociation(reactants,  # reactants id list
+    #                            struc_rec,  # struc dict record
+    #                            allow_hydrogen=searching_setting.get("hydrogen", True),
+    #                            allow_halogen=searching_setting.get("halogen", True),
+    #                            search_mode=searching_setting.get("mode", 1))
+    react_l=[]
+    if ovwrite_at1:
+        if searching_setting.get("at3", False):
+            ovwrite_at3 = searching_setting.get("at3", False)
+            ovwrite_at4 = searching_setting.get("at4", False)
+            react_l = [{"struc": str(reactants[0]),
+                        "at_combi": [[str(ovwrite_at1), str(ovwrite_at2)], [str(ovwrite_at3), str(ovwrite_at4)]],
+                        "dgap": None}]
+
+        else:react_l = [{"struc": str(reactants[0]),
+                        "at_combi": [[str(ovwrite_at1), str(ovwrite_at2)]],
+                        "dgap": None}]
+
+
+
+        if not react_l:
+            raise Exception(f"no possible dissociation possibilities can be found in reactants list: {reactants}.")
 
     scanmode = searching_setting.get("scan_mode", 0)
     ndisso = searching_setting.get("number", 1)
 
     if scanmode == 0:
         # standard xtbscan
-        from aRST.script.callsys import CallxTB
-        for dgap in sorted(BO.keys())[:ndisso]:
-            # prepare scan_wd
+
+        for entry in react_l[:ndisso]:
             scan_wd = os.path.join(wd, "scan", f"{reactionpath}_{count}")
             create_folder(scan_wd)
 
+            with open(os.path.join(scan_wd, "atl"), "w") as f:
+                f.write(json.dumps(entry))
+
             # prepare scan_xyz
-            info_l = BO[dgap][0]
-            strucid = info_l[0]
-            coord = struc_inspector.get_value(f"{strucid}.struc_info.general.coord")
+            struc = entry["struc"]
+            coord = struc_inspector.get_value(f"{struc}.struc_info.general.coord")
             write_xyz(coord, f"coord")
+            totat_l = entry["at_combi"]  # index starting with 1
 
-            # prepare scan setteing
-            charge = struc_inspector.get_value(f"{strucid}.struc_info.general.charge")
-            nel = struc_inspector.get_value(f"{strucid}.struc_info.general.nel")
+            # prepare scan
+            charge = struc_inspector.get_value(f"{struc}.struc_info.general.charge")
+            nel = struc_inspector.get_value(f"{struc}.struc_info.general.nel")
+            uhf=0
+            # uhf = struc_inspector.get_value(f"{struc}.struc_info.general.uhf") # todo
 
-            if nel % 2 == 0:
-                uhf = np.inf  # try both 0 and 2 (additional reaction path)
-            else:
-                uhf = 1
-
-            ## constrain setting
-            at1, at2 = info_l[1], info_l[2]
-            at_l = [at1, at2]
-            d12 = np.round(Coord(coord).get_ats_distance(int(at1), int(at2)), 2)
+            # preparing scan inp
             d = searching_setting.get("pulling_distance", 2)
-            push_l = [(int(at1) + 1,  # at1
-                       int(at2) + 1,  # at2
-                       d12,  # strat distance
-                       d * d12)]  # end distance
+            push_l = []
+            for pair in totat_l[:2]:
+                at1, at2 = pair
+                d12 = np.round(Coord(coord).get_ats_distance(int(at1) - 1, int(at2) - 1), 2)
+                dend = d * d12
+                push_l.append([at1, at2, d12, dend])
 
             constrain_setting = {
                 "constrain": {
                     "force_constant": xtb_setting.get("k", 1)
                 },
                 "scan": {
-                    "mode": "concerted" if len(at_l) == 2 else None,
+                    "mode": "concerted" if len(push_l) == 2 else None,
                     "distance": push_l if push_l else None,
                     "step": xtb_setting.get("step", 20)
                 }
             }
+
             # call xtb scan
             status = CallxTB(scan_wd, {"method": xtb_setting.get("method", "gfn2"),
                                        "coordfn": "coord",
@@ -87,71 +106,47 @@ def simulation_intraD(reactants,  # reactants list
                                        "etemp": xtb_setting.get("scan_etemp", "4000")
                                        }).scan(constrain_setting)
             if status == 0:
-                endxyz = pd.read_table(os.path.join(scan_wd, 'xtbopt.xyz'), header=None, skiprows=2, sep='\s+')
-                if os.path.exists(os.path.join(scan_wd, 'xtbtopo.mol')):
-                    constrain_l, ele = read_topomol(os.path.join(scan_wd, 'xtbtopo.mol'))
+                endwd = scan_wd
+                if searching_setting.get("sep_mode", 0) != 0:
+                    # do a unconstarined opt
+                    optwd = os.path.join(scan_wd, "opt")
+                    create_folder(optwd)
+                    shutil.copyfile(os.path.join(scan_wd, 'xtbopt.xyz'), os.path.join(optwd, 'coord.xyz'))
+                    status2 = CallxTB(optwd, {"method": xtb_setting.get("method", "gfn2"),
+                                              "coordfn": "coord",
+                                              "optlevel": xtb_setting.get("optlevel", None),
+                                              "charge": charge,
+                                              "uhf": uhf if not np.isinf(uhf) else 0,
+                                              "alpb": xtb_setting.get("alpb", "h2o"),
+                                              "etemp": xtb_setting.get("struc_etemp", "4000")
+                                              }).opt()
+                    if status2 == 0:
+                        endwd = optwd
+                endxyz = pd.read_table(os.path.join(endwd, 'xtbopt.xyz'), header=None, skiprows=2, sep='\s+')
+                if os.path.exists(os.path.join(endwd, 'xtbtopo.mol')):
+                    constrain_l, ele = read_topomol(os.path.join(endwd, 'xtbtopo.mol'))
                 else:
                     constrain_l, ele = [], []
-                if os.path.getsize(os.path.join(scan_wd, "wbo")) != 0:
-                    bo = pd.read_csv(os.path.join(scan_wd, "wbo"), header=None, sep='\s+')
-                else:
-                    bo = None
-                atcharge = pd.read_table(os.path.join(scan_wd, "charges"), header=None, sep='\s+')
-                output_d[f"{count}"] = [{"reactants": [strucid],
-                                         "unreacted": [st for st in reactants if st != strucid]
-                                         if len(reactants) > 1 else []},  # reactants info
+                bo = pd.read_csv(os.path.join(endwd, "wbo"), header=None, sep='\s+') if os.path.getsize(
+                    os.path.join(endwd, "wbo")) != 0 else None
+                atcharge = pd.read_table(os.path.join(endwd, "charges"), header=None, sep='\s+')
+
+                output_d[f"{count}"] = [{"reactants": [struc],
+                                         "unreacted": [st for st in reactants
+                                                       if st != struc]
+                                         if len(reactants) > 2 else []},  # reactants info
                                         {"atomic_charge": atcharge,
-                                         "charge":round_charge(sum(atcharge),0.5),
+                                         "charge": charge,
                                          "nel": nel,
                                          "uhf": uhf if not np.isinf(uhf) else 0,
                                          "coord": endxyz,
                                          "bo": bo,
-                                         "atomic_connection": (constrain_l, ele)
-                                         }  # endxyz info
+                                         "atomic_connection": (constrain_l, ele)}  # endxyz info
                                         ]
-            count += 1
-            if np.isinf(uhf):
-                shutil.copytree(os.path.join(wd, "scan", f"{reactionpath}_{count - 1}"),
-                                os.path.join(wd, "scan", f"{reactionpath}_{count}"))
-                scan_wd = os.path.join(wd, "scan", f"{reactionpath}_{count}")
-                os.chdir(scan_wd)
 
-                status = CallxTB(scan_wd, {"method": xtb_setting.get("method", "gfn2"),
-                                           "coordfn": "coord",
-                                           "optlevel": xtb_setting.get("optlevel", None),
-                                           "charge": charge,
-                                           "uhf": 2,
-                                           "alpb": xtb_setting.get("alpb", "h2o"),
-                                           "etemp": xtb_setting.get("scan_etemp", "4000")
-                                           }).scan(constrain_setting)
-                if status == 0:
-                    endxyz = pd.read_table(os.path.join(scan_wd, 'xtbopt.xyz'), header=None, skiprows=2, sep='\s+')
-                    if os.path.exists(os.path.join(scan_wd, 'xtbtopo.mol')):
-                        constrain_l, ele = read_topomol(os.path.join(scan_wd, 'xtbtopo.mol'))
-                    else:
-                        constrain_l, ele = [], []
-                    if os.path.getsize(os.path.join(scan_wd, "wbo")) != 0:
-                        bo = pd.read_csv(os.path.join(scan_wd, "wbo"), header=None, sep='\s+')
-                    else:
-                        bo = None
-                    atcharge = pd.read_table(os.path.join(scan_wd, "charges"), header=None, sep='\s+')
-                    output_d[f"{count}"] = [{"reactants": [strucid],
-                                             "unreacted": [st for st in reactants if st != strucid]
-                                             if len(reactants) > 1 else []},  # reactants info
-                                            {"atomic_charge": atcharge,
-                                             "charge":charge,
-                                             "nel": nel,
-                                             "uhf": 2,
-                                             "coord": endxyz,
-                                             "bo": bo,
-                                             "atomic_connection": (constrain_l, ele)
-                                             }  # endxyz info
-                                            ]
-                count += 1
-        return output_d
+
     elif scanmode == 1:  # use molbar FF
         from aRST.script.do_scan import get_endxyz_from_mb
-        from aRST.script.callsys import CallxTB
         for dgap in sorted(BO.keys())[:ndisso]:
             # prepare scan_wd
             scan_wd = os.path.join(wd, "scan", f"{reactionpath}_{count}")
@@ -198,7 +193,7 @@ def simulation_intraD(reactants,  # reactants list
                                          "unreacted": [st for st in reactants if st != strucid]
                                          if len(reactants) > 1 else []},  # reactants info
                                         {"atomic_charge": atcharge,
-                                         "charge":charge,
+                                         "charge": charge,
                                          "nel": nel,
                                          "coord": endxyz,
                                          "bo": bo,

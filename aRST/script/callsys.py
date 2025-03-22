@@ -204,7 +204,7 @@ class CallxTB:
                     f'force constant={setting_d["constrain"]["force_constant"]}\n')
             if "loose_bond" in setting_d["constrain"].keys():
                 at1, at2, dd = setting_d["constrain"]["loose_bond"]
-                f.write('distance: %d,%d,%.2f\n' % (at1, at2, dd * 1.2))
+                f.write('distance: %d,%d,%.2f\n' % (int(at1), int(at2), dd * 1.2))
 
             f.write('$scan\n')
             if setting_d["scan"]["mode"] == "concerted":
@@ -214,7 +214,7 @@ class CallxTB:
             for item in atl:
                 at1,at2,d0,d_end = item
                 f.write('distance: %d,%d,%.2f;%.2f,%.2f,%d\n'
-                        % (at1,at2, d0, d0, d_end, setting_d["scan"]["step"]))
+                        % (int(at1), int(at2), d0, d0, d_end, setting_d["scan"]["step"]))
             f.write("$end")
 
         cmd = self.generate_cmd_string(opt=True)

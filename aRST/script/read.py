@@ -195,24 +195,26 @@ def refine_struc_info(wd0,strucid, struc_rec, setting_d):
                 f"struc {strucid} sp at {setting_inspector.get_value('xtb_setting.method', 'gfn2')} failed")
 
 
-    # do orca sp
-    wd = create_folder(os.path.join(wd0, "struc", strucid, "orca"))
-    write_xyz(coord, "coord")
-    staus = CallORCA(wd, {"functional": setting_inspector.get_value("orca_setting.functional", "r2scan-3c"),
-                          "basis": setting_inspector.get_value("orca_setting.basis", " "),
-                          "charge": charge,
-                          "m": m,
-                          "fn": "coord",
-                          "caltyp": "SP",
-                          "caltyp2": "RKS" if m == 1 else "UKS",
-                          "solmode": setting_inspector.get_value("orca_setting.solmode", ""),
-                          "ncpu": setting_inspector.get_value("orca_setting.ncpu", 1)}).call()
-    if staus == 0:
-        sp_orca = get_energy(os.path.join(wd, 'ENERGY'))
-    else:
-        sp_orca = None
-        raise Exception(f'struc {strucid} sp at '
-                        f'{setting_inspector.get_value("orca_setting.functional", "r2scan-3c")} failed')
+    # # do orca sp
+    sp_orca=0
+    if not setting_inspector.get_value("orca_setting.jumpsp", False):
+        wd = create_folder(os.path.join(wd0, "struc", strucid, "orca"))
+        write_xyz(coord, "coord")
+        staus = CallORCA(wd, {"functional": setting_inspector.get_value("orca_setting.functional", "r2scan-3c"),
+                              "basis": setting_inspector.get_value("orca_setting.basis", " "),
+                              "charge": charge,
+                              "m": m,
+                              "fn": "coord",
+                              "caltyp": "SP",
+                              "caltyp2": "RKS" if m == 1 else "UKS",
+                              "solmode": setting_inspector.get_value("orca_setting.solmode", ""),
+                              "ncpu": setting_inspector.get_value("orca_setting.ncpu", 1)}).call()
+        if staus == 0:
+            sp_orca = get_energy(os.path.join(wd, 'ENERGY'))
+        else:
+            sp_orca = None
+            raise Exception(f'struc {strucid} sp at '
+                            f'{setting_inspector.get_value("orca_setting.functional", "r2scan-3c")} failed')
     endxyz = coord
 
     # getting molbar code
