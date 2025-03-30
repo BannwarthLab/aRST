@@ -40,9 +40,9 @@ Now you are able to used aRST as commandline tool :)
 
 ## User Manual
 To start a calculation, the essential input consists of the ```.xyz``` files of reactants, 
-a ```in.toml``` file with detailed settings.
+a ```in.toafo``` file with detailed settings.
 
-### essential input for all type calculation in in.toml
+### essential input for all type calculation in in.toafo
 
 ```
 [geom.reactant1]
@@ -71,7 +71,7 @@ Print out reactive information of given structures.
 With essential input, calling command:
 
 ```
-aRST in.toml --ml_feature > record.log 2>&1 &
+aRST in.toafo --afo_feature > record.log 2>&1 &
 ```
 
 
@@ -89,7 +89,7 @@ at =                                # int, specified atom index
 Calling commandline:
 
 ```
-aRST in.toml --align > record.log 2>&1 &
+aRST in.toafo --align > record.log 2>&1 &
 ```
 
 ### reaction pathes exploration
@@ -122,18 +122,18 @@ mb_level =                          # None or "loose" to only screen with topolo
 
 
 [searching_setting.reactivity]
-ml_method ="gfn2"/"stda"            # str, method for ml feature calculations
+afo_method ="gfn2"/"stda"            # str, method for afo feature calculations
 ##############################################
 MO_method = "orca"/"terachem"       # str, program to get molden file
 ### if MO_method=terachem, you will need: ###
-ml_tc_functional="BHandHLYP"        # str, if use stda, method for structure sp calculations in TC
-ml_tc_basis="vdzp"                  # str, if use stda, basis for structure sp calculations in TC
-ml_tc_epsilon=                      # float, if use stda, pcm solvent mode
+afo_tc_functional="BHandHLYP"        # str, if use stda, method for structure sp calculations in TC
+afo_tc_basis="vdzp"                  # str, if use stda, basis for structure sp calculations in TC
+afo_tc_epsilon=                      # float, if use stda, pcm solvent mode
 ##############################################
 ### if MO_method=orca, you will need: ###
-ml_orca_functional="BHandHLYP"        # str, if use stda, method for structure sp calculations in ORCA
-ml_orca_basis="vdzp"                  # str, if use stda, basis for structure sp calculations in ORCA
-ml_orca_cpcm=                         # str, if use stda, cpcm solvent mode in ORCA
+afo_orca_functional="BHandHLYP"        # str, if use stda, method for structure sp calculations in ORCA
+afo_orca_basis="vdzp"                  # str, if use stda, basis for structure sp calculations in ORCA
+afo_orca_cpcm=                         # str, if use stda, cpcm solvent mode in ORCA
 ##############################################
 
 [searching_setting.inter]
@@ -142,11 +142,30 @@ search_mode = 1                     # 0: only search association possibility bet
                                     # 1(default): only search association possibility between different structures (A+B ->);
                                     # 2: search association possibility in all structures (A+A ->, A+B-> and B+B ->).
 
+at1=                                # int (index starts with 0) manually define reactive atom
+at2=
 
 loose_bond =                        # bool(default as False), loose a bit the weakest bond in the structure
 maxovlap =                          # bool(default as False), different alignment direction
 aligning_distance = 5               # int, scale of aligning distance
 concerted_pair= False               # bool, create concerted pair in simulations (good for DA reactions)
+
+[searching_setting.inter]
+number = 1
+at1=                                # int (index starts with 0) manually define reactive atom
+at2=
+concerted_pair=False
+
+[searching_setting.disso]
+number = 1
+at1=                                # int (index starts with 0) manually define reactive atom
+at2=
+mode = 0                            # 0: use mbo as bo
+                                      1: use embo as bo
+                                      
+concerted_pair=False
+
+pulling_distance = 2               # int, scale of pulling distance
 
 
 [xtb_setting]
@@ -191,5 +210,5 @@ multiplicity =
 Calling commandline:
 
 ```
-aRST in.toml --explore > record.log 2>&1 &
+aRST in.toafo --explore > record.log 2>&1 &
 ```

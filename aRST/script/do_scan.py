@@ -1,6 +1,4 @@
-import os
 import pandas as pd
-from collections import Counter
 from aRST.script.geom import Coord
 
 
@@ -53,26 +51,3 @@ def get_endxyz_from_mb(constrain_l, coordinates, ele,set_angles=True):
     coord.insert(0, 'Symbol', ele)
     coord.columns = [''] * len(coord.columns)
     return coord
-
-def get_bo(wbopath,tmp_at_connection):
-    wboe = pd.read_csv(os.path.join(wbopath, "wbo"), header=None, sep='\s+')
-    BO = {}
-    for index in range(wboe.shape[0]):
-        dgap = wboe.iloc[index, 2]
-        if dgap >= 0.3:
-            at_1, at_2 = wboe.iloc[index, 0], wboe.iloc[index, 1]
-            value = [at_1, at_2]
-            if dgap not in BO.keys():
-                BO[dgap] = [value]
-            else:
-                BO[dgap].append(value)
-
-    bo = 0
-    if tmp_at_connection is not None:
-        for key,item in BO.items():
-            for atl1 in item:
-                for atl2 in tmp_at_connection:
-                    if Counter(atl1) == Counter(atl2):
-                        bo = key
-                        continue
-    return bo

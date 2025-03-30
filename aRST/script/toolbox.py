@@ -1,147 +1,144 @@
 import os
-import re
-import shutil
-import string
-import random
 import numpy as np
+import pandas as pd
+from os.path import join, exists
+import networkx as nx
+from aRST.script.element import element
 
+
+class mydict(dict):
+    def __init__(self, data=None):
+        if data is None:
+            data = {}
+        super().__init__(data)
+
+    def get_value(self, target_key, default_value=None):
+        keys = target_key.split('.')
+        current_data = self
+
+        for key in keys:
+            if isinstance(current_data, dict) and key in current_data:
+                current_data = current_data[key]
+            elif isinstance(current_data, list):
+                try:
+                    index = int(key)
+                    current_data = current_data[index]
+                except (ValueError, IndexError):
+                    return current_data
+            else:
+                return default_value
+
+        return current_data
+
+    def set_value(self, target_key, new_value):
+        keys = target_key.split('.')
+        current_data = self
+
+        for key in keys[:-1]:
+            if isinstance(current_data, dict):
+                if key not in current_data:
+                    current_data[key] = {}
+                current_data = current_data[key]
+            else:
+                raise KeyError(f"Invalid key '{key}' in the dictionary.")
+
+        last_key = keys[-1]
+        current_data[last_key] = new_value
+
+    def compare_value(self, key1, key2):
+        value1 = self.get_value(key1)
+        value2 = self.get_value(key2)
+        if isinstance(value1, str) and isinstance(value2, str):
+            return value1 == value2
+        if isinstance(value1, (int, float)) and isinstance(value2, (int, float)):
+            return round(value1, 2) == round(value2, 2)
+        return False
+
+
+def read_coord(coordpath):
+    coord = pd.read_table(coordpath, header=None, skiprows=2, sep='\s+') if exists(coordpath) else None
+    return coord
+
+
+def read_bo(bopath):
+    bo = pd.read_csv(bopath, header=None, sep='\s+', dtype={0: int, 1: int}) \
+        if exists(bopath) and os.path.getsize(bopath) != 0 else None
+    return bo
+
+
+def read_afo_csv(afopath):
+    afo = pd.read_csv(afopath, index_col=False) if exists(afopath) else None
+    if afo is not None:
+        afo.columns = afo.columns.str.strip()
+        afo.insert(0, 'index', range(len(afo)), allow_duplicates=False)
+        afo.set_index("index")
+        if 'HOAO_a (eV)' in afo.columns:
+            afo = afo[['index',
+                       'HOAO_a (eV)', 'HOAO_b (eV)',
+                       'LUAO_a (eV)', 'LUAO_b (eV)', 'Atom']]
+        else:
+            afo = afo[['index',
+                       'HOAO (eV)', 'LUAO (eV)', 'Atom']]
+            afo.rename(columns={'HOAO (eV)': 'HOAO_a (eV)'})
+            afo.rename(columns={'LUAO (eV)': 'LUAO_a (eV)'})
+            afo.insert(len(afo.columns), "HOAO_b (eV)", afo.loc[:, "HOAO_a (eV)"].copy())
+            afo.insert(len(afo.columns), "LUAO_b (eV)", afo.loc[:, "LUAO_a (eV)"].copy())
+    return afo
+
+
+def read_atcharge(atchargepath):
+    atcharge = pd.read_table(atchargepath, header=None, sep='\s+') if exists(atchargepath) else None
+    return atcharge
+
+
+def get_strucinfo_from_path(strucid_path):
+    from aRST.script.callsys import CallxTB, CallORCA, CallMolBar
+    # determine coord
+    if exists(join(strucid_path, "orca", "orca.xyz")):
+        coord = read_coord(join(strucid_path, "orca", "orca.xyz"))
+    elif exists(join(strucid_path, "orca", "coord.xyz")):
+        coord = read_coord(join(strucid_path, "orca", "coord.xyz"))
+    elif exists(join(strucid_path, "xtb", "xtbopt.xyz")):
+        coord = read_coord(join(strucid_path, "orca", "xtbopt.xyz"))
+
+    # at least it should have xtb sp res
+
+    # elif exists(join(strucid_path, "xtb", "coord.xyz")):
+    #     coord = read_coord(join(strucid_path, "orca", "coord.xyz"))
+    else:
+        raise ValueError(f"{strucid_path} strucinfo doesn't exist!")
+
+    xtb = CallxTB(join(strucid_path, "xtb"))
+    nel = xtb.get_nel_from_out()
+    charge = xtb.get_charge_from_out()
+    atcharge = read_atcharge(join(strucid_path, "charges"))
+    Esp_gfn = xtb.get_Esp_from_out()
+    Etrv_gfn = CallxTB(join(strucid_path, "xtb", "trv")).get_Etrv()
+    Esolv_gfn = CallxTB(join(strucid_path, "xtb", "solv")).get_Esolv()
+    constrain_l, ele_l = xtb.get_topo()
+
+    Esp_orca = CallORCA(join(strucid_path, "orca")).get_energy()
+    m = CallORCA(join(strucid_path, "orca")).get_m()
+
+    mb = CallMolBar(coord).get_mb()
+    return {"coord": coord, "nel": nel, "m": m, "c": charge, "atcharge": atcharge,
+            "Esp_gfn": Esp_gfn, "Etrv_gfn": Etrv_gfn,
+            "Esolv_gfn": Esolv_gfn,
+            "constrain_l": constrain_l, "ele_l": ele_l, "Esp_orca": Esp_orca, "mb": mb}
 
 
 def create_folder(wd):
     wd = os.path.abspath(wd)
-    if not os.path.exists(wd) and not os.path.isdir(wd):
-        try:
-            os.makedirs(wd)
-        except:
-            pass
-    os.chdir(wd)
+    if not exists(wd):
+        os.makedirs(wd)
+        os.chdir(wd)
+    elif os.path.isdir(wd):
+        os.chdir(wd)
+    else:
+        os.remove(wd)
+        os.makedirs(wd)
+        os.chdir(wd)
     return wd
-
-def rm_folderORfile(wd):
-    wd = os.path.abspath(wd)
-    if os.path.isdir(wd):
-        try:
-            shutil.rmtree(f'{wd}', ignore_errors=True)
-            os.rmdir(f'{wd}')
-        except:
-            pass
-    elif os.path.isfile(wd):
-        try:
-            os.remove(wd)
-        except:
-            pass
-
-
-def get_neighborats(at,wbo,filetype="bo"):
-    neighbor_l = []
-    if filetype=="bo":
-        boindex = 2
-    else:
-        boindex = 3
-    for index in range(wbo.shape[0]):
-        at1, at2 = wbo.iloc[index, :2]
-        dgap = wbo.iloc[index, boindex]
-        if filetype=="bo" and dgap<=0.3:
-            continue
-        elif filetype!="bo" and wbo.iloc[index, boindex]<=0.3:
-            continue
-        if int(at) ==int(at1):
-            neighbor_l.append(int(at2))
-        elif int(at) ==int(at2):
-            neighbor_l.append(int(at1))
-    return list(set(neighbor_l))
-
-def add_fragmentat(at,wbo,check_l,atomlist = []):
-    if wbo is None:
-        # single atom
-        atomlist.append(at)
-        check_l[at-1] = True
-        return check_l,atomlist
-    else:
-        trigger = True
-        while trigger:
-            neighbor_l = get_neighborats(at,wbo)
-            if not neighbor_l:
-                # single atom
-                atomlist.append(at)
-                check_l[at - 1] = True
-                trigger=False
-            else:
-                if not all(check_l[i-1] for i in neighbor_l):
-                    for i in neighbor_l:
-                        if not check_l[i-1]:
-                            check_l[i-1] = True
-                            atomlist.append(i)
-                            if i not in atomlist:
-                                atomlist.append(i)
-                            check_l,atomlist = add_fragmentat(i,wbo,check_l,atomlist)
-                else:
-                    trigger = False
-    return check_l,atomlist
-
-def get_fr_valenz_nel(coord):
-    from aRST.script.element import valence_electrons
-    nel = 0
-    for at in range(coord.shape[0]):
-        Z = valence_electrons[coord.iloc[at,0]]
-        nel +=Z
-    return nel
-
-import math
-def round_charge(charge,tol):
-    # round up to higher int for .tol
-    b,a = math.modf(charge)
-    if abs(b)>=tol:
-        if b<=0:
-            out = a-1
-        else:
-            out = a+1
-    else:
-        out = a
-    return int(out)
-
-def seperate_fragment(coord,wbo,atcharge):
-    nat = coord.shape[0]
-    charge0 = round(sum(atcharge))
-    if nat ==1:
-        # single atom
-        fragment_l = [{"coord":coord, "charge":charge0,"atomic_charge":atcharge}]
-    else:
-        fragment_l = []
-        # set check list
-        check_l = [False for i in range(nat)]
-        for atindex in range(nat):
-            if not check_l[atindex]:
-                check_l, atomlist = add_fragmentat(atindex+1,wbo,check_l,atomlist=[])
-                atomlist = list(set(sorted(atomlist)))
-                fcoord = coord.iloc[[i-1 for i in atomlist]]
-                fcharge = atcharge.iloc[[i-1 for i in atomlist]]
-                fragment_l.append({"coord": fcoord.reset_index(drop=True),
-                                   "atomic_charge": fcharge.reset_index(drop=True),
-                                   })
-        # now set charge based on charge conservation
-        charge_floatl = [fragment_l[frindex]["atomic_charge"].loc[:,0].sum() for frindex in range(len(fragment_l))]
-        charge_intl = [round_charge(i,0.5) for i in charge_floatl]
-        if np.round(sum(charge_intl)) !=np.round(sum(charge_floatl)):
-            print(f"please debug here: charge_floatl = {charge_floatl}; charge_intl = {charge_intl}")
-        for frindex in range(len(fragment_l)):
-            fragment_l[frindex]["charge"] = charge_intl[frindex]
-            vnel = get_fr_valenz_nel(fragment_l[frindex]["coord"])
-            fragment_l[frindex]["nel"]=vnel+charge_intl[frindex]
-    return fragment_l
-
-
-def creat_randomfolder(wd):
-    wd = os.path.abspath(wd)
-    random_name = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(5))
-    if not os.path.isdir(os.path.join(wd,random_name)):
-        os.makedirs(os.path.join(wd,random_name))
-    else:
-        rm_folderORfile(os.path.join(wd,random_name))
-        os.makedirs(os.path.join(wd,random_name))
-    os.chdir(os.path.join(wd,random_name))
-    return os.path.join(wd,random_name)
-
 
 
 def write_xyz(xyz, name):
@@ -153,114 +150,181 @@ def write_xyz(xyz, name):
         f.write('\n')
         for i in range(nat):
             at, x, y, z = xyz.iloc[i, 0], xyz.iloc[i, 1], xyz.iloc[i, 2], xyz.iloc[i, 3]
-            f.write('%2s %12.8f %12.8f %12.8f\n' % (at, x, y, z))
+            f.write('%2s %12.4f %12.4f %12.4f\n' % (at, x, y, z))
         f.write('\n')
 
 
-def get_nelectron(xtboutwd):
-    with open(f'{xtboutwd}', 'r') as f:
-        l = []
-        for line in f:
-            if "# electrons" in line:
-                l.append(line)
-        if l:
-            e = l[0]
-            ne = int(re.findall(r'\-?\d+\.?\d*', e)[0])
+class FragmentAnalyzer:
+    def __init__(self, coord, bo, atcharge):
+
+        # supra struc info
+        self.Snat = coord.shape[0]
+        self.Sbo = bo
+        self.Satcharge = atcharge
+        self.Scharge = int(atcharge.sum().iloc[0])
+        self.Scoord = coord
+        self.Sele_l = coord.iloc[:, 0].tolist()
+        self.Snel = int(sum([element[_] for _ in self.Sele_l])) - self.Scharge
+
+        # build up graph
+        self.build_cn_matrix()
+
+        self.define_graph()
+        # self.degree = [deg for node, deg in self.Graph.degree()]
+
+        # fragment struc info
+        self.fragments = [list(_) for _ in nx.connected_components(self.Graph)]
+
+        self.fragment_data = self.get_fragment_info()
+
+        # check if nel doesn't change
+        if not self.check_nel():
+            self.status = False
         else:
-            ne = 0
-    return ne
+            self.status = True
 
+    def build_cn_matrix(self):
+        self.Mcn = np.zeros((self.Snat, self.Snat), dtype=int)
+        # build up cn matrix base on wbo file
+        if self.Sbo is not None:
+            for i in range(self.Sbo.shape[0]):
+                if self.Sbo.iloc[i, 2] > 0.3:
+                    at1, at2 = self.Sbo.iloc[i, :2]
+                    at1, at2 = int(at1), int(at2)
+                    self.Mcn[at1 - 1, at2 - 1] = self.Mcn[at2 - 1, at1 - 1] = 1
 
-def get_energy(ENERGYFILE):
-    speh = np.inf
-    if os.path.isfile(f'{ENERGYFILE}'):
-        with open(f'{ENERGYFILE}', 'r') as f:
-            speh = float(f.readlines()[0])
-    return speh
+    def define_graph(self):
+        self.Graph = nx.Graph()
+        for i in range(self.Snat):
+            self.Graph.add_node(i)
+            for j in range(i + 1, self.Snat):
+                if self.Mcn[i, j]:
+                    self.Graph.add_edge(i, j)
+        G_sorted = nx.Graph()
+        for node in sorted(self.Graph.nodes):
+            G_sorted.add_node(node)
+        for u, v, data in self.Graph.edges(data=True):
+            G_sorted.add_edge(min(u, v), max(u, v), weight=data["weight"] if "weight" in data.keys() else 1)
+        self.Graph = G_sorted
 
+    def get_fragment_info(self):
+        charge_l_flo = []
+        fragment_data = []
+        for fragment in self.fragments:
+            atcharge = self.Satcharge.iloc[list(fragment)]
+            charge_flo = atcharge.sum()
+            charge_l_flo.append(charge_flo)
+            fragment_data.append({
+                "charge_flo": charge_flo, "atcharge": atcharge})
 
+        # Convert float fragment charges to integers while conserving total charge
+        int_fragment_charges = self.adjust_fragment_charge(charge_l_flo)
 
-def boltzmanp(a):
-    # a: gap or wb(wboe)
-    ev2j = 1.602176634 * pow(10, -19)
-    return np.exp(-a * ev2j / (1.38 * pow(10, -23) * 1000))
+        # Update fragment data with integer values
+        for i, frag in enumerate(fragment_data):
+            coord = self.Scoord.iloc[self.fragments[i]]
+            ele_l = coord.iloc[:, 0].tolist()
+            charge_int = int(int_fragment_charges[i])
+            nel = int(sum([element[_] for _ in ele_l]) - charge_int)
+            frag["coord"] = coord
+            frag["charge_int"] = charge_int
+            frag["nel"] = nel
+        return fragment_data
 
+    def check_nel(self):
+        tmpnel = sum([_["nel"] for _ in self.fragment_data])
 
-def lowestgeom(infile):
-    # input is .log file
-    with open(infile, 'r') as f:
-        f.seek(0, 0)
-        first = f.readline()
-        atnr = int(first.split('\n')[0])
-        f.seek(0, 0)
-        d = {}
-        test = f.readlines()
-        for i in range(0, len(test), atnr + 2):
-            tmp = [test[j] for j in range(i + 1, i + atnr + 2)]
-            try:
-                energy = float(re.findall(r'\-?\d+\.?\d*', tmp[0].split(':')[1])[0])
-            except:
-                energy = 'inf'
-            d[energy] = tmp
-        a = min(d, key=d.get)
-        outlist = [str(atnr) + '\n'] + d[a]
-        return outlist
-
-
-
-def read_topomol(molfile, nat1=None):
-    from aRST.script.geom import r0
-    # V2000
-    with open(molfile) as f:
-        context = f.readlines()
-
-    if len(context[3].split())<7:
-        nat, nbond = int(''.join(context[3].split()[0][:3])), int(''.join(context[3].split()[0][3:]))
-    else:
-
-        nat, nbond = int(context[3].split()[0]), int(context[3].split()[1])
-    # coordinates = []
-    constrain_l = []
-    ele = []
-
-    for i in range(nat):
-        # tmp = context[i + 4].split()[:3]
-        # coordinates.append([float(k) for k in tmp])
-        ele.append(context[i + 4].split()[3])
-
-    for i in range(nbond):
-        bond_pair = context[i + nat + 4].split()[:2]
-        atom1, atom2 = int(bond_pair[0]), int(bond_pair[1])
-        d = r0[ele[atom1 - 1]] + r0[ele[atom2 - 1]]
-        tmp_d = {"atoms": {}, "value": {}}
-        if nat1 is None:
-            tmp_d["atoms"] = [atom1, atom2]
-            tmp_d["value"] = d
+        if tmpnel == self.Snel:
+            return True
         else:
-            tmp_d["atoms"] = [atom1 + nat1, atom2 + nat1]
-            tmp_d["value"] = d
-        constrain_l.append(tmp_d)
+            return False
 
-    return constrain_l, ele
+    def adjust_fragment_charge(self, charge_l_flo):
 
-from molbar.barcode import get_molbar_from_file,get_molbar_from_coordinates
-def get_molbarcode(coord,molbarlevel=None):
-    if coord.shape[0]>1:
-        # transform coord to coord_l and ele_l
-        coord_l,ele_l = [],[]
-        for i in range(coord.shape[0]):
-            coord_l.append(coord.loc[i,1:3].tolist())
-            ele_l.append(coord.loc[i,0])
-        try:
-            mb = get_molbar_from_coordinates(coord_l,ele_l)
-            if molbarlevel =="loose":
-                mb = mb[:4] # only take mb code until Topology Spectrum
-        except Exception:
-            mb = "unknow"
+        int_charges = np.round(charge_l_flo).astype(int)  # Round to the nearest integer
+        charge_difference = self.Scharge - np.sum(int_charges)  # Compute discrepancy
 
-    else:
-        mb = coord.iloc[0,0]
-        if mb =="Cl":
-            mb = "CL"
-    return mb
+        if charge_difference != 0:
+            residuals = np.array(charge_l_flo) - int_charges  # Find decimal parts
+            adjustment_indices = np.argsort(-residuals)  # Sort by highest decimal part
 
+            for i in range(abs(charge_difference)):
+                idx = adjustment_indices[i]
+                int_charges[idx] += np.sign(charge_difference)  # Adjust by +1 or -1
+        return list(int_charges)
+
+
+#
+# # def convert_json2dict(jsondata):
+# #     d = {}
+# #     for struc in jsondata.keys():
+# #         d[struc] = {}
+# #         for item in list(jsondata[struc].keys()):
+# #
+# #             try:
+# #                 df = pd.read_json(jsondata[struc][item])
+# #                 d[struc][item] = df
+# #             except:
+# #                 d[struc][item] = jsondata[struc][item]
+# #     return d
+#
+def convert_for_json(d, exclude_keys=None):
+    """
+    Recursively convert a deep nested dict to be JSON serializable.
+    - Exclude specific keys.
+    - Convert float values to 4 decimal places.
+    - Convert DataFrame to a JSON string.
+    """
+    if exclude_keys is None:
+        exclude_keys = set()
+
+    if isinstance(d, pd.DataFrame):
+        return {"__dataframe__": d.to_json()}  # Store as JSON string
+    elif isinstance(d, list):
+        return [convert_for_json(v, exclude_keys) for v in d]
+    elif isinstance(d, dict):
+        return {k: convert_for_json(v, exclude_keys) for k, v in d.items() if k not in exclude_keys}
+    elif isinstance(d, float):
+        return round(d, 4)  # Round float values to 4 decimal places
+    return d  # int, str, etc., remain unchanged
+
+
+def convert_storage_to_json(data, exclude_keys=None):
+    if exclude_keys is None:
+        exclude_keys = set()
+    if isinstance(data, pd.DataFrame):
+        return {"__dataframe__": data.to_json()}
+    elif isinstance(data, list):
+        return [convert_for_json(v, exclude_keys) for v in data]
+    elif isinstance(data, dict):
+        return {k: convert_for_json(v, exclude_keys) for k, v in data.items() if k not in exclude_keys}
+    elif isinstance(data, float):
+        return np.round(data, 4)
+    return data
+
+
+def write_rxnout():
+    import aRST.script.initialization as storage
+    from aRST.script.exploration.network import rxnnetwork
+    import json
+    data = {
+        "nodes": [
+            {
+             "node": node,
+             "info": rxnnetwork.get_reaction_info(node)}
+            for node in rxnnetwork.graph.nodes
+        ],
+        "edges": list(rxnnetwork.graph.edges)
+    }
+    with open(f'{storage.setting.wd0}/reaction.json', "w") as file:
+        file.write(json.dumps(data, indent=2))
+        file.write('\n')
+
+
+def write_strucout():
+    import aRST.script.initialization as storage
+    import json
+    with open(f'{storage.setting.wd0}/struc.json', "w") as file:
+        exclude_keys = ["atomic_connection"]
+        file.write(json.dumps(convert_for_json(storage.allstruc.data, exclude_keys), indent=2))
+        file.write('\n')

@@ -1,9 +1,11 @@
-from os.path import join
+import traceback
+from os.path import join, exists
 import os
 import shutil
 import subprocess
 import re
-from aRST.script.dictionaryInspector import DictionaryInspector
+from aRST.script.toolbox import mydict
+import pandas as pd
 
 
 def remove_file(old_path, new_path):
@@ -12,16 +14,39 @@ def remove_file(old_path, new_path):
     for file in filelist:
         src = join(old_path, file)
         dst = join(new_path, file)
-
         shutil.move(src, dst)
 
 
 class CallORCA:
-    def __init__(self, wd, command_d):
-        self.wd = wd
-        self.command_d_inspertor = DictionaryInspector(command_d)
+    @classmethod
+    def default_settings(cls, setting):
+        """Dynamically generates default settings based on the `setting` class."""
+        return {
+            "functional": setting.get_value("orca_setting.functional", "r2scan-3c"),
+            "basis": setting.get_value("orca_setting.basis", " "),
+            "charge": 0,
+            "m": 1,
+            "fn": "coord",
+            "caltyp": "SP",
+            "caltyp2": "RKS",  # This can be updated dynamically if needed
+            "solmode": setting.get_value("orca_setting.solmode", ""),
+            "ncpu": setting.get_value("orca_setting.ncpu", 1),
+        }
 
-    def orcasubprocess(self, cmd_string, writeenergy=True,removegbw=True):
+    def __init__(self, wd, command_d=None, custom_settings=None):
+        self.wd = wd
+        if command_d is not None:
+            self.cmd = mydict(command_d)
+        else:
+            import aRST.script.initialization as storage
+            command_d = self.default_settings(storage.setting)
+            if custom_settings is not None:
+                command_d.update(custom_settings)
+
+            command_d["caltyp2"] = "RKS" if command_d["m"] == 1 else "UKS"
+            self.cmd = mydict(command_d)
+
+    def orcasubprocess(self, cmd_string, writeenergy=True, removegbw=True):
         with open(f'{self.wd}/orca.out', 'w') as stdout_file, open(f'{self.wd}/orca_err.out', 'w') as stderr_file:
             p = subprocess.Popen(cmd_string, stdout=stdout_file, stderr=stderr_file, shell=True)
             p.wait()
@@ -33,12 +58,12 @@ class CallORCA:
                     if 'FINAL SINGLE' in line:
                         with open(f'{self.wd}/ENERGY', 'w') as f2:
                             f2.write(str(re.findall(r'\-?\d+\.?\d*', line)[0]))
-        extensions_to_remove = [ '.densities', '.opt']
-        keep_list = ['.xyz', '.inp','.in','.out','.input', '.molden','.gbw']
+        extensions_to_remove = ['.densities', '.opt']
+        keep_list = ['.xyz', '.inp', '.in', '.out', '.input', '.molden', '.gbw']
         if removegbw:
             keep_list.remove('.gbw')
         for filename in os.listdir(f'{self.wd}'):
-            if filename =="ENERGY":
+            if filename == "ENERGY":
                 continue
             if not any(filename.endswith(ext) for ext in keep_list):
                 os.remove(filename)
@@ -47,43 +72,96 @@ class CallORCA:
 
     def generate_cmd_string(self):
         command_string = "! "
-        command_string += f"{self.command_d_inspertor.get_value('functional', '')} "
-        if self.command_d_inspertor.get_value('basis', ''):
-            command_string += f"{self.command_d_inspertor.get_value('basis', '')} "
-        command_string += f"{self.command_d_inspertor.get_value('caltyp', '')} "
-        command_string += f"{self.command_d_inspertor.get_value('caltyp2', '')} "
-        if self.command_d_inspertor.get_value('solmode', ''):
-            command_string += f"CPCM({self.command_d_inspertor.get_value('solmode', '')}) \n"
-        else:command_string += f"\n"
+        command_string += f"{self.cmd.get_value('functional', '')} "
+        if self.cmd.get_value('basis', ''):
+            command_string += f"{self.cmd.get_value('basis', '')} "
+        command_string += f"{self.cmd.get_value('caltyp', '')} "
+        command_string += f"{self.cmd.get_value('caltyp2', '')} "
+        if self.cmd.get_value('solmode', ''):
+            command_string += f"CPCM({self.cmd.get_value('solmode', '')}) \n"
+        else:
+            command_string += f"\n"
 
-
-        ncpu = self.command_d_inspertor.get_value('ncpu', 1)
+        ncpu = self.cmd.get_value('ncpu', 1)
         if isinstance(ncpu, int) and ncpu > 1:
-            if self.command_d_inspertor.get_value('ncpu', 1):
+            if self.cmd.get_value('ncpu', 1):
                 command_string += f"%PAL NPROCS {int(ncpu)} END \n"
-        c = self.command_d_inspertor.get_value('charge')
-        m = self.command_d_inspertor.get_value('m')
-        fn = self.command_d_inspertor.get_value('fn')
+        c = self.cmd.get_value('charge')
+        m = self.cmd.get_value('m')
+        fn = self.cmd.get_value('fn')
         if all(v is not None for v in [fn, c, m]):
             command_string += f"* xyzfile {c} {m} {fn}.xyz "
         else:
             raise Exception(f"{fn}.xyz in {self.wd} has wrong c,m,fn parameter with {[fn, c, m]}")
         return command_string
 
-    def call(self,removegbw=True):
+    def call(self, removegbw=True):
         command_string = self.generate_cmd_string()
         with open(f'{self.wd}/orca.inp', 'w') as f:
             f.write(command_string)
 
         cmd = f'$ORCA orca.inp'
-        rc = self.orcasubprocess(cmd,removegbw=removegbw)
+        rc = self.orcasubprocess(cmd, removegbw=removegbw)
         return rc
+
+    def get_geomres(self):
+        if exists(join(self.wd, 'orca.xyz')):
+            coord = pd.read_table(join(self.wd, 'orca.xyz'), header=None, skiprows=2, sep='\s+')
+        else:
+            coord = pd.read_table(join(self.wd, 'coord.xyz'), header=None, skiprows=2, sep='\s+')
+        return coord
+
+    def get_energy(self, out="orca.out"):
+        Esp = None
+        if exists(join(self.wd, "ENERGY")):
+            with open(join(self.wd, "ENERGY"), 'r') as file:
+                Esp = float(file.readlines()[0])
+        elif exists(join(self.wd, out)):
+            with open(join(self.wd, out), 'r') as file:
+                lines = file.readlines()
+            for ln in lines:
+                if "FINAL SINGLE POINT ENERGY" in ln:
+                    Esp = float(ln.split()[-1])
+                    break
+        return Esp
+
+    def get_m(self, file="orca.inp"):
+        m = None
+        if exists(join(self.wd, file)):
+            with open(join(self.wd, file), 'r') as file:
+                lines = file.readlines()
+            for ln in lines:
+                if "xyz" in ln:
+                    parts = ln.split()
+                    m = int(parts[3])
+        return m
 
 
 class CallxTB:
-    def __init__(self, wd, command_d):
+    @classmethod
+    def default_settings(cls, setting):
+        """Dynamically generates default settings based on the `setting` class."""
+        return {"method": setting.get_value("xtb_setting.method", "gfn2"),
+                "coordfn": "coord",
+                "optlevel": setting.get_value("xtb_setting.optlevel", ""),
+                "charge": 0,
+                "uhf": 0,
+                "alpb": setting.get_value("xtb_setting.alpb", "h2o"),
+                "etemp": setting.get_value("xtb_setting.struc_etemp", "4000"),
+                "xtbwd":setting.get_value("xtb_setting.xtb_wd")
+                }
+
+    def __init__(self, wd, command_d=None, custom_settings=None):
         self.wd = wd
-        self.command_d_inspertor = DictionaryInspector(command_d)
+        if command_d is not None:
+            self.cmd = mydict(command_d)
+        else:
+            import aRST.script.initialization as storage
+            command_d = self.default_settings(storage.setting)
+            if custom_settings is not None:
+                command_d.update(custom_settings)
+
+            self.cmd = mydict(command_d)
 
     def xtbsubprocess(self, cmd_string, writeenergy=False):
         with open(f'{self.wd}/xtb.out', 'w') as stdout_file, open(f'{self.wd}/xtb_err.out', 'w') as stderr_file:
@@ -101,29 +179,29 @@ class CallxTB:
 
     def generate_cmd_string(self, opt=False, xtbmlversion=False):
         if xtbmlversion:
-            cmd_string = self.command_d_inspertor.get_value("xtbwd")+" "
+            cmd_string = self.cmd.get_value("xtbwd") + " "
         else:
             cmd_string = "xtb "
-        coordfn = self.command_d_inspertor.get_value("coordfn")
+        coordfn = self.cmd.get_value("coordfn")
         if coordfn is None:
             raise Exception(f"coord in {self.wd} can't find right coordfn name")
         cmd_string += f"{coordfn}.xyz "
         if opt:
-            optlevel = self.command_d_inspertor.get_value("optlevel")
+            optlevel = self.cmd.get_value("optlevel")
             cmd_string += f"--opt {optlevel} " if optlevel else "--opt "
 
-        cmd_string += f"--{self.command_d_inspertor.get_value('method')} " \
-            if self.command_d_inspertor.get_value('method') else ""
-        cmd_string += f"-c {self.command_d_inspertor.get_value('charge')} " \
-            if self.command_d_inspertor.get_value('charge') else ""
-        cmd_string += f"--uhf {self.command_d_inspertor.get_value('uhf')} " \
-            if self.command_d_inspertor.get_value('uhf') else ""
-        cmd_string += f"--etemp {self.command_d_inspertor.get_value('etemp')} " \
-            if self.command_d_inspertor.get_value('etemp') else ""
-        cmd_string += f"--alpb {self.command_d_inspertor.get_value('alpb')} " \
-            if self.command_d_inspertor.get_value('alpb') else ""
-        cmd_string += f"{self.command_d_inspertor.get_value('extracmd')} " \
-            if self.command_d_inspertor.get_value('extracmd') else ""
+        cmd_string += f"--{self.cmd.get_value('method')} " \
+            if self.cmd.get_value('method') else ""
+        cmd_string += f"-c {self.cmd.get_value('charge')} " \
+            if self.cmd.get_value('charge') else ""
+        cmd_string += f"--uhf {self.cmd.get_value('uhf')} " \
+            if self.cmd.get_value('uhf') else ""
+        cmd_string += f"--etemp {self.cmd.get_value('etemp')} " \
+            if self.cmd.get_value('etemp') else ""
+        cmd_string += f"--alpb {self.cmd.get_value('alpb')} " \
+            if self.cmd.get_value('alpb') else ""
+        cmd_string += f"{self.cmd.get_value('extracmd')} " \
+            if self.cmd.get_value('extracmd') else ""
         return cmd_string
 
     def sp(self, writeenergy=True):
@@ -138,9 +216,9 @@ class CallxTB:
         #     rc = self.secondchance_opt()
         return rc
 
-    def ml(self):
+    def afo(self):
         cmd_string = self.generate_cmd_string(opt=False, xtbmlversion=True)
-        cmd_string+= "--ml_feature "
+        cmd_string += "--ml_feature "
         p = subprocess.Popen(cmd_string, stdout=open(f'{self.wd}/xtb.out', 'w'), stderr=subprocess.PIPE, shell=True)
         p.wait()
         rc = p.returncode
@@ -155,17 +233,17 @@ class CallxTB:
         if rc == 0:
             cmd2 = f'TRVthermo --io xtb --rotthr 50 '
             cmd2 += f'--fxyz xtbopt.xyz' if os.path.exists(
-                join(self.wd,"xtbopt.xyz")) else f'--fxyz {self.command_d_inspertor.get_value("coordfn")}.xyz '
-            cmd2 += f" --temp {self.command_d_inspertor.get_value('etemp')} " \
-                if self.command_d_inspertor.get_value('etemp') else ""
+                join(self.wd, "xtbopt.xyz")) else f'--fxyz {self.cmd.get_value("coordfn")}.xyz '
+            cmd2 += f" --temp {self.cmd.get_value('etemp')} " \
+                if self.cmd.get_value('etemp') else ""
             cmd2 += f' --fvib freq.out > thermo.out'
             p2 = subprocess.Popen(cmd2, shell=True)
             p2.wait()
             rc2 = p2.returncode
             # if rc2 != 0:
-                # raise Exception("TRVthermo calculation failed in",self.wd)
+            # raise Exception("TRVthermo calculation failed in",self.wd)
         else:
-            rc2=1
+            rc2 = 1
             # raise Exception("TRV ohess calculation failed in ",self.wd)
         return rc2
 
@@ -180,7 +258,7 @@ class CallxTB:
                     esolv = float(re.findall(r'\-?\d+\.?\d*', line)[0])
         rc2 = p2.returncode
 
-        self.command_d_inspertor.set_value("alpb",False)
+        self.cmd.set_value("alpb", False)
         cmd1 = self.generate_cmd_string()
 
         p1 = subprocess.Popen(cmd1, stdout=open(f'{self.wd}/gas.out', 'w'), stderr=subprocess.PIPE, shell=True)
@@ -212,30 +290,30 @@ class CallxTB:
 
             atl = setting_d["scan"]["distance"]
             for item in atl:
-                at1,at2,d0,d_end = item
+                at1, at2, d0, d_end = item
                 f.write('distance: %d,%d,%.2f;%.2f,%.2f,%d\n'
                         % (int(at1), int(at2), d0, d0, d_end, setting_d["scan"]["step"]))
             f.write("$end")
 
         cmd = self.generate_cmd_string(opt=True)
-        cmd+= "--input scan.inp "
+        cmd += "--input scan.inp "
 
         p = subprocess.Popen(cmd, stdout=open(f'{self.wd}/xtb.out', 'w'), stderr=subprocess.PIPE, shell=True)
         p.wait()
         rc = p.returncode
-        if rc !=0 and (os.path.exists(f'{self.wd}/xtbscan.log') and os.path.exists(f'{self.wd}/xtbopt.xyz')):
-            rc=0
+        if rc != 0 and (os.path.exists(f'{self.wd}/xtbscan.log') and os.path.exists(f'{self.wd}/xtbopt.xyz')):
+            rc = 0
         return rc
 
-    def constrained_opt(self,newbond):
+    def constrained_opt(self, newbond):
         with open(f'{self.wd}/scan.inp', 'w') as f:
             f.write(f'$constrain\n'
-                    f'force constant={self.command_d_inspertor.get_value("k")}\n')
+                    f'force constant={self.cmd.get_value("k")}\n')
             for item in newbond:
-                at1,at2 = item["atoms"]
+                at1, at2 = item["atoms"]
                 value = item["value"]
                 f.write('distance: %d,%d,%.2f\n'
-                        % (at1,at2,value))
+                        % (at1, at2, value))
             f.write("$end")
         cmd = self.generate_cmd_string(opt=True)
         cmd += "--input scan.inp "
@@ -248,19 +326,17 @@ class CallxTB:
 
     def secondchance_opt(self):
         cmd_string = "xtb "
-        coordfn = self.command_d_inspertor.get_value("coordfn")
+        coordfn = self.cmd.get_value("coordfn")
         cmd_string += f"{coordfn}.xyz "
         cmd_string += "--opt "
 
-        cmd_string += f"-c {self.command_d_inspertor.get_value('charge')} " \
-            if self.command_d_inspertor.get_value('charge') else ""
-        cmd_string += f"--uhf {self.command_d_inspertor.get_value('uhf')} " \
-            if self.command_d_inspertor.get_value('uhf') else ""
+        cmd_string += f"-c {self.cmd.get_value('charge')} " \
+            if self.cmd.get_value('charge') else ""
+        cmd_string += f"--uhf {self.cmd.get_value('uhf')} " \
+            if self.cmd.get_value('uhf') else ""
 
         rc = self.xtbsubprocess(cmd_string, True)
         return rc
-
-
 
     def get_moldeninput(self):
         cmd = self.generate_cmd_string()
@@ -269,22 +345,120 @@ class CallxTB:
         return rc
 
 
+    def get_nel_from_out(self, out="xtb.out"):
+        nel = None
+        if exists(join(self.wd, out)):
+            with open(join(self.wd, out), 'r') as file:
+                lines = file.readlines()
+
+            for ln in lines:
+                if "# electrons" in ln:
+                    nel = int(ln.split()[-2])
+                    break
+        return nel
+
+    def get_charge_from_out(self, out="xtb.out"):
+        c = None
+        if exists(join(self.wd, out)):
+            with open(join(self.wd, out), 'r') as file:
+                lines = file.readlines()
+
+            for ln in lines:
+                if "net charge" in ln:
+                    c = int(ln.split()[-2])
+                    break
+        return c
+
+    def get_Esp_from_out(self, out="xtb.out"):
+        # unit in eh
+        Esp = None
+        if exists(join(self.wd, "ENERGY")):
+            with open(join(self.wd, "ENERGY"), 'r') as file:
+                Esp = float(file.readlines()[0])
+
+        elif exists(join(self.wd, out)):
+            with open(join(self.wd, out), 'r') as file:
+                lines = file.readlines()
+
+            for ln in lines:
+                if "total energy" in ln:
+                    Esp = float(ln.split()[4])
+                    break
+        return Esp
+
+    def get_Etrv(self, out="GTRV"):
+        # unit in eh
+        Etrv = None
+        if exists(join(self.wd, out)):
+            with open(join(self.wd, out), 'r') as file:
+                Etrv = float(file.readlines()[0])
+        return Etrv
+
+    def get_Esolv(self, out="GSOLV"):
+        # unit in eh
+        Esolv = None
+        if exists(join(self.wd, out)):
+            with open(join(self.wd, out), 'r') as file:
+                Esolv = float(file.readlines()[0])
+        return Esolv
+
+
+    def get_topo(self, out="xtbtopo.mol"):
+        # constrain_l, ele required in mb; at index starts with 1
+        constrain_l, ele = None, None
+        coord = None
+        for file in os.listdir(self.wd):
+            if file.endswith("xyz"):
+                from aRST.script.toolbox import read_coord
+                coord = read_coord(join(self.wd, file))
+                break
+        if coord is not None:
+            if exists(join(self.wd, out)):
+                constrain_l, ele = [], []
+                from aRST.script.geom import Coord
+                # V2000
+                with open(join(self.wd, out)) as f:
+                    lines = f.readlines()
+                ln_parts = lines[3].split()
+                nat, nbond = int(ln_parts[0]), int(ln_parts[1])
+
+                for i in range(nat):
+                    ele.append(lines[4 + i].split()[3])
+                for i in range(nbond):
+                    ln_parts = lines[4 + nat + i].split()
+                    at1, at2 = int(ln_parts[0]), int(ln_parts[1])
+                    bond_length = Coord(coord).get_ats_distance(at1 - 1, at2 - 1)
+                    constrain_l.append({"atoms": [at1, at2], "value": bond_length})
+            else:
+                # single at
+                constrain_l, ele = [], [str(coord.iloc[0, 0])]
+        return constrain_l, ele
+
+
 class CallTerachem:
+    _instance = None
+    def __new__(cls, wd, Setting=None):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            if not shutil.which("terachem"):
+                raise ValueError("terachem is not installed or not in PATH.")
+        return cls._instance
+
     def __init__(self, wd, command_d):
         self.wd = wd
-        self.command_d_inspertor = DictionaryInspector(command_d)
+        self.cmd = mydict(command_d)
 
     def wirte_input(self):
-        epsilon = self.command_d_inspertor.get_value("epsilon")
-        coordfn = self.command_d_inspertor.get_value("coordfn")
-        c = self.command_d_inspertor.get_value("c")
-        m = self.command_d_inspertor.get_value("m")
-        functional = self.command_d_inspertor.get_value("functional")
-        basis = self.command_d_inspertor.get_value("basis")
-        if m !=1:
-            functional = "u"+functional
+        epsilon = self.cmd.get_value("epsilon")
+        coordfn = self.cmd.get_value("coordfn")
+        c = self.cmd.get_value("c")
+        m = self.cmd.get_value("m")
+        functional = self.cmd.get_value("functional")
+        basis = self.cmd.get_value("basis")
+        if m != 1:
+            functional = "u" + functional
 
-        with open(join(self.wd,"tc.inp"), 'w') as f:
+        with open(join(self.wd, "tc.inp"), 'w') as f:
             f.write(f"coordinates             {coordfn}.xyz\n"
                     f"method         {functional}\n"
                     f"basis                   {basis}\n"
@@ -313,31 +487,33 @@ class CallTerachem:
         # write input
         self.wirte_input()
         # run
-        with open(join(self.wd,"tc.out"), 'w') as stdout_file, open('tc_err.out', 'w') as stderr_file:
+        with open(join(self.wd, "tc.out"), 'w') as stdout_file, open('tc_err.out', 'w') as stderr_file:
             p = subprocess.Popen(cmd, stdout=stdout_file, stderr=stderr_file, shell=True)
             p.wait()
             rc = p.returncode
         return rc
 
+
 class CallsTDA:
-    def __init__(self,wd, coordfn):
+    def __init__(self, wd, coordfn):
         self.wd = wd
         self.coordfn = coordfn
 
     def callml(self, stdawd, sty):
         cmd = f"{stdawd} -f {self.coordfn} -ml_feature -sty {str(sty)}"
-        p = subprocess.Popen(cmd, stdout=open(join(self.wd,f'stda.out'), 'w'), stderr=subprocess.PIPE, shell=True)
+        p = subprocess.Popen(cmd, stdout=open(join(self.wd, f'stda.out'), 'w'), stderr=subprocess.PIPE, shell=True)
         p.wait()
         rc = p.returncode
         return rc
 
+
 class CallMultiwfn:
-    def __init__(self, wd,inputfn):
+    def __init__(self, wd, inputfn):
         self.wd = wd
         self.inputfn = inputfn
 
-    def write_cartesian_molden(self,mwfnwd):
-        with open(join(self.wd,"cmd.in"),"w") as f:
+    def write_cartesian_molden(self, mwfnwd):
+        with open(join(self.wd, "cmd.in"), "w") as f:
             f.write("100\n"
                     "2\n"
                     "6\n"
@@ -346,11 +522,29 @@ class CallMultiwfn:
                     "-10\n"
                     )
         cmd = f"{mwfnwd} {self.inputfn}"
-        with open(join(self.wd, "cmd.in"), "r") as cmd_in_file, open(join(self.wd,"multiwfn.out"), 'w') as out_file:
-            p = subprocess.Popen(cmd, stdin=cmd_in_file,stdout=out_file, stderr=subprocess.PIPE, shell=True)
+        with open(join(self.wd, "cmd.in"), "r") as cmd_in_file, open(join(self.wd, "multiwfn.out"), 'w') as out_file:
+            p = subprocess.Popen(cmd, stdin=cmd_in_file, stdout=out_file, stderr=subprocess.PIPE, shell=True)
             p.wait()
         rc = p.returncode
         return rc
 
 
+class CallMolBar:
+    def __init__(self, coord):
+        self.coord = coord
+
+    def get_mb(self):
+        from molbar.barcode import get_molbar_from_coordinates
+        if self.coord.shape[0] > 1:
+            mb = "unknow"
+            # transform coord to coord_l and ele_l
+            coord_l = [self.coord.loc[i, 1:3].tolist() for i in self.coord.index]
+            ele_l = [self.coord.loc[i, 0] for i in self.coord.index]
+            try:
+                mb = get_molbar_from_coordinates(coord_l, ele_l)
+            except Exception:
+                traceback.print_exc()
+        else:
+            mb = self.coord.iloc[0, 0]
+        return mb
 

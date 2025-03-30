@@ -1,0 +1,86 @@
+import os
+from aRST.script.toolbox import create_folder, write_xyz
+from os.path import join, exists
+from aRST.script.callsys import CallxTB, CallORCA, CallTerachem, CallsTDA, CallMultiwfn
+import aRST.script.initialization as storage
+import shutil
+
+
+class getAFO:
+    def __init__(self, strucid=0, setting=None, coord=None, c=None, m=None):
+        if coord is None:
+            self.coord = storage.allstruc.get_value(f"{strucid}.struc_info.general.coord")
+            self.c = storage.allstruc.get_value(f"{strucid}.struc_info.general.charge")
+            self.m = storage.allstruc.get_value(f"{strucid}.struc_info.general.multiplicity")
+            self.setting = storage.setting
+
+        else:
+            self.coord = coord
+            self.c = c
+            self.m = m
+            self.setting = setting
+        self.struc = strucid
+
+    def get_from_xtb(self):
+        afowd = create_folder(join(self.setting.strucwd, self.struc, "xtb", "afo"))
+        rc = 0
+        if not exists(join(afowd, "ml_feature.csv")):
+            write_xyz(self.coord, "coord")
+            rc = CallxTB(afowd, custom_settings={"charge": self.c, "uhf": self.m - 1}).afo()
+        return afowd, rc
+
+    def get_from_tc(self):
+        afowd = join(self.setting.strucwd, self.struc, "stda")
+        rc = 0
+        if not exists(join(afowd, "ml_feature.csv")):
+            tcwd = create_folder(join(self.setting.strucwd, self.struc, "tc"))
+            write_xyz(self.coord, "coord")
+            inputcmd_d = {"coordfn": "coord",
+                          "c": self.c,
+                          "m": self.m,
+                          "functional": self.setting.get_value("searching_setting.reactivity.afo_tc_functional"),
+                          "basis": self.setting.get_value("searching_setting.reactivity.afo_tc_basis"),
+                          "epsilon": self.setting.get_value("searching_setting.reactivity.afo_tc_epsilon"),
+                          }
+
+            rc = CallTerachem(wd=tcwd, command_d=inputcmd_d).run()
+
+            if rc == 0:
+                afowd = create_folder(join(self.setting.strucwd,self.struc, "stda"))
+                shutil.copyfile(join(tcwd, "scr.coord", "coord.molden"),
+                                join(afowd, "coord.molden"))
+                rc = CallsTDA(afowd, "coord.molden").callml(self.setting.get_value("stda_setting.stda_wd"), 3)
+        return afowd, rc
+
+    def get_from_orca(self):
+        afowd = create_folder(join(self.setting.strucwd, self.struc, "stda"))
+        rc = 0
+        if not exists(join(afowd, "ml_feature.csv")):
+            orcawd = create_folder(join(self.setting.strucwd, self.struc, "orcaml"))
+            write_xyz(self.coord, "coord")
+            staus = CallORCA(orcawd,
+                             custom_settings={"charge": self.c, "m": self.m,
+                                              "functional": self.setting.get_value(
+                                                  "searching_setting.reactivity.afo_orca_functional"),
+                                              "basis": self.setting.get_value(
+                                                  "searching_setting.reactivity.afo_orca_basis"),
+                                              "solmode": self.setting.get_value(
+                                                  "searching_setting.reactivity.afo_orca_cpcm", ""), }).call(
+                removegbw=False)
+
+            import subprocess
+            p = subprocess.Popen("orca_2mkl orca -molden", shell=True)
+            p.wait()
+
+            # transfom MOs from spherical coordinates to cartesian
+            rc = CallMultiwfn(orcawd, "orca.molden.input").write_cartesian_molden(
+                self.setting.get_value("mwfn_setting.mwfn_wd"))
+            if rc == 0:
+                os.remove(join(orcawd, "orca.molden.input"))
+                os.remove(join(orcawd, "orca.gbw"))
+
+                shutil.copyfile(join(orcawd, "orca.molden"),
+                                join(afowd, "coord.molden"))
+                os.chdir(afowd)
+                rc = CallsTDA(afowd, "coord.molden").callml(self.setting.get_value("stda_setting.stda_wd"), 1)
+        return afowd, rc

@@ -1,85 +1,168 @@
-import os
-import traceback
-
-import pandas as pd
-
-from aRST.script.Element import element2
+import datetime
 
 
-def print_header():
-    print('==========================================================================================')
-    print('|                                                                                        |')
-    print('|                         Reaction Path Search Tool                                      |')
-    print('|                                                                                        |')
-    print('|                                 Y.Chen                                                 |')
-    print('|                                                                                        |')
-    print('|                      Institute of Physical Chemistry                                   |')
-    print('|                          RWTH Aachen University                                        |')
-    print('|                                                                                        |')
-    print('|                           version : 1.0_alpha                                          |')
-    print('|                                                                                        |')
-    print('==========================================================================================')
-    print('\n')
+def print_head():
+    program_name = "automated Reaction Search Tool (aRST) V2.0"
+    timestamp = datetime.datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+    tot_width = 80
+    border_width = 60
+    side_padding = (tot_width - border_width) // 2
+    side = " " * side_padding
+    border = "=" * border_width
+
+    print(side + border)
+    print(side + f"|{' ' * (border_width - 2)}|")
+    print(side + f"|{' ' * (border_width - 2)}|")
+    print(side + f"|{program_name.center(border_width - 2)}|")
+    print(side + f"|{' ' * (border_width - 2)}|")
+    print(side + f"|{' ' * (border_width - 2)}|")
+    print(side + border)
+
+    print(side+"# Author:             Y. Chen")
+    print(side+"# Institute:          Institute of Physical Chemistry")
+    print(side+"#                     RWTH Aachen University")
+    print(side+"# Version date:       03.2025")
+    print(side+f"# Job running at:     {timestamp}")
+    print(side + border)
+    print()
 
 
-def call_header(text, typ="*"):
-    print(text.center(90, typ))
+def print_args(args):
+    string = " "
+    if args.explore:
+        string = "Job type: reaction exploartion"
+    elif args.afo_features:
+        string = "Job type: reactivity assesment"
+    elif args.align:
+        string = "Job type: reactants alignment"
+    print(string.center(80))
 
 
-def printout_cycle_results(path_i, reactants, association_d,dissociation_d,
-                           hoaoa_df, hoaob_df, luaoa_df, luaob_df, rec):
-    try:
-        call_header(f"REACTANTS INFO FOR PATH {path_i}: 1-{len(association_d.keys()) + len(dissociation_d.keys())} ")
-        # print(f"Reactants for this path {path_i}: {reactants}\n")
-        for i in reactants:
-            name = rec[i]['name']
-            at_df = {}
-            at_l = rec[i]['ml_feature'][['Atom']].to_dict()
-            for j in list(at_l['Atom'].keys()):
-                old_v = at_l['Atom'][j]
-                new_v = element2[old_v]
-                at_l['Atom'][j] = new_v
-            at_l['dir'] = i
-            at_df[name] = at_l
-            call_header("Element", " ")
-            print(at_df, '\n')
-            call_header("WBOE", " ")
-            wboe = rec[i]['wboe']
-            if not isinstance(wboe, list):
-                wboe.columns = ['At1', 'AT2', 'BDE', 'BO']
-                print(wboe.to_string(index=False), '\n')
+def print_parser(data):
+    print("*read input:")
+    for section, subkeys in data.items():
+        # Start with section header
+        line = f"[{section}]:"
+        indent = " " * 4  # 4-space indent for continuation lines
+        first_item_in_line = True  # Track if we're at the start of a new line
 
-        call_header("ATOMISTIC FEATURES", " ")
+        # Add key-value pairs one by one, checking line length
+        for k, v in subkeys.items():
+            # Add comma only if it's not the first item in the line
+            item = f", {k}={v}" if not first_item_in_line else f" {k}={v}"
 
-        # Reset the indices of the dataframes
-        df1_reset = hoaoa_df.reset_index()
-        df2_reset = hoaob_df.reset_index()
-        merged_df = pd.concat([df1_reset.round(3), df2_reset.round(3)], axis=1, keys=['HOAO_a', 'HOAO_b'])
-        print(merged_df.to_string(index=False), '\n')
+            # If adding this item would exceed 60 chars, start a new line
+            if len(line) + len(item) > 60:
+                print(line)
+                line = indent + f"{k}={v}"  # Start new line with indent (no comma)
+                first_item_in_line = True  # Next item is the first in this line
+            else:
+                line += item
+                first_item_in_line = False  # Next item is not the first
 
-        df1_reset = luaoa_df.reset_index()
-        df2_reset = luaob_df.reset_index()
-        merged_df = pd.concat([df1_reset.round(3), df2_reset.round(3)], axis=1, keys=['LUAO_a', 'LUAO_b'])
-        print(merged_df.to_string(index=False), '\n')
-
-        # print(hoaoa_df.round(3), '\n')
-        # print(hoaob_df.round(3), '\n')
-        # print(luaoa_df.round(3), '\n')
-        # print(luaob_df.round(3), '\n')
-
-        call_header("REACTION INFO"," ")
-        print("association:")
-        for i in list(association_d.keys()):
-            print(f"{i}: {association_d[i]} ")
-        print("dissociation:")
-        for i in list(dissociation_d.keys()):
-            print(f"{i}: {dissociation_d[i]} ")
+        print(line)  # Print the final line for the section
+    print()
+    print()
 
 
-        # for i in sorted(push_dict_1.keys())[:5]:
-        #     print(f'dict1: gap: {i},at_l: {push_dict_1[i]}\n')
-        # for i in sorted(push_dict_2.keys())[:5]:
-        #     print(f'dict2: gap: {i},at_l: {push_dict_2[i]}\n')
-    except:
-        traceback.print_exc()
-    return
+def print_simulation(reactants, at_l, charge_l, nel_l, reactionpath, count, totnel, totcharge, u, nat_1=None):
+    totw = 80
+    border_width = 60
+    col1 = 15
+    col2 = 15
+    col3 = 15
+    col4 = 15
+    side_padding = (totw - border_width) // 2
+    side = " " * side_padding
+
+    print(side + "=" * border_width)
+    title = f"Path Guess Scan {reactionpath}_{count}"
+    print(title.center(totw))
+    print(side + "-" * border_width)
+    print(side + f"{'struc'.center(col1)}{'charge'.center(col2)}{'nel'.center(col3)}{'react atom'.center(col4)}")
+    print(side + "-" * border_width)
+
+    if len(at_l) > 1:
+        for reactant, at1, at2, charge, nel in zip(reactants, at_l[0], at_l[1], charge_l, nel_l):
+            atoms = f"({at1},{at2})"
+            print(side + f"{str(reactant).center(col1)}"
+                         f"{str(charge).center(col2)}"
+                         f"{str(nel).center(col3)}"
+                         f"{str(atoms).center(col4)}")
+
+    else:
+        for reactant, at, charge, nel in zip(reactants, at_l[0], charge_l, nel_l):
+            print(side + f"{str(reactant).center(col1)}"
+                         f"{str(charge).center(col2)}"
+                         f"{str(nel).center(col3)}"
+                         f"{str(at).center(col4)}")
+
+    print(side + "-" * border_width)
+    at1 = int(at_l[0][0])
+    at2 = int(at_l[0][1])
+    if nat_1:
+        at2 += nat_1
+    if len(at_l) > 1:
+        at3 = int(at_l[1][0])
+        at4 = int(at_l[1][1])
+        if nat_1:
+            at4 += nat_1
+        string = f"({at1, at2},{at3, at4}"
+    else:
+        string = f"{at1, at2}"
+    print(side + f"{f'P(uhf={u})'.center(col1)}"
+                 f"{str(totcharge).center(col2)}"
+                 f"{str(totnel).center(col3)}"
+                 f"{str(string).center(col4)}")
+    print(side + "=" * border_width)
+    print()
+
+
+def print_simulation_details(status,key=None, atl=None, sim_uhf=None, otherkey=None, E_sp=None):
+    totw = 80
+    border_width = 60
+    col1 = 10
+    col2 = 15
+    col3 = 5
+    col4 = 30
+    side_padding = (totw - border_width) // 2
+    side = " " * side_padding
+    comments = None
+
+    if status == 0:  # print head
+        print(side + "=" * border_width)
+        title = f"Reaction Simulation Summary"
+        print(title.center(totw))
+        print(side + "-" * border_width)
+        print(side + f"{'scan':^{col1}} {'atl':^{col2}} {'uhf_sim':^{col3}} {'status':^{col4}}")
+        print(side + "-" * border_width)
+        return
+    elif status == 5:  # print tail
+        print(side + "=" * border_width)
+        return
+    elif status == 1:
+        # reactants = products
+        comments = "R=P"
+    elif status == 2:
+        # rxn exist
+        comments = f"rxn exist in {otherkey}"
+
+    elif status == 3:
+        # rxn exist but different unreact
+        comments = f" semi-new rxn: {otherkey}"
+    elif status == 4:
+        # new reaction
+        comments = f" new rxn: {otherkey}, ΔE_sp ={E_sp:.2f}"
+    elif status==6:
+        # unknow in rmb or pmb
+        comments = f" UMBnew rxn: {otherkey}, ΔE_sp ={E_sp:.2f}"
+    print(side + f"{str(key).center(col1)}"
+                 f"{str(atl).center(col2)}"
+                 f"{str(sim_uhf).center(col3)}"
+                 f"{str(comments).center(col4)}")
+
+
+def print_jobhead(jobhead):
+    string = "****"
+    stringout = string + " " + jobhead + " " + string
+    print(stringout.center(80))
