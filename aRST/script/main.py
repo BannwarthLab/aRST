@@ -76,7 +76,7 @@ def main():
             from aRST.script.toolbox import write_rxnout,write_strucout
             write_rxnout()
             write_strucout()
-            plot_rxnnetwork()
+            # plot_rxnnetwork()
         except Exception as e:
             print(f"Error in ReactionSearch(): {e}", flush=True)
             traceback.print_exc()

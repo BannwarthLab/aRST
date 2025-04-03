@@ -1,3 +1,4 @@
+import sys
 from itertools import product
 import numpy as np
 import pandas as pd
@@ -55,6 +56,7 @@ def find_identical_at_from_afo(HOAO, tol=0.01):
                     for i in range(idx + 1, HOAO.shape[0]):
                         if abs(HOAO.loc[i, struc] - hoao) < tol:
                             degenerated.append(i)
+                            used.append(i)
                 out[str(struc)].append({"atom": degenerated, "hoao": np.round(hoao, 2)})
     return out
 
@@ -68,21 +70,23 @@ def refine_react_l(react_l, identical_atom_d, intra=False):
         for item in react_l:
             struc1, struc2 = item["struc_combi"]  # istruc1 > istruc2
             at1, at2 = item["at_combi"]
-            if tuple([struc1, struc2, (at1, at2)]) not in used_combi:
+            if tuple((int(struc1), int(struc2), int(at1), int(at2))) not in used_combi:
                 # find all degenerated pair
                 degenerate_at1 = [at1]
                 degenerate_at2 = [at2]
                 for tmp in identical_atom_d[struc1]:
-                    if at1 in tmp["atom"]:
+                    if int(at1) in tmp["atom"]:
                         degenerate_at1 = tmp["atom"]
                         break
                 for tmp in identical_atom_d[struc2]:
-                    if at2 in tmp["atom"]:
+                    if int(at2) in tmp["atom"]:
                         degenerate_at2 = tmp["atom"]
                         break
+
                 all_combi = list(product(degenerate_at1, degenerate_at2))
                 for combi in all_combi:
-                    used_combi.append(tuple([struc1, struc2, combi]))
+                    tat1,tat2 = combi
+                    used_combi.append(tuple((int(struc1), int(struc2), int(tat1), int(tat2))))
                 used_l1 = []
                 used_l2 = []
                 pairs = []
@@ -93,7 +97,8 @@ def refine_react_l(react_l, identical_atom_d, intra=False):
                         used_l1.append(at1)
                         used_l2.append(at2)
                 item["at_combi"] = pairs
-                out_react_l.append(item)
+                if item not in out_react_l:
+                    out_react_l.append(item)
             else:
                 # change gap
                 for searchitem in out_react_l:
@@ -112,7 +117,7 @@ def refine_react_l(react_l, identical_atom_d, intra=False):
         for item in react_l:
             struc = item["struc_combi"][0]
             at1, at2 = item["at_combi"]
-            if tuple([struc, (at1, at2)]) not in used_combi:
+            if tuple((int(struc), int(at1), int(at2))) not in used_combi:
                 # find all degenerated pair
                 degenerate_at1 = [at1]
                 degenerate_at2 = [at2]
@@ -126,7 +131,8 @@ def refine_react_l(react_l, identical_atom_d, intra=False):
                         break
                 all_combi = list(product(degenerate_at1, degenerate_at2))
                 for combi in all_combi:
-                    used_combi.append(tuple([struc, combi]))
+                    tat1, tat2 = combi
+                    used_combi.append(tuple((int(struc), int(tat1), int(tat2))))
                 used_l = []
                 pairs = []
                 for pair in all_combi:
@@ -136,7 +142,8 @@ def refine_react_l(react_l, identical_atom_d, intra=False):
                         used_l.append(at1)
                         used_l.append(at2)
                 item["at_combi"] = pairs
-                out_react_l.append(item)
+                if item not in out_react_l:
+                    out_react_l.append(item)
             else:
                 # change gap
                 for searchitem in out_react_l:

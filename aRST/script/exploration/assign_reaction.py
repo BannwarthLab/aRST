@@ -1,5 +1,6 @@
 import random
 import string
+import sys
 from collections import Counter
 from os.path import join, exists
 from aRST.script.toolbox import read_afo_csv, FragmentAnalyzer
@@ -187,7 +188,7 @@ class SingleCycleSearch:
         # output_d[count] = [{reactants info},{endxyz info}]
         reactants = tmp_path_l[0]["reactants"]
         cut = 4 if storage.setting.get_value("searching_setting.general.mb_level") == "loose" else 7
-        reactants_mbl = [storage.allstruc.get_value(f"{i}.struc_info.general.mb")[:cut] for i in reactants]
+        reactants_mbl = [" | ".join(storage.allstruc.get_value(f"{i}.struc_info.general.mb").split(" | ")[:cut]) for i in reactants]
         endxyz_info = tmp_path_l[1]
 
         # get constrained opt nfragment
@@ -255,7 +256,7 @@ class SingleCycleSearch:
         # now evaluate if reaction simulation fall back to starting geom
         products_mbl = [CallMolBar(i["coord"]).get_mb() for i in endxyz_info_new]
         tmp_path_l.append(products_mbl)
-        products_mbl = [_[:cut] for _ in products_mbl]
+        products_mbl =[" | ".join(item.split(" | ")[:cut]) for item in products_mbl]
         bond_changed = True  # default as true
         if not "unknow" in products_mbl and not "unknow" in reactants_mbl:
             if Counter(products_mbl) == Counter(reactants_mbl):
@@ -338,10 +339,11 @@ class SingleCycleSearch:
         simuhf = tmp_path_l[0]["simuhf"]
 
         cut = 4 if storage.setting.get_value("searching_setting.general.mb_level") == "loose" else 7
-        reactants_mbl = [storage.allstruc.get_value(f"{i}.struc_info.general.mb")[:cut] for i in reactants]
-        unreact_mbl = [storage.allstruc.get_value(f"{i}.struc_info.general.mb")[:cut] for i in unreactants]
+        reactants_mbl = [" | ".join(storage.allstruc.get_value(f"{i}.struc_info.general.mb").split(" | ")[:cut]) for i in reactants]
+        unreact_mbl = [" | ".join(storage.allstruc.get_value(f"{i}.struc_info.general.mb").split(" | ")[:cut]) for i
+                         in unreactants]
         products_mbl = tmp_path_l[2]
-        products_mbl = [_[:cut] for _ in products_mbl]
+        products_mbl =[" | ".join(item.split(" | ")[:cut]) for item in products_mbl]
 
         info_temp = {"reactants": reactants,
                      "unreacted": unreactants,
@@ -384,12 +386,16 @@ class SingleCycleSearch:
                 E_rxn = sum(E_p) - sum(E_r)
 
             E_rxn_kcal = E_rxn * 627.503
+            # print(key,E_rxn_kcal)
             if E_rxn_kcal > storage.setting.get_value("searching_setting.general.elim", 300):
                 info_temp["therdy_allow"] = False
                 info_temp["E_rxn"] = E_rxn_kcal
                 products = ["unknow"]
                 info_temp["products"] = products  # not determing product mb
-                rxnnetwork.add_newnode(info=info_temp)
+                node=rxnnetwork.add_newnode(info=info_temp)
+                refnode_index = rxnnetwork.get_node_index(node)
+                print_simulation_details(status=4, key=key, atl=atl,
+                                         sim_uhf=simuhf, otherkey=refnode_index,E_sp=E_rxn_kcal)
 
             else:
                 info_temp["therdy_allow"] = True
@@ -405,12 +411,13 @@ class SingleCycleSearch:
                             products_ref = info["products"]
                             unreact_ref = info["unreacted"]
                             refE_rxn = info["E_rxn"]
-                            ref_rmbl = [storage.allstruc.get_value(f"{i}.struc_info.general.mb")[:cut] for i in
-                                        reactants_ref]
-                            ref_pmbl = [storage.allstruc.get_value(f"{i}.struc_info.general.mb")[:cut] for i in
-                                        products_ref]
-                            ref_umbl = [storage.allstruc.get_value(f"{i}.struc_info.general.mb")[:cut] for i in
-                                        unreact_ref]
+                            ref_rmbl =[" | ".join(storage.allstruc.get_value(f"{i}.struc_info.general.mb").split(" | ")[:cut]) for i in reactants_ref]
+                            ref_pmbl = [
+                                " | ".join(storage.allstruc.get_value(f"{i}.struc_info.general.mb").split(" | ")[:cut])
+                                for i in products_ref]
+                            ref_umbl = [
+                                " | ".join(storage.allstruc.get_value(f"{i}.struc_info.general.mb").split(" | ")[:cut])
+                                for i in unreact_ref]
                             if Counter(products_mbl) == Counter(ref_pmbl) and \
                                     Counter(reactants_mbl) == Counter(ref_rmbl):
                                 products = products_ref
@@ -439,7 +446,10 @@ class SingleCycleSearch:
                             add = True
                             if pmb != "unknow":
                                 for struc in storage.allstruc.data.keys():
-                                    refmb = storage.allstruc.get_value(f"{struc}.struc_info.general.mb")[:cut]
+
+                                    refmb = " | ".join(
+                                            storage.allstruc.get_value(f"{struc}.struc_info.general.mb").split(" | ")[:cut])
+
                                     if refmb == pmb:
                                         add = False
                                         products.append(struc)
@@ -458,7 +468,8 @@ class SingleCycleSearch:
                         add = True
                         if pmb != "unknow":
                             for struc in storage.allstruc.data.keys():
-                                refmb = storage.allstruc.get_value(f"{struc}.struc_info.general.mb")[:cut]
+                                refmb = " | ".join(
+                                    storage.allstruc.get_value(f"{struc}.struc_info.general.mb").split(" | ")[:cut])
                                 if refmb == pmb:
                                     add = False
                                     products.append(struc)

@@ -1,5 +1,6 @@
 # Reaction simulation for intramolecular association
 import json
+import sys
 from os.path import join
 import shutil
 import copy
@@ -28,7 +29,7 @@ def get_interA_react_l(reactants0):
         react_l = SPR(reactants0,
                       storage.setting.get_value("searching_setting.general.hydrogen", True),
                       storage.setting.get_value("searching_setting.general.halogen", True)
-                      ).inter(storage.setting.get_value("searching_setting.general.spr_mode", True))
+                      ).inter(storage.setting.get_value("searching_setting.general.spr_mode", 0))
 
     cut = 2 if storage.setting.get_value("searching_setting.inter.concerted_pair", False) else 1
     for item in react_l:
