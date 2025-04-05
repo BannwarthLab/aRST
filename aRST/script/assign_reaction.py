@@ -150,6 +150,7 @@ class SingleCycleSearch:
 
         # read ml
         ml_feature = pd.read_csv(join(mlwd, "ml_feature.csv"), index_col=False)
+        ml_feature.columns = ml_feature.columns.str.strip()
         ml_feature.insert(0, 'index', range(len(ml_feature)), allow_duplicates=False)
         ml_feature.set_index("index")
         if 'HOAO_a (eV)' in ml_feature.columns:
