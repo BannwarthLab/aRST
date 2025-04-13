@@ -166,10 +166,7 @@ class Coord:
         d1 = self.get_dihedral_angle(at3, at1, at2, at4)
         d2 = self.get_dihedral_angle(at3, at1, at4, at2)
 
-        if abs(d1) >= abs(d2):
-            return True
-        else:
-            return False
+        return abs(d1) >= abs(d2)
 
     def get_ats_distance(self, at1, at2):
         a = self.get_punkt_coord(at1)

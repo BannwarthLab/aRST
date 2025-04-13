@@ -200,6 +200,7 @@ def intermbff(reactants0, entry, reactionpath, count=0):
             with open(join(scan_wd, "newbond"), "a+") as f:
                 f.write(json.dumps({"atoms": [at1, at2], "value": value}))
         coordinates = [list(alignedcoord.loc[line, 1:4]) for line in range(alignedcoord.shape[0])]
+        # mbxyz=get_endxyz_from_mb(atom_connection, coordinates, ele, set_angles=True)
         mbxyz0 = get_endxyz_from_mb(atom_connection, coordinates, ele, set_angles=False)
         write_xyz(mbxyz0, "coord_mb0")
         mbxyz0 = pd.read_table(join(scan_wd, "coord_mb0.xyz"), header=None, skiprows=2, sep='\s+')
@@ -210,7 +211,10 @@ def intermbff(reactants0, entry, reactionpath, count=0):
         status = CallxTB(scan_wd,
                          custom_settings={"charge": charge, "uhf": u,
                                           "k": storage.setting.get_value("xtb_setting.k", 1),
-                                          "coordfn": "coord_mb"}).constrained_opt(
+                                          "coordfn": "coord_mb",
+                                          "etemp": storage.setting.get_value(
+                                              "xtb_setting.scan_etemp", 4000)
+                                          }).constrained_opt(
             newbond=atom_connection[-len(push_l):])
         if status == 0:
             endxyz = read_coord(join(scan_wd, "xtbopt.xyz"))

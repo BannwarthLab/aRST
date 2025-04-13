@@ -43,18 +43,23 @@ def build_react_l(h_df, l_df, search_mode):
 
 def find_identical_at_from_afo(HOAO, tol=0.01):
     out = {}
-
-    for struc in HOAO.columns:
+    for struc in list(set(HOAO.columns)):
         out[str(struc)] = []
         used = []
         for idx, hoao in HOAO[struc].items():
+            if isinstance(hoao, pd.Series):
+                hoao = hoao.iloc[0]
+            idx = int(idx)
             if idx not in used:
                 used.append(idx)
                 degenerated = []
                 degenerated.append(idx)
                 if idx != HOAO.shape[0]:
                     for i in range(idx + 1, HOAO.shape[0]):
-                        if abs(HOAO.loc[i, struc] - hoao) < tol:
+                        value = HOAO.loc[i, struc]
+                        if isinstance(value, pd.Series):
+                            value = value.iloc[0]
+                        if abs(value - hoao) < tol:
                             degenerated.append(i)
                             used.append(i)
                 out[str(struc)].append({"atom": degenerated, "hoao": np.round(hoao, 2)})
@@ -84,28 +89,33 @@ def refine_react_l(react_l, identical_atom_d, intra=False):
                         break
 
                 all_combi = list(product(degenerate_at1, degenerate_at2))
-                for combi in all_combi:
-                    tat1,tat2 = combi
-                    used_combi.append(tuple((int(struc1), int(struc2), int(tat1), int(tat2))))
                 used_l1 = []
                 used_l2 = []
                 pairs = []
-                for pair in all_combi:
-                    at1, at2 = pair
-                    if at1 not in used_l1 and at2 not in used_l2:
-                        pairs.append([at1, at2])
-                        used_l1.append(at1)
-                        used_l2.append(at2)
+                for combi in all_combi:
+                    tat1, tat2 = combi
+                    used_combi.append(tuple((int(struc1), int(struc2), int(tat1), int(tat2))))
+                    if tat1 not in used_l1 and tat2 not in used_l2:
+                        pairs.append([tat1, tat2])
+                        used_l1.append(tat1)
+                        used_l2.append(tat2)
+                        # gap_value = next((tmpitem["gap"] for tmpitem in react_l if
+                        #                   tmpitem["struc_combi"] == [str(struc1), str(struc2)]
+                        #                   and tmpitem["at_combi"] == [str(tat1),str(tat2)]),None)
+
                 item["at_combi"] = pairs
+
                 if item not in out_react_l:
                     out_react_l.append(item)
             else:
                 # change gap
                 for searchitem in out_react_l:
-                    search_struc_combi = searchitem["struc_combi"]
-                    if search_struc_combi == (struc1, struc2):
+                    search_struc1, search_struc2 = searchitem["struc_combi"]
+                    if int(search_struc1) ==int(struc1) and int(search_struc2) ==int(struc2):
                         search_allcombi = searchitem["at_combi"]
-                        if tuple([at1, at2]) in search_allcombi:
+                        triger = next((True for tmpitem in search_allcombi
+                                       if int(tmpitem[0]) ==int(at1) and int(tmpitem[1]) ==int(at2)),False)
+                        if triger:
                             currentgap = item["gap"]
                             oldgap = searchitem["gap"]
                             if currentgap < oldgap:
@@ -114,6 +124,7 @@ def refine_react_l(react_l, identical_atom_d, intra=False):
                                 searchitem["LUAO"] = item["LUAO"]
                                 break
     else:
+        # todo
         for item in react_l:
             struc = item["struc_combi"][0]
             at1, at2 = item["at_combi"]
@@ -375,168 +386,3 @@ class SDP:
             else:
                 print("Warning: embo doesn't exist in struc info, change back to MBO assessment")
                 return sorted(react_l, key=lambda x: x["mbo"])
-
-# def SPR_HL(reactants,  # reactants id list
-#            struc_rec,  # struc dict record
-#            allow_hydrogen=True,  # if search range including hydrogen elements
-#            allow_halogen=True,  # if search range including halogen elements
-#            search_mode=1,  # 0 : only search intramollecule reaction possibility;
-#            # 1: only intermolecular;
-#            # 2: both inter- and intra reaction possibility.
-#            spr_mode=0 #0(default): globally compre both same spin and oppo spin HL combinations
-#                                     # 1: only compre same spin (HL_aa and HL_bb)
-#                                     # 2: only compre opposite spin (HL_ab and HL_ba)
-#            ):
-#
-#     struc_inspector = DictionaryInspector(struc_rec)
-#     # collecting HL values into dataframe
-#     maxnat = max(struc_inspector.get_value(f'{i}.struc_info.reactivity.ml').shape[0] for i in reactants)
-#     HOAO_a = pd.DataFrame(columns=reactants, index=range(maxnat))
-#     HOAO_b = pd.DataFrame(columns=reactants, index=range(maxnat))
-#     LUAO_a = pd.DataFrame(columns=reactants, index=range(maxnat))
-#     LUAO_b = pd.DataFrame(columns=reactants, index=range(maxnat))
-#     newcolumn_names = ["HOAO_a (eV)", "HOAO_b (eV)", "LUAO_a (eV)", "LUAO_b (eV)"]
-#     dfs = [HOAO_a, HOAO_b, LUAO_a, LUAO_b]
-#
-#     for istruc in range(len(reactants)):
-#         strucid = reactants[istruc]
-#         mldf_original = struc_inspector.get_value(f'{strucid}.struc_info.reactivity.ml').copy()
-#
-#         # remove all hydrogen/halogen if not allowed
-#         if not allow_hydrogen:
-#             # get index
-#             hindex = mldf_original[mldf_original['Atom'] == 1].index.tolist()
-#             mldf_original.loc[hindex, "HOAO_a (eV)"] = -np.inf
-#             mldf_original.loc[hindex, "HOAO_b (eV)"] = -np.inf
-#             mldf_original.loc[hindex, "LUAO_a (eV)"] = np.inf
-#             mldf_original.loc[hindex, "LUAO_a (eV)"] = np.inf
-#
-#         if not allow_halogen:
-#             # get index
-#             hindex = mldf_original[mldf_original['Atom'] == 9 or
-#                                    mldf_original['Atom'] == 17 or
-#                                    mldf_original['Atom'] == 35 or
-#                                    mldf_original['Atom'] == 53 or
-#                                    mldf_original['Atom'] == 85].index.tolist()
-#             # change values
-#             mldf_original.loc[hindex, "HOAO_a (eV)"] = -np.inf
-#             mldf_original.loc[hindex, "HOAO_b (eV)"] = -np.inf
-#             mldf_original.loc[hindex, "LUAO_a (eV)"] = np.inf
-#             mldf_original.loc[hindex, "LUAO_a (eV)"] = np.inf
-#
-#         for df, column_name in zip(dfs, newcolumn_names):
-#             tmpl = list(mldf_original.loc[:, column_name])
-#             for j in range(maxnat - len(tmpl)):
-#                 tmpl.append(np.nan)
-#             df.iloc[:, istruc] = tmpl  # .reset_index(drop=True)
-#
-#     identical_atom_d = find_identical_at(reactants,struc_rec)
-#
-#
-#     final_react = []
-#     if spr_mode==1:
-#         react_aa = build_react_l(HOAO_a, LUAO_a, search_mode)
-#         react_bb = build_react_l(HOAO_b, LUAO_b, search_mode)
-#         for react in [react_aa, react_bb]:
-#             final_react.extend(react)
-#     elif spr_mode==2:
-#         react_ab = build_react_l(HOAO_a, LUAO_b, search_mode)
-#         react_ba = build_react_l(HOAO_b, LUAO_a, search_mode)
-#         for react in [react_ab, react_ba]:
-#             final_react.extend(react)
-#
-#     else:
-#         react_aa = build_react_l(HOAO_a, LUAO_a, search_mode)
-#         react_bb = build_react_l(HOAO_b, LUAO_b, search_mode)
-#         react_ab = build_react_l(HOAO_a, LUAO_b, search_mode)
-#         react_ba = build_react_l(HOAO_b, LUAO_a, search_mode)
-#
-#         for react in [react_aa,react_bb,react_ab,react_ba]:
-#             final_react.extend(react)
-#
-#     final_react = sorted(refine_react_l(final_react,identical_atom_d), key=lambda x: x['gap'])
-#     return final_react
-
-
-# def SPR_dissociation(reactants,  # reactants id list
-#                      struc_rec,  # struc dict record
-#                      allow_hydrogen=True,  # if search range including hydrogen elements
-#                      allow_halogen=True,  # if search range including halogen elements
-#                      search_mode=0  # 0: use wboe; 1: use MBO
-#                      ):
-#     struc_inspector = DictionaryInspector(struc_rec)
-#     final_react = []
-#     for strucid in list(set(reactants)):
-#         react_l = []
-#         wboe = struc_inspector.get_value(f'{strucid}.struc_info.reactivity.bo')
-#         ml = struc_inspector.get_value(f'{strucid}.struc_info.reactivity.ml')
-#         if wboe is not None:
-#             for index in range(wboe.shape[0]):
-#                 if search_mode == 1:
-#                     dgap = wboe.iloc[index, 3]  # MBO
-#                     if dgap <= 0.3:
-#                         continue
-#                 else:
-#                     dgap = wboe.iloc[index, 2]  # energy-baesd MBO
-#                 at1, at2 = wboe.iloc[index, :2]  # index starting from 1
-#                 ele1, ele2 = ml.loc[at1 - 1, 'Atom'], ml.loc[at2 - 1, 'Atom']
-#
-#                 if not allow_hydrogen:
-#                     if int(ele1) == 1 or int(ele2) == 1:
-#                         continue
-#                 if not allow_halogen:
-#                     if int(ele1) in [9, 17, 35, 53, 85] or int(ele2) in [9, 17, 35, 53, 85]:
-#                         continue
-#                 # check for degenrated
-#                 degenrate = False
-#                 for item in react_l:
-#                     if abs(item["dgap"] - dgap) < 0.01:  # yes
-#                         item["at_combi"].append([str(at1), str(at2)])
-#                         degenrate = True
-#                         break
-#                 if not degenrate:
-#                     react_l.append({"struc": str(strucid),
-#                                     "at_combi": [str(at1), str(at2)],
-#                                     "dgap": dgap})
-#         final_react.extend(react_l)
-#         # refine final_react to avoid cutting 2 bonds from same atom
-#         for item in final_react:
-#             newat_combi = []
-#             used_atl = []
-#             for item2 in item["at_combi"]:
-#                 at1, at2 = item2
-#                 if at1 not in used_atl and at2 not in used_atl:
-#                     newat_combi.append(str(at1), str(at2))
-#                     used_atl.append(at1)
-#                     used_atl.append(at2)
-#             item["at_combi"] = newat_combi
-#         final_react = sorted(final_react, key=lambda x: x['dgap'])
-#
-#     return final_react
-#
-#
-# def build_bo_d(reactants,
-#                struc_rec,  # struc dict record
-#                allow_hydrogen=True,  # if search range including hydrogen elements
-#                allow_halogen=True,  # if search range including halogen elements
-#                ):
-#     struc_inspector = DictionaryInspector(struc_rec)
-#     bo = {}
-#     for strucid in reactants:
-#         bo[strucid] = []
-#         wboe = struc_inspector.get_value(f'{strucid}.struc_info.reactivity.bo')
-#         if wboe is not None:
-#             ml = struc_inspector.get_value(f'{strucid}.struc_info.reactivity.ml')
-#             for index in range(wboe.shape[0]):
-#                 dgap = wboe.iloc[index, 3]
-#                 if 0.3 < dgap:
-#                     at_1, at_2 = wboe.iloc[index, 0], wboe.iloc[index, 1]
-#                     ele_1, ele_2 = ml.iloc[at_1 - 1]['Atom'], ml.iloc[at_2 - 1]['Atom']
-#                     if not allow_hydrogen and (int(ele_1) == 1 or int(ele_2) == 1):
-#                         continue
-#                     if not allow_halogen:
-#                         if int(ele_1) in [9, 17, 35, 53, 85] or int(ele_2) in [9, 17, 35, 53, 85]:
-#                             continue
-#                     value = [f'{at_1 - 1}', f'{at_2 - 1}']
-#                     bo[strucid].append(value)
-#     return bo

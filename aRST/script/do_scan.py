@@ -6,7 +6,6 @@ from aRST.script.geom import Coord
 def build_push_l(coord, at_l, nat1=0,d=0.98):
     # avoiding crossing push atomic pairs
     if len(at_l) ==2:
-
         at1 = int(at_l[0][0])
         at2 = int(at_l[0][1]) + int(nat1)
         at3 = int(at_l[1][0])
@@ -37,7 +36,7 @@ def get_endxyz_from_mb(constrain_l, coordinates, ele,set_angles=True):
         'set_edges': False,
         'set_angles': set_angles,
         'set_dihedrals': False,
-        'set_repulsion': False,
+        'set_repulsion': True,
         'repulsion_charge': 100.0,
         'constraints': {'bonds': constrain_l}
     }

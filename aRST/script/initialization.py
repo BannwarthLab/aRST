@@ -1,3 +1,5 @@
+import sys
+
 import toml
 import threading
 import os
@@ -109,6 +111,16 @@ class Allstruc:
                 self.set_value_from_struc_info(str(id), struc_info)
 
     def set_value_from_struc_info(self, strucid, struc_info):
+        # test if this reactant is already in data
+        mb =struc_info["mb"]
+        for struc in list(self.data.keys()):
+            search_mb = self.data.get_value(f"{struc}.struc_info.general.mb")
+            if mb ==search_mb:
+                del self.data[strucid]
+                self.reactants_ini.remove(strucid)
+                self.reactants_ini.append(struc)
+                return
+
         self.data.set_value(f"{strucid}.struc_info.general.coord", struc_info["coord"])
         self.data.set_value(f"{strucid}.struc_info.general.nel", struc_info["nel"])
         self.data.set_value(f"{strucid}.struc_info.general.multiplicity", struc_info["m"])
@@ -140,10 +152,10 @@ class Allstruc:
 
         # do DFT opt if required
         forcedftopt = Setting.get_value("read.general.dftopt", False)
-        if (forcedftopt or Setting.get_value("orca_setting.dftopt")) and coord.shape[0] > 1:
+        if (forcedftopt or Setting.get_value("orca_setting.dftopt",False)) and coord.shape[0] > 1:
             wd = create_folder(join(Setting.strucwd, strucid, "orca"))
             write_xyz(coord, "coord")
-            staus = CallORCA(wd, custom_settings={"charge": charge, "m": m, "caltyp": "SP OPT"})
+            staus = CallORCA(wd, custom_settings={"charge": charge, "m": m, "caltyp": "SP OPT"}).call()
             if staus == 0:
                 coord = read_coord(join(wd, "orca.xyz"))
             else:
@@ -161,11 +173,12 @@ class Allstruc:
 
         ## orca sp
         sp_orca = None
-        wd = create_folder(join(Setting.strucwd, strucid, "orca"))
-        write_xyz(coord, "coord")
-        staus = CallORCA(wd, custom_settings={"charge": charge, "m": m}).call()
-        if staus != 0:
-            print(f'Warning: struc {strucid} sp at ORCA failed, continue anyhow')
+        if not (forcedftopt or Setting.get_value("orca_setting.dftopt",False)) or coord.shape[0] == 1:
+            wd = create_folder(join(Setting.strucwd, strucid, "orca"))
+            write_xyz(coord, "coord")
+            staus = CallORCA(wd, custom_settings={"charge": charge, "m": m}).call()
+            if staus != 0:
+                print(f'Warning: struc {strucid} sp at ORCA failed, continue anyhow')
 
         #########  TRV  #########
         wd = create_folder(join(Setting.strucwd, strucid, "xtb", "trv"))

@@ -43,13 +43,13 @@ class ReactionNetwork:
             if edge_l:
                 for targetnode in edge_l:
                     self.graph.add_edge(nodeid, targetnode)
-        return self.get_node_index(nodeid)
+        return self.get_node_index_form_nodeid(nodeid)
 
     def add_newedge(self, node1, node2):
         self.graph.add_edge(node1, node2)
 
-    def get_node_index(self, node):
-        return list(self.graph.nodes).index(node)
+    def get_node_index_form_nodeid(self, nodeid):
+        return list(self.graph.nodes).index(nodeid)
 
     def get_layer_nodes(self, layer):
         nodes = [_ for _ in self.graph.nodes if self.get_reaction_info(_)["layer"] == int(layer)]
@@ -88,6 +88,7 @@ class ReactionNetwork:
 
     def get_allowed_layer_nodes(self, layer):
         allowed_nodes = []
+        allowed_conbi = [] # (R,U,P)
         for node in self.graph.nodes:
             info = self.get_reaction_info(node)
             # check layer
@@ -99,7 +100,16 @@ class ReactionNetwork:
             # check thermodynamic allowed
             if not info["therdy_allow"]:
                 continue
+            # check if duplicated reactions
+            reactants = info["reactants"]
+            products = info["products"]
+            unreact = info["unreacted"]
+            unit =(tuple(reactants), tuple(unreact), tuple(products))
+            if unit in allowed_conbi:
+                continue
+
             allowed_nodes.append(node)
+            allowed_conbi.append(unit)
         return allowed_nodes
 
     def get_reaction_info(self, node):

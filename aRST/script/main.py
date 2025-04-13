@@ -80,6 +80,7 @@ def main():
         except Exception as e:
             print(f"Error in ReactionSearch(): {e}", flush=True)
             traceback.print_exc()
+            pass
     elif args.afo_features:
         from aRST.script.reactivity.afo_features import show_afo
         show_afo()
@@ -97,9 +98,12 @@ if __name__ == "__main__":
         main()
     except Exception as e:
         print(f"Error in main(): {e}",flush=True)
-    end_time = datetime.now()
-    running_time = end_time - start_time
-    total_seconds = running_time.total_seconds()
-    print(f"***** Job finished in {int(total_seconds // 3600)} hour "
-          f"{int((total_seconds % 3600) // 60)} mins {total_seconds % 60:.2f} sec *****",flush=True)
+    except SystemExit as e:
+        print(f"SystemExit: {e}", flush=True)
+    finally:
+        end_time = datetime.now()
+        running_time = end_time - start_time
+        total_seconds = running_time.total_seconds()
+        print(f"***** Job finished in {int(total_seconds // 3600)} hour "
+              f"{int((total_seconds % 3600) // 60)} mins {total_seconds % 60:.2f} sec *****",flush=True)
 

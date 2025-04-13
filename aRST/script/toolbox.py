@@ -213,7 +213,7 @@ class FragmentAnalyzer:
         for fragment in self.fragments:
             atcharge = self.Satcharge.iloc[list(fragment)]
             charge_flo = atcharge.sum()
-            charge_l_flo.append(charge_flo)
+            charge_l_flo.append(float(charge_flo))
             fragment_data.append({
                 "charge_flo": charge_flo, "atcharge": atcharge})
 
@@ -253,20 +253,6 @@ class FragmentAnalyzer:
                 int_charges[idx] += np.sign(charge_difference)  # Adjust by +1 or -1
         return list(int_charges)
 
-
-#
-# # def convert_json2dict(jsondata):
-# #     d = {}
-# #     for struc in jsondata.keys():
-# #         d[struc] = {}
-# #         for item in list(jsondata[struc].keys()):
-# #
-# #             try:
-# #                 df = pd.read_json(jsondata[struc][item])
-# #                 d[struc][item] = df
-# #             except:
-# #                 d[struc][item] = jsondata[struc][item]
-# #     return d
 #
 def convert_for_json(d, exclude_keys=None):
     """
@@ -285,22 +271,17 @@ def convert_for_json(d, exclude_keys=None):
     elif isinstance(d, dict):
         return {k: convert_for_json(v, exclude_keys) for k, v in d.items() if k not in exclude_keys}
     elif isinstance(d, float):
-        return round(d, 4)  # Round float values to 4 decimal places
+        return round(d, 8)  # Round float values to 8 decimal places
     return d  # int, str, etc., remain unchanged
 
 
-def convert_storage_to_json(data, exclude_keys=None):
-    if exclude_keys is None:
-        exclude_keys = set()
-    if isinstance(data, pd.DataFrame):
-        return {"__dataframe__": data.to_json()}
-    elif isinstance(data, list):
-        return [convert_for_json(v, exclude_keys) for v in data]
-    elif isinstance(data, dict):
-        return {k: convert_for_json(v, exclude_keys) for k, v in data.items() if k not in exclude_keys}
-    elif isinstance(data, float):
-        return np.round(data, 4)
-    return data
+import json
+class CompactJSONEncoder(json.JSONEncoder):
+    def iterencode(self, obj, _one_shot=False):
+        """Override default encoding to keep lists compact."""
+        if isinstance(obj, list):
+            return "[" + ",".join(map(self.encode, obj)) + "]"
+        return super().iterencode(obj, _one_shot)
 
 
 def write_rxnout():
@@ -317,7 +298,7 @@ def write_rxnout():
         "edges": list(rxnnetwork.graph.edges)
     }
     with open(f'{storage.setting.wd0}/reaction.json', "w") as file:
-        file.write(json.dumps(data, indent=2))
+        file.write(json.dumps(data, indent=2, cls=CompactJSONEncoder))
         file.write('\n')
 
 
