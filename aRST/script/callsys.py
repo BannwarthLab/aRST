@@ -535,16 +535,8 @@ class CallMolBar:
 
     def get_mb(self):
         from molbar.barcode import get_molbar_from_coordinates
-        if self.coord.shape[0] > 1:
-            mb = "unknow"
-            # transform coord to coord_l and ele_l
-            coord_l = [self.coord.loc[i, 1:3].tolist() for i in self.coord.index]
-            ele_l = [self.coord.loc[i, 0] for i in self.coord.index]
-            try:
-                mb = get_molbar_from_coordinates(coord_l, ele_l)
-            except Exception:
-                traceback.print_exc()
-        else:
-            mb = self.coord.iloc[0, 0]
+        coord_l = [self.coord.loc[i, 1:3].tolist() for i in self.coord.index]
+        ele_l = [self.coord.loc[i, 0] for i in self.coord.index]
+        mb = get_molbar_from_coordinates(coord_l, ele_l)
         return mb
 

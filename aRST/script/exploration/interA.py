@@ -35,6 +35,9 @@ def get_interA_react_l(reactants0):
     for item in react_l:
         pairs = item["at_combi"][:cut]
         item["at_combi"] = pairs
+    print()
+    print(f"tot. atom pairs in {reactants0}: {len(react_l)}")
+    print()
     return react_l
 
 

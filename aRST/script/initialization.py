@@ -61,6 +61,7 @@ class Allstruc:
             c = Setting.get_value(f"geom.{struc}.charge")
             m = Setting.get_value(f"geom.{struc}.multiplicity")
             if all(v is not None for v in [coord, c, m]):
+                # set up new id anyhow
                 self.data.set_value(f"{str(id)}.struc_info.general.coord", coord)
                 self.data.set_value(f"{str(id)}.struc_info.general.charge", c)
                 self.data.set_value(f"{str(id)}.struc_info.general.multiplicity", m)
@@ -113,13 +114,20 @@ class Allstruc:
     def set_value_from_struc_info(self, strucid, struc_info):
         # test if this reactant is already in data
         mb =struc_info["mb"]
-        for struc in list(self.data.keys()):
-            search_mb = self.data.get_value(f"{struc}.struc_info.general.mb")
-            if mb ==search_mb:
+        for searchid in list(self.data.keys()):
+            if searchid!=strucid:
+                search_mb = self.data.get_value(f"{searchid}.struc_info.general.mb")
+                if mb ==search_mb:
+                    del self.data[strucid]
+                    self.reactants_ini.remove(strucid)
+                    self.reactants_ini.append(searchid)
+                    return
+        # check if need to change current strucid
+        for _ in range(int(strucid)):
+            if str(_) not in list(self.data.keys()):
                 del self.data[strucid]
-                self.reactants_ini.remove(strucid)
-                self.reactants_ini.append(struc)
-                return
+                strucid = str(_)
+                break
 
         self.data.set_value(f"{strucid}.struc_info.general.coord", struc_info["coord"])
         self.data.set_value(f"{strucid}.struc_info.general.nel", struc_info["nel"])

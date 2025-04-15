@@ -89,6 +89,9 @@ def refine_react_l(react_l, identical_atom_d, intra=False):
                         break
 
                 all_combi = list(product(degenerate_at1, degenerate_at2))
+                if int(struc1) ==int(struc2):
+                    all_combi2 = list(product(degenerate_at2, degenerate_at1))
+                    all_combi.extend(all_combi2)
                 used_l1 = []
                 used_l2 = []
                 pairs = []

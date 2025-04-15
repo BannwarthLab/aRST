@@ -1,4 +1,3 @@
-import numpy as np
 import pandas as pd
 import aRST.script.initialization as storage
 from aRST.script.exploration.assign_reaction import SingleCycleSearch

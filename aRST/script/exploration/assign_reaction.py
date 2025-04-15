@@ -28,7 +28,7 @@ class SingleCycleSearch:
         nel = storage.allstruc.get_value(f"{struc}.struc_info.general.nel")
         c = storage.allstruc.get_value(f"{struc}.struc_info.general.charge")
         if not all(v is not None for v in [coord, nel, c]):
-            print(f"Warning: {struc} doesn't have enough coord, nel, c, will be neglet in the reaction searching")
+            print(f"Warning: {struc} doesn't have enough coord, nel, c, this struc will be neglet in the reaction searching")
 
         afo = storage.allstruc.get_value(f"{struc}.struc_info.reactivity.afo")
         if afo is None:
@@ -283,7 +283,7 @@ class SingleCycleSearch:
             nel = frag["nel"]
             caltyp = "SP OPT" if coord.shape[0] > 1 and dftopt else "SP"
             m_l = [1, 3] if nel % 2 == 0 else [2]
-            sp_dft, m_fin, coord_fin = None, None, None
+            sp_dft, m_fin, coord_fin = np.inf, m_l[0], coord # initial setting in case DFT sp failed
             for m in m_l:
                 wd = create_folder(
                     join(storage.setting.bufferwd, frag['strucwd'], "orca", str(m)))
@@ -416,10 +416,13 @@ class SingleCycleSearch:
 
                         reactants_ref = info["reactants"]
                         products_ref = info["products"]
+                        if "unknow" in products_ref:
+                            continue # that is products of Erxn > Elim
                         unreact_ref = info["unreacted"]
                         ref_rmbl = [
                             " | ".join(storage.allstruc.get_value(f"{i}.struc_info.general.mb").split(" | ")[:cut]) for
                             i in reactants_ref]
+
                         ref_pmbl = [
                             " | ".join(storage.allstruc.get_value(f"{i}.struc_info.general.mb").split(" | ")[:cut])
                             for i in products_ref]
@@ -572,3 +575,7 @@ def ReactionSearch(step=0):
                         singlecycle.evalueate_path(count, info_l, layer=step + 1)
                 print_simulation_details(status=5)
             step += 1
+    # clean up buffer_struc
+    if exists(storage.setting.bufferwd):
+        import shutil
+        shutil.rmtree(storage.setting.bufferwd,ignore_errors=True)
