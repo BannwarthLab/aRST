@@ -37,7 +37,7 @@ def main():
                         default=False,
                         help='Explore reaction pathes based on given reactants.')
     parser.add_argument('--afo_features',
-                        '-ml',
+                        '-afo',
                         action='store_true',
                         default=False,
                         help='Print out reactive information of given structures.')
@@ -46,10 +46,6 @@ def main():
                         action='store_true',
                         default=False,
                         help='Aligning two strucs with given atom index.')
-    parser.add_argument('--opt',
-                        action='store_true',
-                        default=False,
-                        help='Optimizing coord at gfn/dft level according to input file.')
     parser.add_argument("-u", "--unbuffered", action="store_true",
                         help="Run in unbuffered mode (forces real-time output).")
 
@@ -67,43 +63,38 @@ def main():
     print_parser(setting.config)
     print_args(args)
 
-
-
     if args.explore:
         from aRST.script.exploration.assign_reaction import ReactionSearch
+        from datetime import datetime
+        start_time = datetime.now()
         try:
             ReactionSearch()
             from aRST.script.toolbox import write_rxnout,write_strucout
             write_rxnout()
             write_strucout()
-            # plot_rxnnetwork()
         except Exception as e:
-            print(f"Error in ReactionSearch(): {e}", flush=True)
+            print(f"Error in main(): {e}", flush=True)
             traceback.print_exc()
-            pass
-    elif args.afo_features:
-        from aRST.script.reactivity.afo_features import show_afo
-        show_afo()
-
-
-
-
-if __name__ == "__main__":
-    # import logging
-    # log_to_stderr()
-    # get_logger().setLevel(logging.DEBUG)
-    from datetime import datetime
-    start_time = datetime.now()
-    try:
-        main()
-    except Exception as e:
-        print(f"Error in main(): {e}",flush=True)
-    except SystemExit as e:
-        print(f"SystemExit: {e}", flush=True)
-    finally:
+        except SystemExit as e:
+            print(f"SystemExit: {e}", flush=True)
+            traceback.print_exc()
         end_time = datetime.now()
         running_time = end_time - start_time
         total_seconds = running_time.total_seconds()
+        print()
         print(f"***** Job finished in {int(total_seconds // 3600)} hour "
-              f"{int((total_seconds % 3600) // 60)} mins {total_seconds % 60:.2f} sec *****",flush=True)
+              f"{int((total_seconds % 3600) // 60)} mins {total_seconds % 60:.2f} sec *****", flush=True)
+        # plot_rxnnetwork()
+
+
+    elif args.afo_features:
+        from aRST.script.reactivity.afo_features import show_afo
+        show_afo()
+    elif args.align:
+        from aRST.script.alignment.do_alignment import aligning_two_structures
+        aligning_two_structures()
+
+
+if __name__ == "__main__":
+    main()
 
