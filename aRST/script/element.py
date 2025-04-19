@@ -78,6 +78,7 @@ r0 = {'H': 0.32, 'D': 0.32, 'He': 0.46, 'Li': 1.20, 'Be': 0.94, 'B': 0.77, 'C': 
       'Bk': 1.68, 'Cf': 1.68, 'Es': 1.65, 'Fm': 1.67, 'Md': 1.73, 'No': 1.76, 'Lr': 1.61, 'Rf': 1.57,
       'Db': 1.49, 'Sg': 1.43, 'Bh': 1.41, 'Hs': 1.34, 'Mt': 1.29, 'Ds': 1.21, 'Rg': 1.21, 'Cn': 1.22,
       'Nh': 1.36, 'Fl': 1.43, 'Mc': 1.62, 'Lv': 1.75, 'Ts': 1.65, 'Og': 1.57, 'Cl': 0.99}
+scaled_r0 = {k: v*4/3 for k, v in element.items()}
 
 valence_electrons = {
     # Group 1 - Alkali Metals

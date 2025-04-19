@@ -2,7 +2,7 @@ import os
 
 import numpy as np
 import pandas as pd
-from aRST.script.element import r0,element
+from aRST.script.element import r0,element,scaled_r0
 import warnings
 warnings.filterwarnings( "ignore" )
 
@@ -25,14 +25,14 @@ class Coord:
                 y = self.coord.iloc[i, 2] - self.coord.iloc[at, 2]
                 z = self.coord.iloc[i, 3] - self.coord.iloc[at, 3]
                 r = np.linalg.norm(np.array([x, y, z]))
-                rcov_c = float(r0[f'{self.coord.iloc[at, 0]}'])
-                rcov_i = float(r0[f'{self.coord.iloc[i, 0]}'])
+                rcov_c = float(scaled_r0[f'{self.coord.iloc[at, 0]}'])
+                rcov_i = float(scaled_r0[f'{self.coord.iloc[i, 0]}'])
                 rr = (rcov_i + rcov_c) / r
                 # add connected at's xyz
                 if rr > 0.8:
                     neighbor_atl.append([self.coord.iloc[i, 1], self.coord.iloc[i, 2], self.coord.iloc[i, 3]])
                 # add up I
-                cn = 1 / (1 + np.exp(- 16 * rr - 1))
+                cn = 1 / (1 + np.exp(- 16 *(rr - 1)))
                 atmass = 0.5 * cn / (r ** 2)
                 t1 = t1 + atmass * (y ** 2 + z ** 2)
                 t2 = t2 + atmass * (-y * x)

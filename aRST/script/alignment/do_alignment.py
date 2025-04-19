@@ -14,7 +14,7 @@ def aligning_two_structures(reactants=None,at1=None,at2=None):
         # check if define reactive ats
         at1 = storage.setting.get_value("searching_setting.inter.at1")
         at2 = storage.setting.get_value("searching_setting.inter.at2")
-    if not at1 or not at2:
+    if at1 is None or at2 is None:
         print("aRST doesn't detect preassign reactive ats, switch to most reactive pair assigning by AFO gaps")
         SingleCycleSearch(reactants)
         hydrogen = storage.setting.get_value("searching_setting.general.hydrogen", True)
@@ -29,16 +29,16 @@ def aligning_two_structures(reactants=None,at1=None,at2=None):
 
         react_l = react_l[0]
         # react_l is ({"struc_combi": [str(istruc_l), str(istruc_h)],
-        #                 "at_combi": [str(iat_l), str(iat_h)],
+        #                 "at_combi": [[str(iat_l), str(iat_h)]],
         #                 "HOAO": H,
         #                 "LUAO": L,
         #                 "gap": gap})
         if int(react_l["struc_combi"][0]) == 0 :
-            at1 = int(react_l["at_combi"][0])
-            at2 = int(react_l["at_combi"][1])
+            at1 = int(react_l["at_combi"][0][0])
+            at2 = int(react_l["at_combi"][0][1])
         else:
-            at1 = int(react_l["at_combi"][1])
-            at2 = int(react_l["at_combi"][0])
+            at1 = int(react_l["at_combi"][0][1])
+            at2 = int(react_l["at_combi"][0][0])
     else:
         print(f"pre-assigned reactive atom pair is: struc 0 : {at1}, struc 1: {at2}")
 
