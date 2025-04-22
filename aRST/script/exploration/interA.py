@@ -13,7 +13,7 @@ from aRST.script.callsys import CallxTB
 from aRST.script.do_scan import build_push_l
 from aRST.script.do_scan import get_endxyz_from_mb
 import aRST.script.initialization as storage
-from aRST.script.head import print_simulation
+from aRST.script.head import print_simulation,print_react_l
 
 
 def get_interA_react_l(reactants0):
@@ -35,9 +35,13 @@ def get_interA_react_l(reactants0):
     for item in react_l:
         pairs = item["at_combi"][:cut]
         item["at_combi"] = pairs
-    print()
-    print(f"tot. atom pairs in {reactants0}: {len(react_l)}")
-    print()
+    # print top 20 react_l
+    print_react_l(reactants0,react_l,rtype="interA")
+    # write full react_l in file
+    if storage.setting.get_value("searching_setting.general.general", 1)==1:
+        with open(join(storage.setting.wd0, "react_l"), "w") as f:
+            for item in react_l:
+                f.write(json.dumps(item)+"\n")
     return react_l
 
 
@@ -114,7 +118,7 @@ def interxtbscan(reactants0, entry, reactionpath, count=0):
             allbonds = SDP([struc1, struc2],
                            storage.setting.get_value("searching_setting.general.hydrogen", True),
                            storage.setting.get_value("searching_setting.general.halogen", True),
-                           )
+                           ).allbonds
             allbonds = sorted(allbonds, key=lambda x: x["mbo"])
             item = allbonds[0]
             if item["mbo"] <= 0.9:

@@ -166,3 +166,28 @@ def print_jobhead(jobhead):
     string = "****"
     stringout = string + " " + jobhead + " " + string
     print(stringout.center(80))
+
+
+def print_react_l(reactants,react_l,rtype="interA"):
+    totw = 80
+    border_width = 60
+    col1 = 25
+    col2 = 35
+    side_padding = (totw - border_width) // 2
+    side = " " * side_padding
+    print(side + "*" * border_width)
+    title = f"{rtype} Reactivity Assessment"
+    print(title.center(totw))
+    print()
+    print(side + f"Reactants: {reactants}")
+    print(side + f"tot.atom pairs: {len(react_l)}")
+    print(side + "-" * border_width)
+    print(side + f"{'atom pair':^{col1}} {'AFO gap':^{col2}}")
+    print(side + "-" * border_width)
+    for entry in react_l[:20]:
+        at_l = entry["at_combi"]
+        gap = entry["gap"]
+        strgap = f"{gap:.2f}" if isinstance(gap, float) else "np.inf"
+        print(side + f"{str(at_l).center(col1)}"
+                     f"{strgap.center(col2)}")
+    print(side + "*" * border_width)
