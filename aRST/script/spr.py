@@ -366,21 +366,24 @@ class SDP:
             struc = item["struc"]
             at1, at2 = item["at_combi"]
             mbo = item["mbo"]
-            for item2 in react_l:
-                if item2["struc"] == struc and abs(mbo - item2["mbo"]) < tol:
-                    if not any([at1 in _ for _ in item2["at_combi"]]) and not any(
-                            [at2 in _ for _ in item2["at_combi"]]):
-                        item2["at_combi"].append([at1, at2])
-                        break
-                else:
-                    react_l.append(item)
-                    react_l[-1]["at_combi"] = [[at1, at2]]
             if not react_l:
                 react_l.append(item)
-                react_l[-1]["at_combi"] = [[at1, at2]]
+                react_l[0]["at_combi"] = [[at1, at2]]
+            else:
+                # loop over react_l if degenerate dissociation pair
+                degenerate = False
+                for item2 in react_l:
+                    if int(item2["struc"]) == int(struc) and abs(mbo - item2["mbo"]) < tol:
+                        degenerate = True
+                        if not any([at1 in _ for _ in item2["at_combi"]]) and not any(
+                                [at2 in _ for _ in item2["at_combi"]]):
+                            item2["at_combi"].append([at1, at2])
+                            break
+                if not degenerate:
+                    react_l.append(item)
+                    react_l[-1]["at_combi"] = [[at1, at2]]
 
         if mode == 0:
-
             return sorted(react_l, key=lambda x: x["mbo"])
         else:
             # embo as bo
