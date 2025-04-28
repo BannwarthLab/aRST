@@ -1,12 +1,10 @@
-import random
-import string
 import sys
 from collections import Counter
 from os.path import join, exists
 
 import numpy as np
 
-from aRST.script.toolbox import read_afo_csv, FragmentAnalyzer
+from aRST.script.toolbox import read_afo_csv, FragmentAnalyzer, get_random_folder_name
 from aRST.script.exploration.prepare_afo import getAFO
 from aRST.script.callsys import CallORCA, CallMolBar
 from aRST.script.exploration.interA import *
@@ -28,7 +26,8 @@ class SingleCycleSearch:
         nel = storage.allstruc.get_value(f"{struc}.struc_info.general.nel")
         c = storage.allstruc.get_value(f"{struc}.struc_info.general.charge")
         if not all(v is not None for v in [coord, nel, c]):
-            print(f"Warning: {struc} doesn't have enough coord, nel, c, this struc will be neglet in the reaction searching")
+            print(
+                f"Warning: {struc} doesn't have enough coord, nel, c, this struc will be neglet in the reaction searching")
 
         afo = storage.allstruc.get_value(f"{struc}.struc_info.reactivity.afo")
         if afo is None:
@@ -50,7 +49,7 @@ class SingleCycleSearch:
                         # H+
                         afo.loc[0, :] = [0, -np.inf, -np.inf, -np.inf, -np.inf, 1]
 
-                    elif c==-1:
+                    elif c == -1:
                         # H-
                         afo.loc[0, :] = [0, np.inf, np.inf, np.inf, np.inf, 1]
                     else:
@@ -191,74 +190,103 @@ class SingleCycleSearch:
         # output_d[count] = [{reactants info},{endxyz info}]
         reactants = tmp_path_l[0]["reactants"]
         cut = 5 if storage.setting.get_value("searching_setting.general.mb_level") == "loose" else 7
-        reactants_mbl = [" | ".join(storage.allstruc.get_value(f"{i}.struc_info.general.mb").split(" | ")[:cut]) for i in reactants]
+        reactants_mbl = [" | ".join(storage.allstruc.get_value(f"{i}.struc_info.general.mb").split(" | ")[:cut]) for i
+                         in reactants]
         endxyz_info = tmp_path_l[1]
 
         # get constrained opt nfragment
         fragmentation = FragmentAnalyzer(endxyz_info["coord"], endxyz_info["bo"], endxyz_info["atomic_charge"])
         frag_data = fragmentation.fragment_data
         status = fragmentation.status
-        if not status:
+        if status != 0:
             raise ValueError(f"{key} fragmentation has error in endxyz, check!!!")
 
         # reset endxyz info
         endxyz_info_new = []
 
-        def treate_more_geoms_in_endxyz(frag_data):
-            # unconstrained opt for each fragment
+        def _trate_more_geoms_in_endxyz(frag_data):
+            # target: doing unconstrained opt + (short md) for each fragments
             for frag in frag_data:
                 coord = frag["coord"]
                 charge = frag["charge_int"]
                 nel = frag["nel"]
                 atcharge = frag["atcharge"]
-
-                random_name = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(5))
-                optwd = join(storage.setting.bufferwd, random_name, "xtb")
-                create_folder(optwd)
-                write_xyz(coord, "coord")
                 if coord.shape[0] > 1:
-                    uhf = 0 if nel % 2 == 0 else 1
-                    status = CallxTB(optwd, custom_settings={"charge": charge, "uhf": uhf}).opt()
-                    if status != 0:
-                        status = CallxTB(optwd, custom_settings={"charge": charge, "uhf": uhf}).sp()
-                    Esp_gfn = CallxTB(optwd).get_Esp_from_out()
-                    coord = read_coord(join(optwd, "xtbopt.xyz")) if exists(join(optwd, "xtbopt.xyz")) else coord
-                    bo = read_bo(join(optwd, "wbo"))
-                    constrain_l, ele_l = CallxTB(optwd).get_topo()
-                    atcharge = read_atcharge(join(optwd, "charges"))
-
-                    tested_fragemnation = FragmentAnalyzer(coord, bo, atcharge)
-                    tested_frag_data = tested_fragemnation.fragment_data
-                    if not tested_fragemnation.status:
-                        raise ValueError(f"fragmentation has error, check {optwd}")
-                    if len(tested_frag_data) > 1:
-                        treate_more_geoms_in_endxyz(tested_frag_data)
-                    elif len(tested_frag_data) == 1:
-                        endxyz_info_new.append({"coord": coord,
-                                                "atomic_charge": atcharge,
-                                                "charge": charge,
-                                                "nel": nel,
-                                                "Esp_gfn": Esp_gfn,
-                                                "strucwd": random_name,
-                                                "atomic_connection": (constrain_l, ele_l), })
+                    _handle_multi_at_geom(coord, charge, nel)
                 else:
-                    uhf = 0 if nel % 2 == 0 else 1
-                    status = CallxTB(optwd, custom_settings={"charge": charge, "uhf": uhf}).sp()
-                    Esp_gfn = CallxTB(optwd).get_Esp_from_out()
-                    endxyz_info_new.append({"coord": coord,
-                                            "atomic_charge": atcharge,
-                                            "charge": charge,
-                                            "nel": nel,
-                                            "Esp_gfn": Esp_gfn,
-                                            "strucwd": random_name,
-                                            "atomic_connection": ([], [str(coord.iloc[0, 0])])})
+                    _handle_single_at_geom(coord, charge, nel, atcharge)
 
-        treate_more_geoms_in_endxyz(frag_data)
+        def _handle_single_at_geom(coord, charge, nel, atcharge):
+            random_name = get_random_folder_name()
+            spwd = join(storage.setting.bufferwd, key, random_name, "xtb")
+            create_folder(spwd)
+            write_xyz(coord, "coord")
+            uhf = 0 if nel % 2 == 0 else 1
+
+            # doing xtb sp in random folder
+            xtbparse = CallxTB(spwd, custom_settings={"charge": charge, "uhf": uhf})
+            status = xtbparse.sp()
+            Esp_gfn = xtbparse.get_Esp_from_out()
+            endxyz_info_new.append({"coord": coord,
+                                    "atomic_charge": atcharge,
+                                    "charge": charge,
+                                    "nel": nel,
+                                    "Esp_gfn": Esp_gfn,
+                                    "strucwd": key+"/"+random_name,
+                                    "atomic_connection": ([], [str(coord.iloc[0, 0])])})
+
+        def _handle_multi_at_geom(coord, charge, nel):
+            # 1. fully relax
+            random_name = get_random_folder_name()
+            optwd = join(storage.setting.bufferwd, key, random_name, "xtb")
+            create_folder(optwd)
+            write_xyz(coord, "coord")
+            uhf = 0 if nel % 2 == 0 else 1
+
+            # doing xtb opt in random folder
+            xtbparse = CallxTB(optwd, custom_settings={"charge": charge, "uhf": uhf})
+            status = xtbparse.opt()
+            if status != 0:
+                status = xtbparse.sp()  # switch to sp
+            Esp_gfn = xtbparse.get_Esp_from_out()
+            # receive opt res
+            coord = read_coord(join(optwd, "xtbopt.xyz")) if exists(join(optwd, "xtbopt.xyz")) else coord
+            bo = read_bo(join(optwd, "wbo"))
+            constrain_l, ele_l = xtbparse.get_topo()
+            atcharge = read_atcharge(join(optwd, "charges"))
+            # now testing if more_geoms again
+            tested_fragemnation = FragmentAnalyzer(coord, bo, atcharge)
+            tested_frag_data = tested_fragemnation.fragment_data
+            if tested_fragemnation.status != 0:
+                raise ValueError(f"fragmentation has error, check {optwd}")
+            if len(tested_frag_data) > 1:
+                _trate_more_geoms_in_endxyz(tested_frag_data)
+            elif len(tested_frag_data) == 1:
+                # add geom directly
+                endxyz_info_new.append({"coord": coord,
+                                        "atomic_charge": atcharge,
+                                        "charge": charge,
+                                        "nel": nel,
+                                        "Esp_gfn": Esp_gfn,
+                                        "strucwd": key+"/"+random_name,
+                                        "atomic_connection": (constrain_l, ele_l)})
+
+        _trate_more_geoms_in_endxyz(frag_data)
+        # check up if number of nel; c; nat are correct
+        totc_2 = sum(np.round(frag["charge"]) for frag in endxyz_info_new)
+        totnel_2 = sum(int(frag["nel"]) for frag in endxyz_info_new)
+        totnat_2 = sum(int(frag["coord"].shape[0]) for frag in endxyz_info_new)
+        totc = endxyz_info["charge"]
+        totnel = endxyz_info["nel"]
+        totnat = endxyz_info["coord"].shape[0]
+        all_equal = (totc == totc_2) and (totnel == totnel_2) and (totnat == totnat_2)
+        if not all_equal:
+            raise ValueError(f"Fragmentation in supra molecule in path {key} failed, check!")
 
         # now evaluate if reaction simulation fall back to starting geom
         products_mbl = [CallMolBar(i["coord"]).get_mb() for i in endxyz_info_new]
         tmp_path_l.append(products_mbl)
-        products_mbl =[" | ".join(item.split(" | ")[:cut]) for item in products_mbl]
+        products_mbl = [" | ".join(item.split(" | ")[:cut]) for item in products_mbl]
         bond_changed = True  # default as true
         if not "unknow" in products_mbl and not "unknow" in reactants_mbl:
             if Counter(products_mbl) == Counter(reactants_mbl):
@@ -283,7 +311,7 @@ class SingleCycleSearch:
             nel = frag["nel"]
             caltyp = "SP OPT" if coord.shape[0] > 1 and dftopt else "SP"
             m_l = [1, 3] if nel % 2 == 0 else [2]
-            sp_dft, m_fin, coord_fin = np.inf, m_l[0], coord # initial setting in case DFT sp failed
+            sp_dft, m_fin, coord_fin = np.inf, m_l[0], coord  # initial setting in case DFT sp failed
             for m in m_l:
                 wd = create_folder(
                     join(storage.setting.bufferwd, frag['strucwd'], "orca", str(m)))
@@ -341,11 +369,12 @@ class SingleCycleSearch:
         simuhf = tmp_path_l[0]["simuhf"]
 
         cut = 5 if storage.setting.get_value("searching_setting.general.mb_level") == "loose" else 7
-        reactants_mbl = [" | ".join(storage.allstruc.get_value(f"{i}.struc_info.general.mb").split(" | ")[:cut]) for i in reactants]
+        reactants_mbl = [" | ".join(storage.allstruc.get_value(f"{i}.struc_info.general.mb").split(" | ")[:cut]) for i
+                         in reactants]
         unreact_mbl = [" | ".join(storage.allstruc.get_value(f"{i}.struc_info.general.mb").split(" | ")[:cut]) for i
-                         in unreactants]
+                       in unreactants]
         products_mbl = tmp_path_l[2]
-        products_mbl =[" | ".join(item.split(" | ")[:cut]) for item in products_mbl]
+        products_mbl = [" | ".join(item.split(" | ")[:cut]) for item in products_mbl]
 
         info_temp = {"reactants": reactants,
                      "unreacted": unreactants,
@@ -398,9 +427,9 @@ class SingleCycleSearch:
                 info_temp["products"] = products  #
                 # Erxn too large, add new node without determining products mb
 
-                rxnid=rxnnetwork.add_newnode(info=info_temp)
+                rxnid = rxnnetwork.add_newnode(info=info_temp)
                 print_simulation_details(status=4, key=key, atl=atl,
-                                         sim_uhf=simuhf, otherkey=rxnid,E_sp=E_rxn_kcal)
+                                         sim_uhf=simuhf, otherkey=rxnid, E_sp=E_rxn_kcal)
 
             else:
                 info_temp["therdy_allow"] = True
@@ -410,14 +439,15 @@ class SingleCycleSearch:
                     # compare mb
                     rxnexist = False
                     products_ref = None
-                    for node in [_ for _ in rxnnetwork.graph.nodes if int(rxnnetwork.get_reaction_info(_)["layer"])!=0]:
+                    for node in [_ for _ in rxnnetwork.graph.nodes if
+                                 int(rxnnetwork.get_reaction_info(_)["layer"]) != 0]:
 
                         info = rxnnetwork.get_reaction_info(node)
 
                         reactants_ref = info["reactants"]
                         products_ref = info["products"]
                         if "unknow" in products_ref:
-                            continue # that is products of Erxn > Elim
+                            continue  # that is products of Erxn > Elim
                         unreact_ref = info["unreacted"]
                         ref_rmbl = [
                             " | ".join(storage.allstruc.get_value(f"{i}.struc_info.general.mb").split(" | ")[:cut]) for
@@ -555,7 +585,7 @@ def ReactionSearch(step=0):
             nodes = rxnnetwork.get_allowed_layer_nodes(layer=step)
             nodes_scanwd = [rxnnetwork.get_reaction_info(_)["scanwd"] for _ in nodes]
             print("node = ", nodes_scanwd)
-            for node,nodewd in zip(nodes,nodes_scanwd):
+            for node, nodewd in zip(nodes, nodes_scanwd):
                 print("starting exploring node ", nodewd)
                 rxninfo = rxnnetwork.get_reaction_info(node)
                 reactants_l = rxninfo["products"] + rxninfo["unreacted"]
@@ -576,6 +606,7 @@ def ReactionSearch(step=0):
                 print_simulation_details(status=5)
             step += 1
     # clean up buffer_struc
-    if exists(storage.setting.bufferwd):
+    if exists(storage.setting.bufferwd) and not (
+    storage.setting.get_value("searching_setting.general.keepbuffstruc", False)):
         import shutil
-        shutil.rmtree(storage.setting.bufferwd,ignore_errors=True)
+        shutil.rmtree(storage.setting.bufferwd, ignore_errors=True)
