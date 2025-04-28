@@ -13,7 +13,7 @@ from aRST.script.callsys import CallxTB
 from aRST.script.do_scan import build_push_l
 from aRST.script.do_scan import get_endxyz_from_mb
 import aRST.script.initialization as storage
-from aRST.script.head import print_simulation,print_react_l
+from aRST.script.head import print_simulation, print_react_l
 
 
 def get_interA_react_l(reactants0):
@@ -36,12 +36,12 @@ def get_interA_react_l(reactants0):
         pairs = item["at_combi"][:cut]
         item["at_combi"] = pairs
     # print top 20 react_l
-    print_react_l(reactants0,react_l,rtype="interA")
+    print_react_l(reactants0, react_l, rtype="interA")
     # write full react_l in file
-    if storage.setting.get_value("searching_setting.general.general", 1)==1:
+    if storage.setting.get_value("searching_setting.general.general", 1) == 1:
         with open(join(storage.setting.wd0, "react_l"), "w") as f:
             for item in react_l:
-                f.write(json.dumps(item)+"\n")
+                f.write(json.dumps(item) + "\n")
     return react_l
 
 
@@ -152,11 +152,17 @@ def interxtbscan(reactants0, entry, reactionpath, count=0):
                     bo = read_bo(join(optwd, "wbo"))
                     constrain_l, ele_l = CallxTB(optwd).get_topo()
                     atcharge = read_atcharge(join(optwd, "charges"))
+            # md optional
+            if storage.setting.get_value("searching_setting.general.md", True):
+                mdwd = join(scan_wd, "md")
+                bo, constrain_l, ele_l, atcharge, endxyz = _short_md_for_product_struc_guess(mdwd, endxyz, push_l,
+                                                                                             charge, u)
+
             unreacted = [st for st in reactants0 if st != struc1 and st != struc2]
             unreacted = sorted(unreacted, key=int, reverse=True)
             output_d[f"{reactionpath}_{count}"] = [{"reactants": [struc1, struc2],
                                                     "unreacted": unreacted,
-                                                    "at_l": at_l,"simuhf":u},  # reactants info
+                                                    "at_l": at_l, "simuhf": u},  # reactants info
                                                    {"atomic_charge": atcharge,
                                                     "charge": charge,
                                                     "nel": totnel,
@@ -240,6 +246,10 @@ def intermbff(reactants0, entry, reactionpath, count=0):
                     bo = read_bo(join(optwd, "wbo"))
                     constrain_l, ele_l = CallxTB(optwd).get_topo()
                     atcharge = read_atcharge(join(optwd, "charges"))
+            if storage.setting.get_value("searching_setting.general.md", True):
+                mdwd = join(scan_wd, "md")
+                bo, constrain_l, ele_l, atcharge, endxyz = _short_md_for_product_struc_guess(mdwd, endxyz, push_l,
+                                                                                             charge, u)
 
             unreacted = [st for st in reactants0 if st != struc1 and st != struc2]
             unreacted = sorted(unreacted, key=int, reverse=True)
@@ -265,3 +275,35 @@ def intermbff(reactants0, entry, reactionpath, count=0):
                              )
         count += 1
     return output_d, count
+
+
+def _short_md_for_product_struc_guess(mdwd, coord, constrained_bonds, charge, uhf):
+    create_folder(mdwd)
+    write_xyz(coord, "coord")
+    if storage.setting.get_value("searching_setting.md.temp") is not None:
+        mdtemp = storage.setting.get_value("searching_setting.md.temp")
+    else:
+        mdtemp = storage.setting.get_value("xtb_setting.scan_etemp")
+    xtbmdparse = CallxTB(mdwd, custom_settings={"charge": charge, "uhf": uhf,
+                                                "mdetemp": mdtemp,
+                                                "mdtime":storage.setting.get_value("searching_setting.md.time",10),
+                                                "mdstep": storage.setting.get_value("searching_setting.md.step", 1),
+                                                "mdshake": storage.setting.get_value("searching_setting.md.shake", 1),
+                                                "mddump": storage.setting.get_value("searching_setting.md.dump", 50),
+                                                "etemp":storage.setting.get_value("xtb_setting.scan_etemp") # sp after md
+                                                })
+    status = xtbmdparse.short_md(constrained_bonds=constrained_bonds)
+    if status != 0:
+        raise ValueError(f"md has error, check {mdwd}")
+    # get energy min struc in the md simulation
+    # coord can't be single at in this case
+    coord, emd = xtbmdparse.get_Emin_geom_from_mdtrj(nat=coord.shape[0])
+    write_xyz(coord, "emincoord")
+    # doing a sp in the same folder for sp information
+    status = xtbmdparse.sp()
+    if status != 0:
+        raise ValueError(f"sp after md has error, check {mdwd}")
+    bo = read_bo(join(mdwd, "wbo"))
+    constrain_l, ele_l = xtbmdparse.get_topo()
+    atcharge = read_atcharge(join(mdwd, "charges"))
+    return bo, constrain_l, ele_l, atcharge, coord
