@@ -109,8 +109,9 @@ def get_strucinfo_from_path(strucid_path):
         raise ValueError(f"{strucid_path} strucinfo doesn't exist!")
 
     xtb = CallxTB(join(strucid_path, "xtb"))
-    nel = xtb.get_nel_from_out()
     charge = xtb.get_charge_from_out()
+    ele_l = coord.iloc[:, 0].tolist()
+    nel = int(sum([element[_] for _ in ele_l])) - charge
     atcharge = read_atcharge(join(strucid_path, "charges"))
     Esp_gfn = xtb.get_Esp_from_out()
     Etrv_gfn = CallxTB(join(strucid_path, "xtb", "trv")).get_Etrv()
@@ -141,6 +142,13 @@ def create_folder(wd):
     return wd
 
 
+def get_random_folder_name():
+    import random
+    import string
+    random_name = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(5))
+    return random_name
+
+
 def write_xyz(xyz, name):
     pwd = os.getcwd()
     # xyz.round(10)
@@ -161,7 +169,7 @@ class FragmentAnalyzer:
         self.Snat = coord.shape[0]
         self.Sbo = bo
         self.Satcharge = atcharge
-        self.Scharge = int(atcharge.sum().iloc[0])
+        self.Scharge = np.round(atcharge.iloc[:, 0].sum())
         self.Scoord = coord
         self.Sele_l = coord.iloc[:, 0].tolist()
         self.Snel = int(sum([element[_] for _ in self.Sele_l])) - self.Scharge
@@ -179,9 +187,9 @@ class FragmentAnalyzer:
 
         # check if nel doesn't change
         if not self.check_nel():
-            self.status = False
+            self.status = 1
         else:
-            self.status = True
+            self.status = 0
 
     def build_cn_matrix(self):
         self.Mcn = np.zeros((self.Snat, self.Snat), dtype=int)
@@ -244,6 +252,7 @@ class FragmentAnalyzer:
         int_charges = np.round(charge_l_flo).astype(int)  # Round to the nearest integer
         charge_difference = self.Scharge - np.sum(int_charges)  # Compute discrepancy
 
+
         if charge_difference != 0:
             residuals = np.array(charge_l_flo) - int_charges  # Find decimal parts
             adjustment_indices = np.argsort(-residuals)  # Sort by highest decimal part
@@ -252,6 +261,7 @@ class FragmentAnalyzer:
                 idx = adjustment_indices[i]
                 int_charges[idx] += np.sign(charge_difference)  # Adjust by +1 or -1
         return list(int_charges)
+
 
 #
 def convert_for_json(d, exclude_keys=None):
@@ -276,6 +286,8 @@ def convert_for_json(d, exclude_keys=None):
 
 
 import json
+
+
 class CompactJSONEncoder(json.JSONEncoder):
     def iterencode(self, obj, _one_shot=False):
         """Override default encoding to keep lists compact."""
@@ -291,8 +303,8 @@ def write_rxnout():
     data = {
         "nodes": [
             {
-             "node": node,
-             "info": rxnnetwork.get_reaction_info(node)}
+                "node": node,
+                "info": rxnnetwork.get_reaction_info(node)}
             for node in rxnnetwork.graph.nodes
         ],
         "edges": list(rxnnetwork.graph.edges)
