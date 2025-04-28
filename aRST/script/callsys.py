@@ -148,7 +148,7 @@ class CallxTB:
                 "uhf": 0,
                 "alpb": setting.get_value("xtb_setting.alpb", "h2o"),
                 "etemp": setting.get_value("xtb_setting.struc_etemp", "4000"),
-                "xtbwd":setting.get_value("xtb_setting.xtb_wd")
+                "xtbwd": setting.get_value("xtb_setting.xtb_wd")
                 }
 
     def __init__(self, wd, command_d=None, custom_settings=None):
@@ -338,24 +338,92 @@ class CallxTB:
         rc = self.xtbsubprocess(cmd_string, True)
         return rc
 
+    def short_md(self, constrained_bonds=False):
+        # constrained_bonds = push_l in the scanning
+        with open(f'{self.wd}/md.inp', 'w') as f:
+            if constrained_bonds:
+                f.write("$constrain\n")
+                for item in constrained_bonds:
+                    at1 = int(item[0])
+                    at2 = int(item[1])
+                    d = item[3]
+                    f.write(f"distance: {at1}, {at2}, {d:.2f}\n")
+
+            f.write("$md\n"
+                    f"time={self.cmd.get_value('mdtime', 10)}\n"  # simulation 10 ps 
+                    f"step={self.cmd.get_value('mdstep', 1)}\n"  # every 1 fs for propagation
+                    f"temp={self.cmd.get_value('mdetemp', 1000)}\n"  # use set relaxed etemp
+                    f"shake={self.cmd.get_value('mdshake', 1)}\n"  # not constring bonds
+                    f"dump={self.cmd.get_value('mddump', 50)}"  # save geom every 50 fs
+                    )
+            # xtb coord.xyz --input md.inp --md
+        cmd_string = f"xtb {self.cmd.get_value('coordfn')}.xyz --input md.inp --md "
+        cmd_string += f"-c {self.cmd.get_value('charge')} " \
+            if self.cmd.get_value('charge') else ""
+        cmd_string += f"--uhf {self.cmd.get_value('uhf')} " \
+            if self.cmd.get_value('uhf') else ""
+        cmd_string += f"--alpb {self.cmd.get_value('alpb')} " \
+            if self.cmd.get_value('alpb') else ""
+        p = subprocess.Popen(cmd_string, stdout=open(f'{self.wd}/xtbmd.out', 'w'), stderr=subprocess.PIPE, shell=True)
+        p.wait()
+        rc = p.returncode
+        return rc
+
+    def get_Emin_geom_from_mdtrj(self, nat):
+        import numpy as np
+
+        # cut geomblock in md.trj
+        coord_l = []
+        energies = []
+        trjwd = f'{self.wd}/xtb.trj'
+
+        def parse_xtb_trj(trjwd, nat):
+            with open(trjwd, 'r') as f:
+                while True:
+                    # Read frame header
+                    line = f.readline()
+                    if not line:  # End of file
+                        break
+                    num_atoms = int(line.strip())
+                    assert num_atoms == nat, f"Unexpected number of atoms: {num_atoms} (expected {nat})"
+
+                    # Read comment line (contains energy)
+                    comment_line = f.readline().strip()
+                    energy = float(comment_line.split()[1])  # Assumes format: "energy: <value> ..."
+
+                    # Read atomic coordinates
+                    data = []
+                    for _ in range(num_atoms):
+                        parts = f.readline().split()
+                        data.append([parts[0], float(parts[1]), float(parts[2]), float(parts[3])])
+
+                    coord = pd.DataFrame(data)
+                    coord_l.append(coord)
+                    energies.append(energy)
+            return coord_l, energies
+
+        def filter_outliers(coord_l, energies, z_threshold=2.5):
+            from scipy.stats import zscore
+            z_scores = np.abs(zscore(energies))
+            non_outliers = np.where(z_scores < z_threshold)[0]
+
+            clean_coord_l = [coord_l[i] for i in non_outliers]
+            clean_energies = [energies[i] for i in non_outliers]
+
+            return clean_coord_l, clean_energies
+
+        frames, energies = parse_xtb_trj(trjwd, nat)
+        clean_coord_l, clean_energies = filter_outliers(coord_l, energies)
+        lowest_idx = np.argmin(clean_energies)
+        coord_emin = clean_coord_l[lowest_idx]
+        emin = clean_energies[lowest_idx]
+        return coord_emin, emin
+
     def get_moldeninput(self):
         cmd = self.generate_cmd_string()
         cmd += "--molden "
         rc = self.xtbsubprocess(cmd)
         return rc
-
-
-    def get_nel_from_out(self, out="xtb.out"):
-        nel = None
-        if exists(join(self.wd, out)):
-            with open(join(self.wd, out), 'r') as file:
-                lines = file.readlines()
-
-            for ln in lines:
-                if "# electrons" in ln:
-                    nel = int(ln.split()[-2])
-                    break
-        return nel
 
     def get_charge_from_out(self, out="xtb.out"):
         c = None
@@ -402,7 +470,6 @@ class CallxTB:
                 Esolv = float(file.readlines()[0])
         return Esolv
 
-
     def get_topo(self, out="xtbtopo.mol"):
         # constrain_l, ele required in mb; at index starts with 1
         constrain_l, ele = None, None
@@ -437,6 +504,7 @@ class CallxTB:
 
 class CallTerachem:
     _instance = None
+
     def __new__(cls, wd, Setting=None):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
@@ -539,4 +607,3 @@ class CallMolBar:
         ele_l = [self.coord.loc[i, 0] for i in self.coord.index]
         mb = get_molbar_from_coordinates(coord_l, ele_l)
         return mb
-
