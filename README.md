@@ -119,7 +119,15 @@ sep_mode = 0                        # 0(default): directly separate fragments fr
                                     # 1: do unconstrain opt to scan-complex and seperate fragments                   
                                                        
 mb_level =                          # None or "loose" to only screen with topology spectrum
+md = True                           # bool, if doing short md to test the stability of product structure
 
+[searching_setting.md]
+### if md=True, you will need: ###
+time=10                             # int, total run time of MD simulation
+step=1                              # int, time step for propagation
+temp=300                            # int, electronic temp, by defalut using scan temp
+shake=1                             # 0/1/2, 0: not using shake algorithm; 1: constrain H bonds; 2: constrain all bonds
+dump=50                             # int, interval for trajectory printout
 
 [searching_setting.reactivity]
 afo_method ="gfn2"/"stda"            # str, method for afo feature calculations
