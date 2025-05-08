@@ -252,7 +252,6 @@ class FragmentAnalyzer:
         int_charges = np.round(charge_l_flo).astype(int)  # Round to the nearest integer
         charge_difference = self.Scharge - np.sum(int_charges)  # Compute discrepancy
 
-
         if charge_difference != 0:
             residuals = np.array(charge_l_flo) - int_charges  # Find decimal parts
             adjustment_indices = np.argsort(-residuals)  # Sort by highest decimal part
@@ -264,6 +263,76 @@ class FragmentAnalyzer:
 
 
 #
+class GraphAnalyzer:
+
+    def __init__(self, coord, bo=None):
+
+        self.nat = coord.shape[0]
+        self.atoms = []
+        self.coordinates = []
+        for i in range(self.nat):
+            self.atoms.append(coord.iloc[i, 0])
+            self.coordinates.append(np.array(coord.iloc[i, 1:4]))
+        self.wbo = bo
+
+        # get topo matrix
+        self.build_cn_matrix()
+        # build up graph
+        self.define_edge()
+        self.degree = [deg for node, deg in self.Graph.degree()]
+
+    def build_cn_matrix(self):
+        self.Mcn = np.zeros((self.nat, self.nat), dtype=int)
+        if self.wbo is not None:
+            # build up cn matrix base on wbo file
+            for i in range(self.wbo.shape[0]):
+                at1, at2 = self.wbo.iloc[i, :2]
+                at1 = int(at1) - 1
+                at2 = int(at2) - 1
+                self.Mcn[at1, at2] = self.Mcn[at2, at1] = 1
+        else:
+            from aRST.script.element import r0
+            # build up cn matrix base on xyz itself
+            for i in range(self.nat):
+                for j in range(i + 1, self.nat):
+                    dist = np.linalg.norm(self.coordinates[i] - self.coordinates[j])
+                    threshold = r0[self.atoms[i]] + r0[self.atoms[j]]
+                    if dist <= threshold * 1.1:
+                        self.Mcn[i, j] = self.Mcn[j, i] = 1
+
+    def define_edge(self):
+        self.Graph = nx.Graph()
+        for i in range(self.nat):
+            for j in range(i):
+                if self.Mcn[i, j]:
+                    bond_length = np.linalg.norm(self.coordinates[i] - self.coordinates[j])
+                    self.Graph.add_edge(i, j, weight=bond_length)
+
+        G_sorted = nx.Graph()
+        for node in sorted(self.Graph.nodes):
+            G_sorted.add_node(node)
+        for u, v, data in self.Graph.edges(data=True):
+            G_sorted.add_edge(min(u, v), max(u, v), weight=data["weight"] if "weight" in data.keys() else 1)
+        self.Graph = G_sorted
+
+    def get_t2t_path(self, tarat1: int, tarat2: int):
+        from itertools import islice
+        # make sure tarat1 >= tarat2
+        if tarat1 < tarat2:
+            tarat1, tarat2 = tarat2, tarat1
+        paths = nx.shortest_simple_paths(self.Graph, source=tarat1, target=tarat2, weight='weight')
+        shortest_two = list(islice(paths, 2))
+
+        if len(shortest_two) == 1:
+            d = 2  # default as 2x covalent radii
+            bond_length = self.Graph[tarat1][tarat2]['weight']
+            return d * bond_length
+        else:
+            # Straighten the ring.
+            length = sum(self.Graph[u][v]['weight'] for u, v in zip(shortest_two[1][:-1], shortest_two[1][1:]))*0.5
+            return length
+
+
 def convert_for_json(d, exclude_keys=None):
     """
     Recursively convert a deep nested dict to be JSON serializable.
