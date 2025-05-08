@@ -137,6 +137,114 @@ class CallORCA:
         return m
 
 
+class CallCrest:
+    @classmethod
+    def default_settings(cls, setting):
+        """Dynamically generates default settings based on the `setting` class."""
+        return {"method": setting.get_value("xtb_setting.method", "gfn2"),
+                "coordfn": "coord",
+                "optlevel": setting.get_value("xtb_setting.optlevel", ""),
+                "charge": 0,
+                "uhf": 0,
+                "alpb": setting.get_value("xtb_setting.alpb", "h2o"),
+                "etemp": setting.get_value("xtb_setting.struc_etemp", "4000"),
+                }
+
+    def __init__(self, wd, command_d=None, custom_settings=None):
+        self.wd = wd
+        if command_d is not None:
+            self.cmd = mydict(command_d)
+        else:
+            import aRST.script.initialization as storage
+            command_d = self.default_settings(storage.setting)
+            if custom_settings is not None:
+                command_d.update(custom_settings)
+
+            self.cmd = mydict(command_d)
+
+    def crestsubprocess(self, cmd_string):
+        with open(f'{self.wd}/crest.out', 'w') as stdout_file, open(f'{self.wd}/crest_err.out', 'w') as stderr_file:
+            p = subprocess.Popen(cmd_string, stdout=stdout_file, stderr=stderr_file, shell=True)
+            p.wait()
+            rc = p.returncode
+        return rc
+
+    def generate_cmd_string(self):
+        cmd_string = "crest "
+        coordfn = self.cmd.get_value("coordfn")
+        if coordfn is None:
+            raise Exception(f"coord in {self.wd} can't find right coordfn name")
+        cmd_string += f"{coordfn}.xyz "
+
+        cmd_string += f"--{self.cmd.get_value('method')} " \
+            if self.cmd.get_value('method') else ""
+        cmd_string += f"-c {self.cmd.get_value('charge')} " \
+            if self.cmd.get_value('charge') else ""
+        cmd_string += f"--uhf {self.cmd.get_value('uhf')} " \
+            if self.cmd.get_value('uhf') else ""
+        cmd_string += f"--etemp {self.cmd.get_value('etemp')} " \
+            if self.cmd.get_value('etemp') else ""
+        cmd_string += f"--alpb {self.cmd.get_value('alpb')} " \
+            if self.cmd.get_value('alpb') else ""
+        cmd_string += f"{self.cmd.get_value('extracmd')} " \
+            if self.cmd.get_value('extracmd') else ""
+        return cmd_string
+
+    def depotonation(self):
+        cmd_string = self.generate_cmd_string()
+        cmd_string += " --deprotonate "
+        rc = self.crestsubprocess(cmd_string)
+        return rc
+
+    def read_depotonated_coord(self):
+        outwd = f'{self.wd}/crest.out'
+        with open(outwd, "r") as file:
+            lines = file.readlines()
+        trigger = False
+        startline, end = 0, 0
+        for line in lines:
+            if "structure    ΔE(kcal/mol)   Etot(Eh)" in line:
+                startline = lines.index(line)
+                trigger = True
+            if trigger and "Wall Time Summary" in line:
+                end = lines.index(line) - 3
+                trigger = False
+                break
+        deltaE_l = []
+        for line in lines[startline+1:end]:
+            nstruc,deltaE,Etot = line.split()
+            deltaE_l.append(float(deltaE))
+        if min(deltaE_l)>0:
+            coord = None
+        else:
+            nstruc = deltaE_l.index(min(deltaE_l))
+            ensemblewd = f'{self.wd}/deprotonated.xyz'
+            coord_l = []
+            with open(ensemblewd, 'r') as f:
+
+                while True:
+                    # Read frame header
+                    line = f.readline()
+                    if not line:  # End of file
+                        break
+                    num_atoms = int(line.strip())
+                    # Read comment line (contains energy)
+                    comment_line = f.readline().strip()
+
+                    # Read atomic coordinates
+                    data = []
+                    for _ in range(num_atoms):
+                        parts = f.readline().split()
+                        data.append([parts[0], float(parts[1]), float(parts[2]), float(parts[3])])
+
+                    coord = pd.DataFrame(data)
+                    coord_l.append(coord)
+            coord = coord_l[nstruc]
+        return coord
+
+
+
+
 class CallxTB:
     @classmethod
     def default_settings(cls, setting):
@@ -177,7 +285,7 @@ class CallxTB:
                             f2.write(str(re.findall(r'\-?\d+\.?\d*', line)[0]))
         return rc
 
-    def generate_cmd_string(self, opt=False, xtbmlversion=False):
+    def generate_cmd_string(self, opt=False, xtbmlversion=False,bar1M=False):
         if xtbmlversion:
             cmd_string = self.cmd.get_value("xtbwd") + " "
         else:
@@ -200,6 +308,8 @@ class CallxTB:
             if self.cmd.get_value('etemp') else ""
         cmd_string += f"--alpb {self.cmd.get_value('alpb')} " \
             if self.cmd.get_value('alpb') else ""
+        if bar1M and self.cmd.get_value('alpb'):
+            cmd_string += "bar1M "
         cmd_string += f"{self.cmd.get_value('extracmd')} " \
             if self.cmd.get_value('extracmd') else ""
         return cmd_string
@@ -248,7 +358,7 @@ class CallxTB:
         return rc2
 
     def solv(self):
-        cmd2 = self.generate_cmd_string()
+        cmd2 = self.generate_cmd_string(bar1M=True)
         p2 = subprocess.Popen(cmd2, stdout=open(f'{self.wd}/solv.out', 'w'), stderr=subprocess.PIPE, shell=True)
         p2.wait()
         with open(f'solv.out', 'r') as f:
@@ -258,8 +368,10 @@ class CallxTB:
                     esolv = float(re.findall(r'\-?\d+\.?\d*', line)[0])
         rc2 = p2.returncode
 
+        oldvalue = self.cmd.get_value("alpb")
         self.cmd.set_value("alpb", False)
         cmd1 = self.generate_cmd_string()
+        self.cmd.set_value("alpb", oldvalue)
 
         p1 = subprocess.Popen(cmd1, stdout=open(f'{self.wd}/gas.out', 'w'), stderr=subprocess.PIPE, shell=True)
         p1.wait()
@@ -308,7 +420,7 @@ class CallxTB:
     def constrained_opt(self, newbond):
         with open(f'{self.wd}/scan.inp', 'w') as f:
             f.write(f'$constrain\n'
-                    f'force constant={self.cmd.get_value("k")}\n')
+                    f'force constant={self.cmd.get_value("k","1")}\n')
             for item in newbond:
                 at1, at2 = item["atoms"]
                 value = item["value"]
