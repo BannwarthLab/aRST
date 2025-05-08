@@ -16,7 +16,7 @@ import aRST.script.initialization as storage
 from aRST.script.head import print_simulation, print_react_l
 
 
-def get_interA_react_l(reactants0):
+def get_interA_react_l(reactants0,printall=True):
     if storage.setting.get_value("searching_setting.inter.at1") is not None:
         # predifined reaction, used in one cycle
         at1 = storage.setting.get_value("searching_setting.inter.at1")
@@ -36,12 +36,13 @@ def get_interA_react_l(reactants0):
         pairs = item["at_combi"][:cut]
         item["at_combi"] = pairs
     # print top 20 react_l
-    print_react_l(reactants0, react_l, rtype="interA")
-    # write full react_l in file
-    if storage.setting.get_value("searching_setting.general.general", 1) == 1:
-        with open(join(storage.setting.wd0, "react_l"), "w") as f:
-            for item in react_l:
-                f.write(json.dumps(item) + "\n")
+    if printall:
+        print_react_l(reactants0, react_l, rtype="interA")
+        # write full react_l in file
+        if storage.setting.get_value("searching_setting.general.general", 1) == 1:
+            with open(join(storage.setting.wd0, "react_l"), "w") as f:
+                for item in react_l:
+                    f.write(json.dumps(item) + "\n")
     return react_l
 
 
@@ -153,12 +154,14 @@ def interxtbscan(reactants0, entry, reactionpath, count=0):
                     constrain_l, ele_l = CallxTB(optwd).get_topo()
                     atcharge = read_atcharge(join(optwd, "charges"))
             # md optional
-            if storage.setting.get_value("searching_setting.general.md", True):
+            if storage.setting.get_value("searching_setting.general.md", False):
                 mdwd = join(scan_wd, "md")
                 bo, constrain_l, ele_l, atcharge, endxyz = _short_md_for_product_struc_guess(mdwd, endxyz, push_l,
                                                                                              charge, u)
 
-            unreacted = [st for st in reactants0 if st != struc1 and st != struc2]
+            unreacted = reactants0.copy()
+            unreacted.remove(struc1)
+            unreacted.remove(struc2)
             unreacted = sorted(unreacted, key=int, reverse=True)
             output_d[f"{reactionpath}_{count}"] = [{"reactants": [struc1, struc2],
                                                     "unreacted": unreacted,
@@ -246,13 +249,14 @@ def intermbff(reactants0, entry, reactionpath, count=0):
                     bo = read_bo(join(optwd, "wbo"))
                     constrain_l, ele_l = CallxTB(optwd).get_topo()
                     atcharge = read_atcharge(join(optwd, "charges"))
-            if storage.setting.get_value("searching_setting.general.md", True):
+            if storage.setting.get_value("searching_setting.general.md", False):
                 mdwd = join(scan_wd, "md")
                 bo, constrain_l, ele_l, atcharge, endxyz = _short_md_for_product_struc_guess(mdwd, endxyz, push_l,
                                                                                              charge, u)
 
-            unreacted = [st for st in reactants0 if st != struc1 and st != struc2]
-            unreacted = sorted(unreacted, key=int, reverse=True)
+            unreacted = reactants0.copy()
+            unreacted.remove(struc1)
+            unreacted.remove(struc2)
             output_d[f"{reactionpath}_{count}"] = [{"reactants": [struc1, struc2],
                                                     "unreacted": unreacted,
                                                     "at_l": at_l,
