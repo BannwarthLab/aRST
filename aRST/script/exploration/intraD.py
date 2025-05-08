@@ -4,7 +4,7 @@ import shutil
 import json
 import numpy as np
 import pandas as pd
-from aRST.script.toolbox import create_folder, write_xyz,read_coord,read_bo,read_atcharge
+from aRST.script.toolbox import create_folder, write_xyz, read_coord, read_bo, read_atcharge
 from aRST.script.spr import SDP
 from aRST.script.geom import Coord
 from aRST.script.callsys import CallxTB
@@ -42,6 +42,46 @@ def check_scan_uhf_D(entry):
         return [1]
 
 
+def determine_pulling_distance(entry):
+    d = storage.setting.get_value("searching_setting.disso.pulling_distance", "auto")
+    struc = entry["struc"]
+    coord = storage.allstruc.get_value(f"{struc}.struc_info.general.coord")
+    at_l = entry["at_combi"]
+
+    push_l = []
+    if d == "auto":
+        if len(at_l) > 1:
+            for pair in at_l[:2]:
+                # storage.setting.get_value("searching_setting.disso.pulling_distance", 2) default as 2x covalent radii
+                at1, at2 = pair
+                d12 = np.round(Coord(coord).get_ats_distance(int(at1), int(at2)), 2)
+                dend = 2 * d12
+                # push_l requires atom index starting with 1
+                at1 = int(at1) + 1
+                at2 = int(at2) + 1
+                push_l.append([at1, at2, d12, dend])
+
+        else:
+            from aRST.script.toolbox import GraphAnalyzer
+            bo = storage.allstruc.get_value(f"{struc}.struc_info.reactivity.bo")
+            at1, at2 = at_l[0]
+            d12 = np.round(Coord(coord).get_ats_distance(int(at1), int(at2)), 2)
+            # exam topo structure of reactant
+            dend = GraphAnalyzer(coord, bo).get_t2t_path(int(at1), int(at2))
+            at1 = int(at1) + 1
+            at2 = int(at2) + 1
+            push_l.append([at1, at2, d12, dend])
+    else:
+        for pair in at_l[:2]:
+            at1, at2 = pair
+            d12 = np.round(Coord(coord).get_ats_distance(int(at1), int(at2)), 2)
+            dend = d * d12
+            at1 = int(at1) + 1
+            at2 = int(at2) + 1
+            push_l.append([at1, at2, d12, dend])
+    return push_l
+
+
 def dissoxtbscan(reactants0, entry, reactionpath, count=0):
     output_d = {}
     uhf_l = check_scan_uhf_D(entry)
@@ -60,13 +100,7 @@ def dissoxtbscan(reactants0, entry, reactionpath, count=0):
         m = storage.allstruc.get_value(f"{struc}.struc_info.general.multiplicity")
 
         # preparing scan inp
-        d = storage.setting.get_value("searching_setting.disso.pulling_distance", 2)
-        push_l = []
-        for pair in at_l[:2]:
-            at1, at2 = pair
-            d12 = np.round(Coord(coord).get_ats_distance(int(at1), int(at2)), 2)
-            dend = d * d12
-            push_l.append([at1, at2, d12, dend])
+        push_l = determine_pulling_distance(entry)
         constrain_setting = {
             "constrain": {
                 "force_constant": storage.setting.get_value("xtb_setting.k", 1)
@@ -80,7 +114,8 @@ def dissoxtbscan(reactants0, entry, reactionpath, count=0):
 
         status = CallxTB(scan_wd,
                          custom_settings={"charge": charge, "uhf": u,
-                          "etemp": storage.setting.get_value("xtb_setting.scan_etemp", 4000)}).scan(constrain_setting)
+                                          "etemp": storage.setting.get_value("xtb_setting.scan_etemp", 4000)}).scan(
+            constrain_setting)
         if status == 0:
             endxyz = read_coord(join(scan_wd, "xtbopt.xyz"))
             bo = read_bo(join(scan_wd, "wbo"))
@@ -92,26 +127,27 @@ def dissoxtbscan(reactants0, entry, reactionpath, count=0):
                 create_folder(optwd)
                 shutil.copyfile(join(scan_wd, 'xtbopt.xyz'), join(optwd, 'coord.xyz'))
                 status2 = CallxTB(optwd,
-                         custom_settings={"charge": charge, "uhf": u}).opt()
+                                  custom_settings={"charge": charge, "uhf": u}).opt()
                 if status2 == 0:
                     endxyz = read_coord(join(optwd, "xtbopt.xyz"))
                     bo = read_bo(join(optwd, "wbo"))
                     constrain_l, ele_l = CallxTB(optwd).get_topo()
                     atcharge = read_atcharge(join(optwd, "charges"))
 
-            unreacted = [st for st in reactants0 if st != struc]
+            unreacted = reactants0.copy()
+            unreacted.remove(struc)
             unreacted = sorted(unreacted, key=int, reverse=True)
             output_d[f"{reactionpath}_{count}"] = [{"reactants": [struc],
-                                     "unreacted": unreacted,
-                                     "at_l":at_l,"simuhf":u},  # reactants info
-                                    {"atomic_charge": atcharge,
-                                     "charge": charge,
-                                     "nel": nel,
-                                     "uhf": u,
-                                     "coord": endxyz,
-                                     "bo": bo,
-                                     "atomic_connection": (constrain_l, ele_l)}  # endxyz info
-                                    ]
+                                                    "unreacted": unreacted,
+                                                    "at_l": at_l, "simuhf": u},  # reactants info
+                                                   {"atomic_charge": atcharge,
+                                                    "charge": charge,
+                                                    "nel": nel,
+                                                    "uhf": u,
+                                                    "coord": endxyz,
+                                                    "bo": bo,
+                                                    "atomic_connection": (constrain_l, ele_l)}  # endxyz info
+                                                   ]
             print_simulation(entry["struc"],
                              at_l,
                              [storage.allstruc.get_value(f"{struc}.struc_info.general.charge")
@@ -121,7 +157,7 @@ def dissoxtbscan(reactants0, entry, reactionpath, count=0):
                              reactionpath, count, nel, charge, u
                              )
         count += 1
-    return output_d,count
+    return output_d, count
 
 
 def dissombff(reactants0, entry, reactionpath, count=0):
@@ -142,13 +178,7 @@ def dissombff(reactants0, entry, reactionpath, count=0):
         m = storage.allstruc.get_value(f"{struc}.struc_info.general.multiplicity")
 
         # preparing scan inp
-        d = storage.setting.get_value("searching_setting.disso.pulling_distance", 2)
-        push_l = []
-        for pair in at_l[:2]:
-            at1, at2 = pair
-            d12 = np.round(Coord(coord).get_ats_distance(int(at1), int(at2)), 2)
-            dend = d * d12
-            push_l.append([at1, at2, d12, dend])
+        push_l = determine_pulling_distance(entry)
         with open(join(scan_wd, "atl"), "w") as f:
             f.write(json.dumps(entry))
         # get atomic connection
@@ -157,7 +187,8 @@ def dissombff(reactants0, entry, reactionpath, count=0):
             f.write("")
 
         for item in push_l:
-            at1, at2 = int(item[0]), int(item[1])
+            at1 = int(item[0])
+            at2 = int(item[1])
             value = np.round(float(item[3]), 2)
             atom_connection.append({"atoms": [at1, at2], "value": value})
             with open(join(scan_wd, "newbond"), "a+") as f:
@@ -172,7 +203,9 @@ def dissombff(reactants0, entry, reactionpath, count=0):
         write_xyz(mbxyz, "coord_mb")
 
         status = CallxTB(scan_wd,
-                         custom_settings={"charge": charge, "uhf": u, "coordfn": "coord_mb"}).constrained_opt(newbond=atom_connection[-len(push_l):])
+                         custom_settings={"charge": charge, "uhf": u, "coordfn": "coord_mb",
+                                          "etemp": storage.setting.get_value("xtb_setting.scan_etemp", 4000)
+                                          }).constrained_opt(newbond=atom_connection[-len(push_l):])
         if status == 0:
             endxyz = read_coord(join(scan_wd, "xtbopt.xyz"))
             bo = read_bo(join(scan_wd, "wbo"))
@@ -184,26 +217,29 @@ def dissombff(reactants0, entry, reactionpath, count=0):
                 create_folder(optwd)
                 shutil.copyfile(join(scan_wd, 'xtbopt.xyz'), join(optwd, 'coord.xyz'))
                 status2 = CallxTB(optwd,
-                         custom_settings={"charge": charge, "uhf": u}).opt()
+                                  custom_settings={"charge": charge, "uhf": u,
+                                                   "etemp": storage.setting.get_value("xtb_setting.scan_etemp",
+                                                                                      4000)}).opt()
                 if status2 == 0:
                     endxyz = read_coord(join(optwd, "xtbopt.xyz"))
                     bo = read_bo(join(optwd, "wbo"))
                     constrain_l, ele_l = CallxTB(optwd).get_topo()
                     atcharge = read_atcharge(join(optwd, "charges"))
 
-            unreacted = [st for st in reactants0 if st != struc]
+            unreacted = reactants0.copy()
+            unreacted.remove(struc)
             unreacted = sorted(unreacted, key=int, reverse=True)
             output_d[f"{reactionpath}_{count}"] = [{"reactants": [struc],
-                                     "unreacted":unreacted,
-                                     "at_l":at_l,"simuhf":u},  # reactants info
-                                    {"atomic_charge": atcharge,
-                                     "charge": charge,
-                                     "nel": nel,
-                                     "uhf": u,
-                                     "coord": endxyz,
-                                     "bo": bo,
-                                     "atomic_connection": (constrain_l, ele_l)}  # endxyz info
-                                    ]
+                                                    "unreacted": unreacted,
+                                                    "at_l": at_l, "simuhf": u},  # reactants info
+                                                   {"atomic_charge": atcharge,
+                                                    "charge": charge,
+                                                    "nel": nel,
+                                                    "uhf": u,
+                                                    "coord": endxyz,
+                                                    "bo": bo,
+                                                    "atomic_connection": (constrain_l, ele_l)}  # endxyz info
+                                                   ]
             print_simulation(entry["struc"],
                              at_l,
                              [storage.allstruc.get_value(f"{struc}.struc_info.general.charge")
@@ -213,4 +249,4 @@ def dissombff(reactants0, entry, reactionpath, count=0):
                              reactionpath, count, nel, charge, u
                              )
         count += 1
-    return output_d,count
+    return output_d, count
