@@ -327,13 +327,12 @@ class SDP:
             coord = self.coord_l[i]
             bodf = self.dfs[i]
             if bodf is not None:
-
                 # read through df
                 for index in range(bodf.shape[0]):
                     at1, at2 = bodf.iloc[index, :2]
-                    at1 -= 1
-                    at2 -= 1
-                    ele1, ele2 = coord.iloc[index, 0], coord.iloc[index, 0]
+                    at1 = int(at1) - 1
+                    at2 = int(at2) - 1
+                    ele1, ele2 = coord.iloc[at1, 0], coord.iloc[at2, 0]
                     if not allow_hydrogen:
                         if ele1 == "H" or ele2 == "H":
                             continue
@@ -344,9 +343,9 @@ class SDP:
                     if mbo < 0.3:
                         continue
                     if at1 < at2:
-                        at1, at2 = int(at2), int(at1)
+                        at1, at2 = at2,at1
                     else:
-                        at1, at2 = int(at1), int(at2)
+                        at1, at2 = at1, at2
                     if bodf.shape[1] > 2:
                         embo = bodf.iloc[index, 3]
                         self.allbonds.append({"struc": struc,
@@ -359,13 +358,15 @@ class SDP:
                                               "mbo": mbo,
                                               })
 
-    def build_react_l(self, mode, tol=0.01):
+    def build_react_l(self, mode, tol=0.01,gaplim=0.9):
         # refine react_l
         react_l = []
         for item in self.allbonds:
             struc = item["struc"]
             at1, at2 = item["at_combi"]
             mbo = item["mbo"]
+            if mode == 0 and mbo>gaplim:
+                continue
             if not react_l:
                 react_l.append(item)
                 react_l[0]["at_combi"] = [[at1, at2]]
