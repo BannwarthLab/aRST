@@ -21,16 +21,19 @@ class getAFO:
             self.setting = setting
         self.struc = strucid
 
-    def get_from_xtb(self):
-        afowd = create_folder(join(self.setting.strucwd, self.struc, "xtb", "afo"))
+    def get_from_xtb(self,subfolder=None):
+        afowd = create_folder(join(self.setting.strucwd, self.struc, "xtb", "afo")) \
+            if not subfolder else create_folder(join(self.setting.strucwd, self.struc,subfolder, "xtb", "afo"))
         rc = 0
         if not exists(join(afowd, "ml_feature.csv")):
             write_xyz(self.coord, "coord")
             rc = CallxTB(afowd, custom_settings={"charge": self.c, "uhf": self.m - 1}).afo()
         return afowd, rc
 
-    def get_from_tc(self):
-        afowd = join(self.setting.strucwd, self.struc, "stda")
+    def get_from_tc(self,subfolder=None):
+        afowd = join(self.setting.strucwd, self.struc, "stda") \
+            if not subfolder else create_folder(join(self.setting.strucwd, self.struc,subfolder, "stda"))
+
         rc = 0
         if not exists(join(afowd, "ml_feature.csv")):
             tcwd = create_folder(join(self.setting.strucwd, self.struc, "tc"))
@@ -46,17 +49,19 @@ class getAFO:
             rc = CallTerachem(wd=tcwd, command_d=inputcmd_d).run()
 
             if rc == 0:
-                afowd = create_folder(join(self.setting.strucwd,self.struc, "stda"))
+                afowd = create_folder(join(self.setting.strucwd,self.struc, "stda")) \
+                    if not subfolder else create_folder(join(self.setting.strucwd, self.struc,subfolder, "stda"))
                 shutil.copyfile(join(tcwd, "scr.coord", "coord.molden"),
                                 join(afowd, "coord.molden"))
                 rc = CallsTDA(afowd, "coord.molden").callml(self.setting.get_value("stda_setting.stda_wd"), 3)
         return afowd, rc
 
-    def get_from_orca(self):
-        afowd = create_folder(join(self.setting.strucwd, self.struc, "stda"))
+    def get_from_orca(self,subfolder=None):
+        afowd = create_folder(join(self.setting.strucwd, self.struc, "stda")) \
+            if not subfolder else create_folder(join(self.setting.strucwd, self.struc,subfolder, "stda"))
         rc = 0
         if not exists(join(afowd, "ml_feature.csv")):
-            orcawd = create_folder(join(self.setting.strucwd, self.struc, "orcaml"))
+            orcawd = create_folder(join(self.setting.strucwd, self.struc, "orcaml")) if not subfolder else create_folder(join(self.setting.strucwd, self.struc,subfolder, "orcaml"))
             write_xyz(self.coord, "coord")
             staus = CallORCA(orcawd,
                              custom_settings={"charge": self.c, "m": self.m,
@@ -69,7 +74,9 @@ class getAFO:
                 removegbw=False)
 
             import subprocess
-            p = subprocess.Popen("orca_2mkl orca -molden", shell=True)
+            p = subprocess.Popen("orca_2mkl orca -molden", shell=True,
+                                 stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL)
             p.wait()
 
             # transfom MOs from spherical coordinates to cartesian
@@ -81,6 +88,10 @@ class getAFO:
 
                 shutil.copyfile(join(orcawd, "orca.molden"),
                                 join(afowd, "coord.molden"))
+                os.remove(join(orcawd, "orca.molden"))
                 os.chdir(afowd)
                 rc = CallsTDA(afowd, "coord.molden").callml(self.setting.get_value("stda_setting.stda_wd"), 1)
+
+                if rc ==0 and not storage.setting.get_value("searching_setting.general.keepmolden", False):
+                    os.remove(join(afowd, "coord.molden"))
         return afowd, rc
