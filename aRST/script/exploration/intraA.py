@@ -111,7 +111,8 @@ def intraxtbscan(reactants0, entry, reactionpath, count=0):
                     bo = read_bo(join(optwd, "wbo"))
                     constrain_l, ele_l = CallxTB(optwd).get_topo()
                     atcharge = read_atcharge(join(optwd, "charges"))
-            unreacted = [st for st in reactants0 if st != struc]
+            unreacted = reactants0.copy()
+            unreacted.remove(struc)
             unreacted = sorted(unreacted, key=int, reverse=True)
             output_d[f"{reactionpath}_{count}"] = [{"reactants": [struc],
                                                     "unreacted": unreacted,
@@ -196,7 +197,8 @@ def intrarmbff(reactants0, entry, reactionpath, count=0):
                     constrain_l, ele_l = CallxTB(optwd).get_topo()
                     atcharge = read_atcharge(join(optwd, "charges"))
 
-            unreacted = [st for st in reactants0 if st != struc]
+            unreacted = reactants0.copy()
+            unreacted.remove(struc)
             unreacted = sorted(unreacted, key=int, reverse=True)
             output_d[f"{reactionpath}_{count}"] = [{"reactants": [struc],
                                                     "unreacted": unreacted,
