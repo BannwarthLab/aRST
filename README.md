@@ -174,6 +174,7 @@ mode = 0                            # 0: use mbo as bo
 concerted_pair=False
 
 pulling_distance = 2               # int, scale of pulling distance
+depotonation = False               # boll, if detecting depotonated form of reactant structures
 
 
 [xtb_setting]
@@ -218,5 +219,5 @@ multiplicity =
 Calling commandline:
 
 ```
-aRST in.toafo --explore > record.log 2>&1 &
+aRST in.toml --explore > record.log 2>&1 &
 ```
