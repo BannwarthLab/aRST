@@ -1,5 +1,4 @@
 import sys
-
 import toml
 import threading
 import os
@@ -35,6 +34,8 @@ class Setting:
     def get_value(self, target_key, default_value=None):
         value = mydict(self.config).get_value(target_key, default_value)
         return value
+    def set_value(self, target_key, new_value):
+        mydict(self.config).set_value(target_key, new_value)
 
 
 class Allstruc:
@@ -50,7 +51,10 @@ class Allstruc:
         return cls._instance
 
     def _initialize(self, Setting):
-
+        self.number_of_struc = mydict({}) # only used in nanoreactor for recording change of number of structures in sys
+        self.number_of_struc["0"] = []
+        # self.number_of_struc = {"layer":[{"strucid": strucid,
+        #                                   "num": num}, ...]}
         self.data = mydict({})
         self.reactants_ini = []
         # read geom input
@@ -67,7 +71,10 @@ class Allstruc:
                 self.data.set_value(f"{str(id)}.struc_info.general.multiplicity", m)
             else:
                 raise ValueError("Can't read reactants info from input, check if correct coord name, charge, m!")
-            for _ in range(Setting.get_value(f"geom.{struc}.number", 1)):
+            nstruc = Setting.get_value(f"geom.{struc}.number", 1)
+            self.data.set_value(f"{str(id)}.struc_info.general.number", nstruc)
+            self.number_of_struc["0"].append({"strucid":str(id),"num":int(nstruc)})
+            for _ in range(nstruc):
                 self.reactants_ini.append(str(id))
 
         ## ref products
@@ -140,17 +147,20 @@ class Allstruc:
 
         self.data.set_value(f"{strucid}.struc_info.energy.sp_gfn", struc_info["Esp_gfn"])
         self.data.set_value(f"{strucid}.struc_info.energy.sp_dft", struc_info["Esp_orca"])
-        self.data.set_value(f"{strucid}.struc_info.energy.trv", struc_info["Etrv_gfn"])
-        self.data.set_value(f"{strucid}.struc_info.energy.solv", struc_info["Esolv_gfn"])
+        # self.data.set_value(f"{strucid}.struc_info.energy.trv", struc_info["Etrv_gfn"])
+        # self.data.set_value(f"{strucid}.struc_info.energy.solv", struc_info["Esolv_gfn"])
 
     @staticmethod
-    def refine_struc_info(coord, charge, m, Setting, strucid=0):
+    def refine_struc_info(coord, charge, m, Setting, strucid=0,wd0=None):
 
         #########  OPT  #########
 
         # do gfn opt if required
         if Setting.get_value("read.general.gfn2opt", False) and coord.shape[0] > 1:
-            wd = create_folder(join(Setting.strucwd, strucid, "xtb"))
+            if not wd0:
+                wd = create_folder(join(Setting.strucwd, strucid, "xtb"))
+            else:
+                wd = create_folder(join(wd0, "xtb"))
             write_xyz(coord, "coord")
             staus = CallxTB(wd, custom_settings={"charge": charge, "uhf": m - 1}).opt()
             if staus == 0:
@@ -161,7 +171,10 @@ class Allstruc:
         # do DFT opt if required
         forcedftopt = Setting.get_value("read.general.dftopt", False)
         if (forcedftopt or Setting.get_value("orca_setting.dftopt",False)) and coord.shape[0] > 1:
-            wd = create_folder(join(Setting.strucwd, strucid, "orca"))
+            if not wd0:
+                wd = create_folder(join(Setting.strucwd, strucid, "orca"))
+            else:
+                wd = create_folder(join(wd0, "orca"))
             write_xyz(coord, "coord")
             staus = CallORCA(wd, custom_settings={"charge": charge, "m": m, "caltyp": "SP OPT"}).call()
             if staus == 0:
@@ -172,8 +185,15 @@ class Allstruc:
         #########  SP  #########
 
         ## xtb sp
-        if not exists(join(Setting.strucwd, strucid, "xtb", "xtbopt.xyz")):
-            wd = create_folder(join(Setting.strucwd, strucid, "xtb"))
+        if not wd0:
+            if not exists(join(Setting.strucwd, strucid, "xtb", "xtbopt.xyz")):
+                wd = create_folder(join(Setting.strucwd, strucid, "xtb"))
+                write_xyz(coord, "coord")
+                staus = CallxTB(wd, custom_settings={"charge": charge, "uhf": m - 1}).sp()
+                if staus != 0:
+                    print(f'Warning: struc {strucid} sp at xtb failed, continue anyhow')
+        else:
+            wd = create_folder(join(wd0, "xtb"))
             write_xyz(coord, "coord")
             staus = CallxTB(wd, custom_settings={"charge": charge, "uhf": m - 1}).sp()
             if staus != 0:
@@ -182,13 +202,16 @@ class Allstruc:
         ## orca sp
         sp_orca = None
         if not (forcedftopt or Setting.get_value("orca_setting.dftopt",False)) or coord.shape[0] == 1:
-            wd = create_folder(join(Setting.strucwd, strucid, "orca"))
+            if not wd0:
+                wd = create_folder(join(Setting.strucwd, strucid, "orca"))
+            else:
+                wd = create_folder(join(wd0, "orca"))
             write_xyz(coord, "coord")
             staus = CallORCA(wd, custom_settings={"charge": charge, "m": m}).call()
             if staus != 0:
                 print(f'Warning: struc {strucid} sp at ORCA failed, continue anyhow')
 
-        #########  TRV  #########
+        # #########  TRV  #########
         wd = create_folder(join(Setting.strucwd, strucid, "xtb", "trv"))
         write_xyz(coord, "coord")
         staus = CallxTB(wd, custom_settings={"charge": charge, "uhf": m - 1}).trv()
@@ -203,9 +226,10 @@ class Allstruc:
             print(f'Warning: struc {strucid} solv failed, continue anyhow')
 
         #########  get res  #########
-        struc_info = get_strucinfo_from_path(join(Setting.strucwd, strucid))
+        if not wd0:
+            struc_info = get_strucinfo_from_path(join(Setting.strucwd, strucid))
 
-        return struc_info
+            return struc_info
 
     def get_value(self, target_key, default_value=None):
         value = self.data.get_value(target_key, default_value)
