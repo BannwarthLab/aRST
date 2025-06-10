@@ -17,7 +17,7 @@ class ReactionNetwork:
 
         return cls._instance
 
-    def add_newnode(self, info, edge_l=None):
+    def add_newnode(self, info, edge_l=None,linkoldnode =True):
         """Adds a reaction as a node and connects reactants to products.
         info = {"reactants": reactants,
                 "unreacted": unreactants,
@@ -35,14 +35,16 @@ class ReactionNetwork:
         if "bond_changed" in info.keys() and "therdy_allow" in info.keys():
             if info["bond_changed"] and info["therdy_allow"]:
                 self.nrxn_allowed+=1
+
         # link to last node
-        if int(info["layer"]) != 0:
-            lastnode = self.get_lastnode_from_node(nodeid)
-            if lastnode:
-                self.graph.add_edge(lastnode, nodeid)
-            if edge_l:
-                for targetnode in edge_l:
-                    self.graph.add_edge(nodeid, targetnode)
+        if linkoldnode:
+            if int(info["layer"]) != 0:
+                lastnode = self.get_lastnode_from_node(nodeid)
+                if lastnode:
+                    self.graph.add_edge(lastnode, nodeid)
+                if edge_l:
+                    for targetnode in edge_l:
+                        self.graph.add_edge(nodeid, targetnode)
         return self.get_node_index_form_nodeid(nodeid)
 
     def add_newedge(self, node1, node2):
