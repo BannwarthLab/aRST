@@ -324,12 +324,12 @@ class GraphAnalyzer:
         shortest_two = list(islice(paths, 2))
 
         if len(shortest_two) == 1:
-            d = 2  # default as 2x covalent radii
+            d = 5  # default as 5x covalent radii
             bond_length = self.Graph[tarat1][tarat2]['weight']
             return d * bond_length
         else:
             # Straighten the ring.
-            length = sum(self.Graph[u][v]['weight'] for u, v in zip(shortest_two[1][:-1], shortest_two[1][1:]))*0.5
+            length = sum(self.Graph[u][v]['weight'] for u, v in zip(shortest_two[1][:-1], shortest_two[1][1:]))*0.9
             return length
 
 
