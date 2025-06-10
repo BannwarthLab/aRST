@@ -171,8 +171,9 @@ def print_jobhead(jobhead):
 def print_react_l(reactants,react_l,rtype="interA"):
     totw = 80
     border_width = 60
-    col1 = 25
-    col2 = 35
+    col1 = 15
+    col2 = 15
+    col3 = 35
     side_padding = (totw - border_width) // 2
     side = " " * side_padding
     print(side + "*" * border_width)
@@ -182,12 +183,15 @@ def print_react_l(reactants,react_l,rtype="interA"):
     print(side + f"Reactants: {reactants}")
     print(side + f"tot.atom pairs: {len(react_l)}")
     print(side + "-" * border_width)
-    print(side + f"{'atom pair':^{col1}} {'AFO gap':^{col2}}")
+    print(side + f"{'struc pair':^{col1}} {'atom pair':^{col2}} {'AFO gap':^{col3}}")
     print(side + "-" * border_width)
     for entry in react_l[:20]:
+        struc_l = entry["struc_combi"] \
+            if "struc_combi" in entry.keys() else entry["struc"]
         at_l = entry["at_combi"]
         gap = entry["gap"]
         strgap = f"{gap:.2f}" if isinstance(gap, float) else "np.inf"
-        print(side + f"{str(at_l).center(col1)}"
-                     f"{strgap.center(col2)}")
+        print(side + f"{str(struc_l).center(col1)}"
+                     f"{str(at_l).center(col2)}"
+                     f"{strgap.center(col3)}")
     print(side + "*" * border_width)
