@@ -27,7 +27,7 @@ multiplicity =
 cycle = # int, number of searching cycle
 elim = # float, energy limitation to kill this reaction path, unit kcal/mol
 
-ml_method = # str, method for ml feature calculations
+afo_method = # str, method for ml feature calculations
 mb_level = # None or "loose" to only screen with topology spectrum
 
 
