@@ -31,6 +31,7 @@ class CallORCA:
             "caltyp2": "RKS",  # This can be updated dynamically if needed
             "solmode": setting.get_value("orca_setting.solmode", ""),
             "ncpu": setting.get_value("orca_setting.ncpu", 1),
+            "env": setting.get_value("env.ORCA"),
         }
 
     def __init__(self, wd, command_d=None, custom_settings=None):
@@ -100,7 +101,7 @@ class CallORCA:
         with open(f'{self.wd}/orca.inp', 'w') as f:
             f.write(command_string)
 
-        cmd = f'$ORCA orca.inp'
+        cmd = f"{self.cmd.get_value('env','')} orca.inp"
         rc = self.orcasubprocess(cmd, removegbw=removegbw)
         return rc
 
@@ -148,6 +149,7 @@ class CallCrest:
                 "uhf": 0,
                 "alpb": setting.get_value("xtb_setting.alpb", "h2o"),
                 "etemp": setting.get_value("xtb_setting.struc_etemp", "4000"),
+                "env":setting.get_value("env.crest")
                 }
 
     def __init__(self, wd, command_d=None, custom_settings=None):
@@ -170,7 +172,7 @@ class CallCrest:
         return rc
 
     def generate_cmd_string(self):
-        cmd_string = "crest "
+        cmd_string = self.cmd.get_value("env")+" "
         coordfn = self.cmd.get_value("coordfn")
         if coordfn is None:
             raise Exception(f"coord in {self.wd} can't find right coordfn name")
@@ -195,8 +197,13 @@ class CallCrest:
         cmd_string += " --deprotonate "
         rc = self.crestsubprocess(cmd_string)
         return rc
+    def potonation(self):
+        cmd_string = self.generate_cmd_string()
+        cmd_string += " --protonate "
+        rc = self.crestsubprocess(cmd_string)
+        return rc
 
-    def read_depotonated_coord(self):
+    def read_update_coord(self,job):
         outwd = f'{self.wd}/crest.out'
         with open(outwd, "r") as file:
             lines = file.readlines()
@@ -218,7 +225,7 @@ class CallCrest:
             coord = None
         else:
             nstruc = deltaE_l.index(min(deltaE_l))
-            ensemblewd = f'{self.wd}/deprotonated.xyz'
+            ensemblewd = f'{self.wd}/deprotonated.xyz' if job=="depotonation" else f'{self.wd}/protonated.xyz'
             coord_l = []
             with open(ensemblewd, 'r') as f:
 
@@ -256,7 +263,8 @@ class CallxTB:
                 "uhf": 0,
                 "alpb": setting.get_value("xtb_setting.alpb", "h2o"),
                 "etemp": setting.get_value("xtb_setting.struc_etemp", "4000"),
-                "xtbwd": setting.get_value("xtb_setting.xtb_wd")
+                "env_xtb":setting.get_value("env.xtb"),
+                "env_xtbml": setting.get_value("env.xtbml"),
                 }
 
     def __init__(self, wd, command_d=None, custom_settings=None):
@@ -287,9 +295,9 @@ class CallxTB:
 
     def generate_cmd_string(self, opt=False, xtbmlversion=False,bar1M=False):
         if xtbmlversion:
-            cmd_string = self.cmd.get_value("xtbwd") + " "
+            cmd_string = self.cmd.get_value("env_xtbml") + " "
         else:
-            cmd_string = "xtb "
+            cmd_string = self.cmd.get_value("env_xtb") + " "
         coordfn = self.cmd.get_value("coordfn")
         if coordfn is None:
             raise Exception(f"coord in {self.wd} can't find right coordfn name")
@@ -675,12 +683,13 @@ class CallTerachem:
 
 
 class CallsTDA:
-    def __init__(self, wd, coordfn):
+    def __init__(self, wd, coordfn,env):
         self.wd = wd
         self.coordfn = coordfn
+        self.env=env
 
-    def callml(self, stdawd, sty):
-        cmd = f"{stdawd} -f {self.coordfn} -ml_feature -sty {str(sty)}"
+    def callml(self, sty):
+        cmd = f"{self.env} -f {self.coordfn} -ml_feature -sty {str(sty)}"
         p = subprocess.Popen(cmd, stdout=open(join(self.wd, f'stda.out'), 'w'), stderr=subprocess.PIPE, shell=True)
         p.wait()
         rc = p.returncode
@@ -688,11 +697,12 @@ class CallsTDA:
 
 
 class CallMultiwfn:
-    def __init__(self, wd, inputfn):
+    def __init__(self, wd, inputfn,env):
         self.wd = wd
         self.inputfn = inputfn
+        self.env = env
 
-    def write_cartesian_molden(self, mwfnwd):
+    def write_cartesian_molden(self):
         with open(join(self.wd, "cmd.in"), "w") as f:
             f.write("100\n"
                     "2\n"
@@ -701,7 +711,7 @@ class CallMultiwfn:
                     "0\n"
                     "-10\n"
                     )
-        cmd = f"{mwfnwd} {self.inputfn}"
+        cmd = f"{self.env} {self.inputfn}"
         with open(join(self.wd, "cmd.in"), "r") as cmd_in_file, open(join(self.wd, "multiwfn.out"), 'w') as out_file:
             p = subprocess.Popen(cmd, stdin=cmd_in_file, stdout=out_file, stderr=subprocess.PIPE, shell=True)
             p.wait()

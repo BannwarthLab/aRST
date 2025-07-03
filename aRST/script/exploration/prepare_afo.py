@@ -53,7 +53,7 @@ class getAFO:
                     if not subfolder else create_folder(join(self.setting.strucwd, self.struc,subfolder, "stda"))
                 shutil.copyfile(join(tcwd, "scr.coord", "coord.molden"),
                                 join(afowd, "coord.molden"))
-                rc = CallsTDA(afowd, "coord.molden").callml(self.setting.get_value("stda_setting.stda_wd"), 3)
+                rc = CallsTDA(afowd, "coord.molden",self.setting.get_value("env.stda")).callml(3)
         return afowd, rc
 
     def get_from_orca(self,subfolder=None):
@@ -74,14 +74,13 @@ class getAFO:
                 removegbw=False)
 
             import subprocess
-            p = subprocess.Popen("orca_2mkl orca -molden", shell=True,
+            p = subprocess.Popen(f"{self.setting.get_value('env.orca_2mkl')} orca -molden", shell=True,
                                  stdout=subprocess.DEVNULL,
                                  stderr=subprocess.DEVNULL)
             p.wait()
 
             # transfom MOs from spherical coordinates to cartesian
-            rc = CallMultiwfn(orcawd, "orca.molden.input").write_cartesian_molden(
-                self.setting.get_value("mwfn_setting.mwfn_wd"))
+            rc = CallMultiwfn(orcawd, "orca.molden.input",self.setting.get_value("env.mwfn")).write_cartesian_molden()
             if rc == 0:
                 os.remove(join(orcawd, "orca.molden.input"))
                 os.remove(join(orcawd, "orca.gbw"))
@@ -90,7 +89,7 @@ class getAFO:
                                 join(afowd, "coord.molden"))
                 os.remove(join(orcawd, "orca.molden"))
                 os.chdir(afowd)
-                rc = CallsTDA(afowd, "coord.molden").callml(self.setting.get_value("stda_setting.stda_wd"), 1)
+                rc = CallsTDA(afowd, "coord.molden",self.setting.get_value("env.stda")).callml(1)
 
                 if rc ==0 and not storage.setting.get_value("searching_setting.general.keepmolden", False):
                     os.remove(join(afowd, "coord.molden"))

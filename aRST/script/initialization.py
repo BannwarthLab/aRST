@@ -3,8 +3,9 @@ import toml
 import threading
 import os
 from os.path import join, exists
-from aRST.script.toolbox import create_folder, mydict, read_coord, get_strucinfo_from_path,write_xyz
+from aRST.script.toolbox import create_folder, mydict, read_coord, get_strucinfo_from_path, write_xyz, get_all_keys
 from aRST.script.callsys import CallxTB, CallORCA
+from aRST.script.check_input import checking_parameter, checking_env
 
 
 class Setting:
@@ -21,6 +22,18 @@ class Setting:
     def _load_config(self, infile):
         with open(infile, "r") as f:
             self.config = toml.load(f)
+        self.config = mydict(self.config)
+        # changing all str parameter to lower cases
+        all_keys = get_all_keys(self.config)
+        for key in all_keys:
+            val = self.get_value(key)
+            if isinstance(val, str) and not "geom" in key:
+                self.set_value(key, val.lower())
+
+        # checking up parameter format
+        self.config = checking_parameter(self.config)
+        self.config = checking_env(self.config)
+
         self.wd0 = self.get_value("searching_setting.general.wd", os.path.abspath(os.path.dirname(infile)))
         self.scanwd = join(self.wd0, "scan")
         self.strucwd = join(self.wd0, "struc")
@@ -30,10 +43,10 @@ class Setting:
             import shutil
             shutil.rmtree(self.bufferwd)
 
-
     def get_value(self, target_key, default_value=None):
         value = mydict(self.config).get_value(target_key, default_value)
         return value
+
     def set_value(self, target_key, new_value):
         mydict(self.config).set_value(target_key, new_value)
 
@@ -51,7 +64,8 @@ class Allstruc:
         return cls._instance
 
     def _initialize(self, Setting):
-        self.number_of_struc = mydict({}) # only used in nanoreactor for recording change of number of structures in sys
+        self.number_of_struc = mydict(
+            {})  # only used in nanoreactor for recording change of number of structures in sys
         self.number_of_struc["0"] = []
         # self.number_of_struc = {"layer":[{"strucid": strucid,
         #                                   "num": num}, ...]}
@@ -73,7 +87,7 @@ class Allstruc:
                 raise ValueError("Can't read reactants info from input, check if correct coord name, charge, m!")
             nstruc = Setting.get_value(f"geom.{struc}.number", 1)
             self.data.set_value(f"{str(id)}.struc_info.general.number", nstruc)
-            self.number_of_struc["0"].append({"strucid":str(id),"num":int(nstruc)})
+            self.number_of_struc["0"].append({"strucid": str(id), "num": int(nstruc)})
             for _ in range(nstruc):
                 self.reactants_ini.append(str(id))
 
@@ -120,11 +134,11 @@ class Allstruc:
 
     def set_value_from_struc_info(self, strucid, struc_info):
         # test if this reactant is already in data
-        mb =struc_info["mb"]
+        mb = struc_info["mb"]
         for searchid in list(self.data.keys()):
-            if searchid!=strucid:
+            if searchid != strucid:
                 search_mb = self.data.get_value(f"{searchid}.struc_info.general.mb")
-                if mb ==search_mb:
+                if mb == search_mb:
                     del self.data[strucid]
                     self.reactants_ini.remove(strucid)
                     self.reactants_ini.append(searchid)
@@ -151,7 +165,7 @@ class Allstruc:
         # self.data.set_value(f"{strucid}.struc_info.energy.solv", struc_info["Esolv_gfn"])
 
     @staticmethod
-    def refine_struc_info(coord, charge, m, Setting, strucid=0,wd0=None):
+    def refine_struc_info(coord, charge, m, Setting, strucid=0, wd0=None):
 
         #########  OPT  #########
 
@@ -170,7 +184,7 @@ class Allstruc:
 
         # do DFT opt if required
         forcedftopt = Setting.get_value("read.general.dftopt", False)
-        if (forcedftopt or Setting.get_value("orca_setting.dftopt",False)) and coord.shape[0] > 1:
+        if (forcedftopt or Setting.get_value("orca_setting.dftopt", False)) and coord.shape[0] > 1:
             if not wd0:
                 wd = create_folder(join(Setting.strucwd, strucid, "orca"))
             else:
@@ -201,7 +215,7 @@ class Allstruc:
 
         ## orca sp
         sp_orca = None
-        if not (forcedftopt or Setting.get_value("orca_setting.dftopt",False)) or coord.shape[0] == 1:
+        if not (forcedftopt or Setting.get_value("orca_setting.dftopt", False)) or coord.shape[0] == 1:
             if not wd0:
                 wd = create_folder(join(Setting.strucwd, strucid, "orca"))
             else:
@@ -267,11 +281,11 @@ class Allrxn:
     def get_all_keys(self):
         return list(self.data.keys())
 
-    def get_layer_keys(self,layer=0):
+    def get_layer_keys(self, layer=0):
         # cycle0: 0_0, 0_1, 0_2....
         # cycle1: 0_0_0, 0_0_1,0_0_2......
         allkeys = self.get_all_keys()
-        return [_ for _ in allkeys if len(_.split("_"))==layer+1]
+        return [_ for _ in allkeys if len(_.split("_")) == layer + 1]
 
 
 setting = None

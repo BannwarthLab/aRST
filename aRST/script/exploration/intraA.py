@@ -10,27 +10,43 @@ from aRST.script.spr import SPR, SDP
 from aRST.script.geom import Coord
 from aRST.script.callsys import CallxTB
 import aRST.script.initialization as storage
-from aRST.script.head import print_simulation
+from aRST.script.head import print_simulation,print_react_l
 
 
-def get_intraA_react_l(reactants0):
-    if storage.setting.get_value("searching_setting.intra.at1") is not None:
-        # predifined reaction, used in one cycle
-        at1 = storage.setting.get_value("searching_setting.intra.at1")
-        at2 = storage.setting.get_value("searching_setting.intra.at2")
-        react_l = {"struc": reactants0[0],
-                   "at_combi": [[str(at1), str(at2)]],
-                   "gap": 0}
-    else:
-        react_l = SPR(reactants0,
-                      storage.setting.get_value("searching_setting.general.hydrogen", True),
-                      storage.setting.get_value("searching_setting.general.halogen", True)
-                      ).intra(storage.setting.get_value("searching_setting.general.spr_mode", True))
-
+def get_intraA_react_l(reactants0,printall=True):
+    react_l = SPR(reactants0,
+                  storage.setting.get_value("searching_setting.general.hydrogen", True),
+                  storage.setting.get_value("searching_setting.general.halogen", True)
+                  ).intra(storage.setting.get_value("searching_setting.general.spr_mode", True))
     cut = 2 if storage.setting.get_value("searching_setting.intra.concerted_pair", False) else 1
     for item in react_l:
         pairs = item["at_combi"][:cut]
         item["at_combi"] = pairs
+
+    if printall:
+        print_react_l(reactants0, react_l, rtype="intraA")
+        # write full react_l in file
+        if storage.setting.get_value("searching_setting.general.general", 1) == 1:
+            with open(join(storage.setting.wd0, "react_l"), "w") as f:
+                for item in react_l:
+                    f.write(json.dumps(item) + "\n")
+
+    if storage.setting.get_value("searching_setting.intra.at1") is not None:
+        # predifined reaction, used in one cycle
+        at1 = storage.setting.get_value("searching_setting.intra.at1")
+        at2 = storage.setting.get_value("searching_setting.intra.at2")
+
+        if storage.setting.get_value("searching_setting.intra.at3") is not None:
+            at3 = storage.setting.get_value("searching_setting.intra.at3")
+            at4 = storage.setting.get_value("searching_setting.intra.at4")
+            react_l = [{"struc": reactants0[0],
+                       "at_combi": [[str(at1), str(at2)],[str(at3), str(at4)]],
+                       "gap": 0}]
+            storage.setting.set_value("searching_setting.intra.concerted_pair", True)
+        else:
+            react_l = [{"struc": reactants0[0],
+                       "at_combi": [[str(at1), str(at2)]],
+                       "gap": 0}]
     return react_l
 
 

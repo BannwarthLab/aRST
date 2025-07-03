@@ -55,6 +55,23 @@ class mydict(dict):
         return False
 
 
+def get_all_keys(d, parent_key=""):
+    keys = []
+
+    if isinstance(d, dict):
+        for k, v in d.items():
+            full_key = f"{parent_key}.{k}" if parent_key else k
+            keys.extend(get_all_keys(v, full_key))
+    elif isinstance(d, list):
+        for idx, item in enumerate(d):
+            full_key = f"{parent_key}.{idx}" if parent_key else str(idx)
+            keys.extend(get_all_keys(item, full_key))
+    else:
+        # It's a leaf value (non-dict, non-list)
+        keys.append(parent_key)
+    return keys
+
+
 def read_coord(coordpath):
     coord = pd.read_table(coordpath, header=None, skiprows=2, sep='\s+') if exists(coordpath) else None
     return coord
@@ -256,7 +273,7 @@ class FragmentAnalyzer:
             residuals = np.array(charge_l_flo) - int_charges  # Find decimal parts
             adjustment_indices = np.argsort(-residuals)  # Sort by highest decimal part
 
-            for i in range(abs(charge_difference)):
+            for i in range(int(abs(charge_difference))):
                 idx = adjustment_indices[i]
                 int_charges[idx] += np.sign(charge_difference)  # Adjust by +1 or -1
         return list(int_charges)
@@ -329,7 +346,7 @@ class GraphAnalyzer:
             return d * bond_length
         else:
             # Straighten the ring.
-            length = sum(self.Graph[u][v]['weight'] for u, v in zip(shortest_two[1][:-1], shortest_two[1][1:]))*0.9
+            length = sum(self.Graph[u][v]['weight'] for u, v in zip(shortest_two[1][:-1], shortest_two[1][1:])) * 0.9
             return length
 
 

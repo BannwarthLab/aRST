@@ -164,6 +164,11 @@ class SingleCycleSearch:
                 from aRST.script.exploration.depotonation import updating_reacntans
                 updating_reacntans(self.reactants)
                 self.prepare_AFO(afosubwd="depotonation")
+            elif storage.setting.get_value("searching_setting.disso.potonation", False):
+                # Testing if depotonation is energetically favorable
+                from aRST.script.exploration.depotonation import updating_reacntans
+                updating_reacntans(self.reactants,job="potonation")
+                self.prepare_AFO(afosubwd="potonation")
             react_l = get_intraD_react_l(self.reactants)
             scanmode = storage.setting.get_value("searching_setting.general.scan_mode", 0)
             ndisso = storage.setting.get_value("searching_setting.disso.number", 1)

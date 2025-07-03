@@ -55,7 +55,7 @@ def determine_pulling_distance(entry):
                 # storage.setting.get_value("searching_setting.disso.pulling_distance", 2) default as 2x covalent radii
                 at1, at2 = pair
                 d12 = np.round(Coord(coord).get_ats_distance(int(at1), int(at2)), 2)
-                dend = 2 * d12
+                dend = 5 * d12
                 # push_l requires atom index starting with 1
                 at1 = int(at1) + 1
                 at2 = int(at2) + 1

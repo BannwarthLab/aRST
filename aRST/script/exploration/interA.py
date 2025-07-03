@@ -17,24 +17,15 @@ from aRST.script.head import print_simulation, print_react_l
 
 
 def get_interA_react_l(reactants0,printall=True):
-    if storage.setting.get_value("searching_setting.inter.at1") is not None:
-        # predifined reaction, used in one cycle
-        at1 = storage.setting.get_value("searching_setting.inter.at1")
-        at2 = storage.setting.get_value("searching_setting.inter.at2")
-        react_l = {"struc_combi": [reactants0[0], reactants0[1]],
-                   "at_combi": [[str(at1), str(at2)]],
-                   "gap": 0}
-    else:
-
-        react_l = SPR(reactants0,
-                      storage.setting.get_value("searching_setting.general.hydrogen", True),
-                      storage.setting.get_value("searching_setting.general.halogen", True)
-                      ).inter(storage.setting.get_value("searching_setting.general.spr_mode", 0))
-
+    react_l = SPR(reactants0,
+                  storage.setting.get_value("searching_setting.general.hydrogen", True),
+                  storage.setting.get_value("searching_setting.general.halogen", True)
+                  ).inter(storage.setting.get_value("searching_setting.general.spr_mode", 0))
     cut = 2 if storage.setting.get_value("searching_setting.inter.concerted_pair", False) else 1
     for item in react_l:
         pairs = item["at_combi"][:cut]
         item["at_combi"] = pairs
+
     # print top 20 react_l
     if printall:
         print_react_l(reactants0, react_l, rtype="interA")
@@ -43,6 +34,24 @@ def get_interA_react_l(reactants0,printall=True):
             with open(join(storage.setting.wd0, "react_l"), "w") as f:
                 for item in react_l:
                     f.write(json.dumps(item) + "\n")
+
+    if storage.setting.get_value("searching_setting.inter.at1") is not None:
+        # overwrite react_l with user's input
+        # predifined reaction, used in one cycle
+        at1 = storage.setting.get_value("searching_setting.inter.at1")
+        at2 = storage.setting.get_value("searching_setting.inter.at2")
+        if storage.setting.get_value("searching_setting.inter.at3") is not None:
+            at3 = storage.setting.get_value("searching_setting.inter.at3")
+            at4 = storage.setting.get_value("searching_setting.inter.at4")
+            react_l = [{"struc_combi": [reactants0[0], reactants0[1]],
+                       "at_combi": [[str(at1), str(at2)],[str(at3), str(at4)]],
+                       "gap": 0}]
+            storage.setting.set_value("searching_setting.inter.concerted_pair", True)
+        else:
+            react_l = [{"struc_combi": [reactants0[0], reactants0[1]],
+                   "at_combi": [[str(at1), str(at2)]],
+                   "gap": 0}]
+
     return react_l
 
 
@@ -154,7 +163,7 @@ def interxtbscan(reactants0, entry, reactionpath, count=0):
                     constrain_l, ele_l = CallxTB(optwd).get_topo()
                     atcharge = read_atcharge(join(optwd, "charges"))
             # md optional
-            if storage.setting.get_value("searching_setting.general.md", False):
+            if storage.setting.get_value("searching_setting.general.MD", False):
                 mdwd = join(scan_wd, "md")
                 bo, constrain_l, ele_l, atcharge, endxyz = _short_md_for_product_struc_guess(mdwd, endxyz, push_l,
                                                                                              charge, u)
@@ -249,7 +258,7 @@ def intermbff(reactants0, entry, reactionpath, count=0):
                     bo = read_bo(join(optwd, "wbo"))
                     constrain_l, ele_l = CallxTB(optwd).get_topo()
                     atcharge = read_atcharge(join(optwd, "charges"))
-            if storage.setting.get_value("searching_setting.general.md", False):
+            if storage.setting.get_value("searching_setting.general.MD", False):
                 mdwd = join(scan_wd, "md")
                 bo, constrain_l, ele_l, atcharge, endxyz = _short_md_for_product_struc_guess(mdwd, endxyz, push_l,
                                                                                              charge, u)

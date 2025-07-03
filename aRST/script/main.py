@@ -10,10 +10,10 @@ import time
 import traceback
 from aRST.script.head import *
 from argparse import ArgumentParser
-
 from aRST.script.exploration.plot import plot_rxnnetwork
 import aRST.script.initialization as init
 from aRST.script.initialization import Setting
+
 
 
 
@@ -36,6 +36,11 @@ def main():
                         action='store_true',
                         default=False,
                         help='Explore reaction pathes based on given reactants.')
+    parser.add_argument('--nanoreactor',
+                        '-n',
+                        action='store_true',
+                        default=False,
+                        help='Pseudo-Nanoreactor exploration based on given reactants.')
     parser.add_argument('--afo_features',
                         '-afo',
                         action='store_true',
@@ -93,8 +98,14 @@ def main():
     elif args.align:
         from aRST.script.alignment.do_alignment import aligning_two_structures
         aligning_two_structures()
+    elif args.nanoreactor:
+        from aRST.script.nanoreactor.build_reaction import pseudo_nanoreactor_inter
+        pseudo_nanoreactor_inter()
+
+
 
 
 if __name__ == "__main__":
+
     main()
 
