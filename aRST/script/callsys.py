@@ -345,7 +345,7 @@ class CallxTB:
         p1.wait()
         rc = p1.returncode
         if rc == 0:
-            cmd2 = f'TRVthermo --io xtb --rotthr 50 '
+            cmd2 = f'{os.environ["TRVT_BIN"]} --io xtb --rotthr 50 '
             cmd2 += f'--fxyz xtbopt.xyz' if os.path.exists(
                 join(self.wd, "xtbopt.xyz")) else f'--fxyz {self.cmd.get_value("coordfn")}.xyz '
             cmd2 += f" --temp {self.cmd.get_value('etemp')} " \
