@@ -31,7 +31,6 @@ class CallORCA:
             "caltyp2": "RKS",  # This can be updated dynamically if needed
             "solmode": setting.get_value("orca_setting.solmode", ""),
             "ncpu": setting.get_value("orca_setting.ncpu", 1),
-            "env": setting.get_value("env.ORCA"),
         }
 
     def __init__(self, wd, command_d=None, custom_settings=None):
@@ -101,7 +100,7 @@ class CallORCA:
         with open(f'{self.wd}/orca.inp', 'w') as f:
             f.write(command_string)
 
-        cmd = f"{self.cmd.get_value('env','')} orca.inp"
+        cmd = f"{os.environ['ORCA_BIN']} orca.inp"
         rc = self.orcasubprocess(cmd, removegbw=removegbw)
         return rc
 
@@ -149,7 +148,6 @@ class CallCrest:
                 "uhf": 0,
                 "alpb": setting.get_value("xtb_setting.alpb", "h2o"),
                 "etemp": setting.get_value("xtb_setting.struc_etemp", "4000"),
-                "env":setting.get_value("env.crest")
                 }
 
     def __init__(self, wd, command_d=None, custom_settings=None):
@@ -172,7 +170,7 @@ class CallCrest:
         return rc
 
     def generate_cmd_string(self):
-        cmd_string = self.cmd.get_value("env")+" "
+        cmd_string = os.environ['CREST_BIN']+" "
         coordfn = self.cmd.get_value("coordfn")
         if coordfn is None:
             raise Exception(f"coord in {self.wd} can't find right coordfn name")
@@ -263,8 +261,6 @@ class CallxTB:
                 "uhf": 0,
                 "alpb": setting.get_value("xtb_setting.alpb", "h2o"),
                 "etemp": setting.get_value("xtb_setting.struc_etemp", "4000"),
-                "env_xtb":setting.get_value("env.xtb"),
-                "env_xtbml": setting.get_value("env.xtbml"),
                 }
 
     def __init__(self, wd, command_d=None, custom_settings=None):
@@ -295,9 +291,9 @@ class CallxTB:
 
     def generate_cmd_string(self, opt=False, xtbmlversion=False,bar1M=False):
         if xtbmlversion:
-            cmd_string = self.cmd.get_value("env_xtbml") + " "
+            cmd_string = os.environ['XTBML_BIN'] + " "
         else:
-            cmd_string = self.cmd.get_value("env_xtb") + " "
+            cmd_string = os.environ['XTB_BIN'] + " "
         coordfn = self.cmd.get_value("coordfn")
         if coordfn is None:
             raise Exception(f"coord in {self.wd} can't find right coordfn name")
@@ -628,8 +624,6 @@ class CallTerachem:
     def __new__(cls, wd, Setting=None):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
-            if not shutil.which("terachem"):
-                raise ValueError("terachem is not installed or not in PATH.")
         return cls._instance
 
     def __init__(self, wd, command_d):
@@ -671,7 +665,7 @@ class CallTerachem:
                 f.write("run                     energy\n")
 
     def run(self):
-        cmd = "terachem tc.inp"
+        cmd = f"{os.environ['TC_BIN']} tc.inp"
         # write input
         self.wirte_input()
         # run
@@ -683,13 +677,12 @@ class CallTerachem:
 
 
 class CallsTDA:
-    def __init__(self, wd, coordfn,env):
+    def __init__(self, wd, coordfn):
         self.wd = wd
         self.coordfn = coordfn
-        self.env=env
 
     def callml(self, sty):
-        cmd = f"{self.env} -f {self.coordfn} -ml_feature -sty {str(sty)}"
+        cmd = f"{os.environ['STDA_BIN']} -f {self.coordfn} -ml_feature -sty {str(sty)}"
         p = subprocess.Popen(cmd, stdout=open(join(self.wd, f'stda.out'), 'w'), stderr=subprocess.PIPE, shell=True)
         p.wait()
         rc = p.returncode
@@ -697,10 +690,9 @@ class CallsTDA:
 
 
 class CallMultiwfn:
-    def __init__(self, wd, inputfn,env):
+    def __init__(self, wd, inputfn):
         self.wd = wd
         self.inputfn = inputfn
-        self.env = env
 
     def write_cartesian_molden(self):
         with open(join(self.wd, "cmd.in"), "w") as f:
@@ -711,7 +703,7 @@ class CallMultiwfn:
                     "0\n"
                     "-10\n"
                     )
-        cmd = f"{self.env} {self.inputfn}"
+        cmd = f"{os.environ['MWFN_BIN']} {self.inputfn}"
         with open(join(self.wd, "cmd.in"), "r") as cmd_in_file, open(join(self.wd, "multiwfn.out"), 'w') as out_file:
             p = subprocess.Popen(cmd, stdin=cmd_in_file, stdout=out_file, stderr=subprocess.PIPE, shell=True)
             p.wait()

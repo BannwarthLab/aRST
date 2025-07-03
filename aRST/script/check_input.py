@@ -1,5 +1,4 @@
 import sys
-from dotenv import load_dotenv
 from aRST.script.toolbox import mydict, get_all_keys
 import os
 import shutil
@@ -235,34 +234,24 @@ def checking_parameter(setting):
 
 
 
-def try_set_env(setting,name, program_hint=None):
-    value = os.getenv(name)
-    if value:
-        setting.set_value(f"env.{name}", value)
-        print(f"Using {name} from .env: {value}")
-    else:
-        path = shutil.which(program_hint or name)
-        if path:
-            setting.set_value(f"env.{name}", path)
-            print(f"Found {name} in PATH: {path}")
-        else:
-            print(f"Warning: {name} not found in .env or PATH")
-
-
 def checking_env(setting):
-    load_dotenv()
-    try_set_env(setting,"ORCA", "orca")
+    required_vars = ["ORCA_BIN","XTB_BIN"]
+    if setting.get_value("searching_setting.reactivity.afo_method") =="stda":
+        required_vars.append("STDA_BIN")
+        required_vars.append("MWFN_BIN")
+        if setting.get_value("searching_setting.reactivity.MO_method") =="terachem":
+            required_vars.append("TC_BIN")
+    elif setting.get_value("searching_setting.reactivity.afo_method") =="gfn2":
+        required_vars.append("XTBML_BIN")
+    if setting.get_value("searching_setting.disso.depotonation") or setting.get_value("searching_setting.disso.potonation"):
+        required_vars.append("CREST_BIN")
 
-    orca_path = setting.get_value("env.ORCA")
-    orca_dir = os.path.dirname(orca_path)  # This safely gets the parent dir
+    missing = [var for var in required_vars if var not in os.environ]
+    if missing:
+        print("Missing environment variables:", ", ".join(missing))
+        print("Please set them using 'export VAR=VALUE' in your shell.")
+        exit(1)
+    else:
+        for i in required_vars:
+            print(os.environ[i])
 
-    orca_2mkl_path = os.path.join(orca_dir, "orca_2mkl")
-    setting.set_value("env.orca_2mkl", orca_2mkl_path)
-
-    try_set_env(setting,"terachem", "terachem")
-    try_set_env(setting,"crest", "crest")
-    try_set_env(setting, "xtb", "xtb")
-    try_set_env(setting,"xtbml", "xtbml")
-    try_set_env(setting,"stda", "stda")
-    try_set_env(setting,"mwfn", "mwfn")
-    return setting

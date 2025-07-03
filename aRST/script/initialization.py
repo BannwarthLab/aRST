@@ -31,8 +31,9 @@ class Setting:
                 self.set_value(key, val.lower())
 
         # checking up parameter format
+
         self.config = checking_parameter(self.config)
-        self.config = checking_env(self.config)
+        checking_env(self.config)
 
         self.wd0 = self.get_value("searching_setting.general.wd", os.path.abspath(os.path.dirname(infile)))
         self.scanwd = join(self.wd0, "scan")
