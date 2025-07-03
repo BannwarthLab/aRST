@@ -251,7 +251,4 @@ def checking_env(setting):
         print("Missing environment variables:", ", ".join(missing))
         print("Please set them using 'export VAR=VALUE' in your shell.")
         exit(1)
-    else:
-        for i in required_vars:
-            print(os.environ[i])
 
