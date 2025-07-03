@@ -41,28 +41,57 @@ def build_react_l(h_df, l_df, search_mode):
     return react_l
 
 
-def find_identical_at_from_afo(HOAO, tol=0.01):
+
+def find_identical_at_from_afo(HOAO_a, HOAO_b, LUAO_a, LUAO_b, tol=0.01):
     out = {}
-    for struc in list(set(HOAO.columns)):
+
+    # Process each structure that exists in HOAO_a
+    for struc in HOAO_a.columns.unique():
         out[str(struc)] = []
-        used = []
-        for idx, hoao in HOAO[struc].items():
-            if isinstance(hoao, pd.Series):
-                hoao = hoao.iloc[0]
-            idx = int(idx)
-            if idx not in used:
-                used.append(idx)
-                degenerated = []
-                degenerated.append(idx)
-                if idx != HOAO.shape[0]:
-                    for i in range(idx + 1, HOAO.shape[0]):
-                        value = HOAO.loc[i, struc]
-                        if isinstance(value, pd.Series):
-                            value = value.iloc[0]
-                        if abs(value - hoao) < tol:
-                            degenerated.append(i)
-                            used.append(i)
-                out[str(struc)].append({"atom": degenerated, "hoao": np.round(hoao, 2)})
+        used_indices = set()
+
+        for idx in HOAO_a.index:
+            if idx in used_indices:
+                continue
+
+            # Get reference values
+            ref_values = {
+                'ha': HOAO_a.loc[idx, struc],
+                'hb': HOAO_b.loc[idx, struc],
+                'la': LUAO_a.loc[idx, struc],
+                'lb': LUAO_b.loc[idx, struc]
+            }
+
+            # Ensure scalar values (handle Series cases)
+            ref_values = {k: v.iloc[0] if isinstance(v, pd.Series) else v
+                          for k, v in ref_values.items()}
+
+            # Find degenerate atoms
+            degenerate = [idx]
+            used_indices.add(idx)
+
+            # Compare with subsequent atoms
+            for i in range(idx + 1, len(HOAO_a)):
+                if i in used_indices:
+                    continue
+
+                # Get comparison values
+                curr_values = {
+                    'ha': HOAO_a.loc[i, struc],
+                    'hb': HOAO_b.loc[i, struc],
+                    'la': LUAO_a.loc[i, struc],
+                    'lb': LUAO_b.loc[i, struc]
+                }
+                curr_values = {k: v.iloc[0] if isinstance(v, pd.Series) else v
+                               for k, v in curr_values.items()}
+
+                # Check tolerance
+                if all(abs(curr_values[k] - ref_values[k]) < tol for k in ref_values):
+                    degenerate.append(i)
+                    used_indices.add(i)
+
+            out[str(struc)].append({"atom": degenerate})
+
     return out
 
 
@@ -242,7 +271,7 @@ class SPR:
                 df.iloc[:, istruc] = tmpl  # .reset_index(drop=True)
 
     def inter(self, spr_mode):
-        identical_atom_d = find_identical_at_from_afo(self.HOAO_a)
+        identical_atom_d = find_identical_at_from_afo(self.HOAO_a,self.HOAO_b,self.LUAO_a,self.LUAO_b)
         final_react = []
         if spr_mode == 1:
             react_aa = build_react_l(self.HOAO_a, self.LUAO_a, search_mode=1)
@@ -268,7 +297,7 @@ class SPR:
         return final_react
 
     def intra(self, spr_mode):
-        identical_atom_d = find_identical_at_from_afo(self.HOAO_a)
+        identical_atom_d = find_identical_at_from_afo(self.HOAO_a,self.HOAO_b,self.LUAO_a,self.LUAO_b)
         final_react = []
         if spr_mode == 1:
             react_aa = build_react_l(self.HOAO_a, self.LUAO_a, search_mode=0)
