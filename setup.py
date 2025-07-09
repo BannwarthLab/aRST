@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 #     return open(os.path.join(os.path.dirname(__file__), fname)).read()
 setup(
     name = "aRST",
-    version = "1.0.0",
+    version = "2.0.0",
     author = "Ying Chen",
     author_email = "ying.chen@pc.rwth-aachen.de",
     description = ("an automated Reaction Search Tool"),
