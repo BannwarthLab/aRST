@@ -136,6 +136,17 @@ class SingleCycleSearch:
         if storage.setting.get_value("searching_setting.intra"):
             print()
             print_jobhead("Intramolecular Association")
+            # Testing if depotonation is energetically favorable
+            if storage.setting.get_value("searching_setting.intra.depotonation", False):
+                # Testing if depotonation is energetically favorable
+                from aRST.script.exploration.depotonation import updating_reacntans
+                updating_reacntans(self.reactants)
+                self.prepare_AFO(afosubwd="depotonation")
+            elif storage.setting.get_value("searching_setting.intra.potonation", False):
+                # Testing if depotonation is energetically favorable
+                from aRST.script.exploration.depotonation import updating_reacntans
+                updating_reacntans(self.reactants, job="potonation")
+                self.prepare_AFO(afosubwd="potonation")
             react_l = get_intraA_react_l(self.reactants)
             scanmode = storage.setting.get_value("searching_setting.general.scan_mode", 0)
             nintra = storage.setting.get_value("searching_setting.intra.number", 1)

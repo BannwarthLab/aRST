@@ -22,7 +22,7 @@ def main():
     parser = ArgumentParser(
         # name of program
         prog="aRST",
-        # description
+        # descriptionh
         description="an automated Reaction Search Tool",
         # bottom text
         epilog="By Ying"

@@ -2,7 +2,7 @@ import datetime
 
 
 def print_head():
-    program_name = "automated Reaction Search Tool (aRST) V2.0"
+    program_name = "automated Reaction Search Tool (aRST) V1.0.0"
     timestamp = datetime.datetime.now().strftime("%d-%m-%Y %H:%M:%S")
     tot_width = 80
     border_width = 60
