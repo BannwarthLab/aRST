@@ -362,23 +362,23 @@ class SingleCycleSearch:
             charge = frag["charge"]
             uhf = frag["m"] - 1
             etrv = 0
-            if coord.shape[0] > 1:
-                wd = create_folder(join(storage.setting.bufferwd, frag['strucwd'], "xtb", "trv"))
-                write_xyz(coord, "coord")
-                xtbprocess = CallxTB(wd, custom_settings={"charge": charge, "uhf": uhf, })
-                staus = xtbprocess.trv()
-                if staus == 0:
-                    etrv = xtbprocess.get_Etrv()
+            # if coord.shape[0] > 1:
+            #     wd = create_folder(join(storage.setting.bufferwd, frag['strucwd'], "xtb", "trv"))
+            #     write_xyz(coord, "coord")
+            #     xtbprocess = CallxTB(wd, custom_settings={"charge": charge, "uhf": uhf, })
+            #     staus = xtbprocess.trv()
+            #     if staus == 0:
+            #         etrv = xtbprocess.get_Etrv()
             frag["Etrv_gfn"] = etrv
 
             esolv = 0
-            if coord.shape[0] > 1:
-                wd = create_folder(join(storage.setting.bufferwd, frag['strucwd'], "xtb", "solv"))
-                write_xyz(coord, "coord")
-                xtbprocess = CallxTB(wd, custom_settings={"charge": charge, "uhf": uhf, })
-                staus = xtbprocess.solv()
-                if staus == 0:
-                    esolv = xtbprocess.get_Esolv()
+            # if coord.shape[0] > 1:
+            #     wd = create_folder(join(storage.setting.bufferwd, frag['strucwd'], "xtb", "solv"))
+            #     write_xyz(coord, "coord")
+            #     xtbprocess = CallxTB(wd, custom_settings={"charge": charge, "uhf": uhf, })
+            #     staus = xtbprocess.solv()
+            #     if staus == 0:
+            #         esolv = xtbprocess.get_Esolv()
             frag["Esolv_gfn"] = esolv
         return tmp_path_l
 
@@ -562,8 +562,8 @@ class SingleCycleSearch:
         storage.allstruc.set_value(f"{newid}.struc_info.general.atcharge", strucinfo_d["atomic_charge"])
         storage.allstruc.set_value(f"{newid}.struc_info.general.atomic_connection", strucinfo_d["atomic_connection"])
         storage.allstruc.set_value(f"{newid}.struc_info.energy.sp_dft", strucinfo_d["Esp_orca"])
-        storage.allstruc.set_value(f"{newid}.struc_info.energy.trv", strucinfo_d["Etrv_gfn"])
-        storage.allstruc.set_value(f"{newid}.struc_info.energy.solv", strucinfo_d["Esolv_gfn"])
+        # storage.allstruc.set_value(f"{newid}.struc_info.energy.trv", strucinfo_d["Etrv_gfn"])
+        # storage.allstruc.set_value(f"{newid}.struc_info.energy.solv", strucinfo_d["Esolv_gfn"])
 
         # move folder
         tmpwd = join(storage.setting.bufferwd, strucinfo_d["strucwd"])

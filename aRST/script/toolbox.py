@@ -131,7 +131,7 @@ def get_strucinfo_from_path(strucid_path):
     nel = int(sum([element[_] for _ in ele_l])) - charge
     atcharge = read_atcharge(join(strucid_path, "charges"))
     Esp_gfn = xtb.get_Esp_from_out()
-    Etrv_gfn = CallxTB(join(strucid_path, "xtb", "trv")).get_Etrv()
+    # Etrv_gfn = CallxTB(join(strucid_path, "xtb", "trv")).get_Etrv()
     Esolv_gfn = CallxTB(join(strucid_path, "xtb", "solv")).get_Esolv()
     constrain_l, ele_l = xtb.get_topo()
 
@@ -140,8 +140,9 @@ def get_strucinfo_from_path(strucid_path):
 
     mb = CallMolBar(coord).get_mb()
     return {"coord": coord, "nel": nel, "m": m, "c": charge, "atcharge": atcharge,
-            "Esp_gfn": Esp_gfn, "Etrv_gfn": Etrv_gfn,
-            "Esolv_gfn": Esolv_gfn,
+            "Esp_gfn": Esp_gfn,
+            # "Etrv_gfn": Etrv_gfn,
+            # "Esolv_gfn": Esolv_gfn,
             "constrain_l": constrain_l, "ele_l": ele_l, "Esp_orca": Esp_orca, "mb": mb}
 
 

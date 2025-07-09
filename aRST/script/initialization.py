@@ -227,18 +227,18 @@ class Allstruc:
                 print(f'Warning: struc {strucid} sp at ORCA failed, continue anyhow')
 
         # #########  TRV  #########
-        wd = create_folder(join(Setting.strucwd, strucid, "xtb", "trv"))
-        write_xyz(coord, "coord")
-        staus = CallxTB(wd, custom_settings={"charge": charge, "uhf": m - 1}).trv()
-        if staus != 0:
-            print(f'Warning: struc {strucid} trv failed, continue anyhow')
+        # wd = create_folder(join(Setting.strucwd, strucid, "xtb", "trv"))
+        # write_xyz(coord, "coord")
+        # staus = CallxTB(wd, custom_settings={"charge": charge, "uhf": m - 1}).trv()
+        # if staus != 0:
+        #     print(f'Warning: struc {strucid} trv failed, continue anyhow')
 
         #########  SOLV  #########
-        wd = create_folder(join(Setting.strucwd, strucid, "xtb", "solv"))
-        write_xyz(coord, "coord")
-        staus = CallxTB(wd, custom_settings={"charge": charge, "uhf": m - 1}).solv()
-        if staus != 0:
-            print(f'Warning: struc {strucid} solv failed, continue anyhow')
+        # wd = create_folder(join(Setting.strucwd, strucid, "xtb", "solv"))
+        # write_xyz(coord, "coord")
+        # staus = CallxTB(wd, custom_settings={"charge": charge, "uhf": m - 1}).solv()
+        # if staus != 0:
+        #     print(f'Warning: struc {strucid} solv failed, continue anyhow')
 
         #########  get res  #########
         if not wd0:

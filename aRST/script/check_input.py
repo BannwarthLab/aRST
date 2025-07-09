@@ -235,7 +235,7 @@ def checking_parameter(setting):
 
 
 def checking_env(setting):
-    required_vars = ["ORCA_BIN","XTB_BIN","TRVT_BIN"]
+    required_vars = ["ORCA_BIN","XTB_BIN"]#,"TRVT_BIN"
     if setting.get_value("searching_setting.reactivity.afo_method") =="stda":
         required_vars.append("STDA_BIN")
         required_vars.append("MWFN_BIN")
