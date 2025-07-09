@@ -326,12 +326,13 @@ class SPR:
         for item in tmp_react:
             struc = item["struc"]
             atl = item["at_combi"][0]
+            trigger = True
             for item2 in allbonds:
                 if item2["struc"] == struc:
-                    if item2["at_combi"] == atl:
-                        continue
-            final_react.append(item)
-
+                    if item2["at_combi"] == atl or len(set(atl))==1:
+                        trigger=False
+            if trigger:
+                final_react.append(item)
         return final_react
 
 
