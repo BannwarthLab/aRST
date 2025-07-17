@@ -25,7 +25,7 @@ def main():
         # descriptionh
         description="an automated Reaction Search Tool",
         # bottom text
-        epilog="By Ying"
+        epilog=""
     )
 
     # add arguments

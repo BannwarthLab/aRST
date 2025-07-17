@@ -26,10 +26,9 @@ def get_intraA_react_l(reactants0,printall=True):
     if printall:
         print_react_l(reactants0, react_l, rtype="intraA")
         # write full react_l in file
-        if storage.setting.get_value("searching_setting.general.general", 1) == 1:
-            with open(join(storage.setting.wd0, "react_l"), "w") as f:
-                for item in react_l:
-                    f.write(json.dumps(item) + "\n")
+        with open(join(storage.setting.wd0, "react_l"), "w") as f:
+            for item in react_l:
+                f.write(json.dumps(item) + "\n")
 
     if storage.setting.get_value("searching_setting.intra.at1") is not None:
         # predifined reaction, used in one cycle

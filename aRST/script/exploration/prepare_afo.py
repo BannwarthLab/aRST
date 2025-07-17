@@ -26,8 +26,19 @@ class getAFO:
             if not subfolder else create_folder(join(self.setting.strucwd, self.struc,subfolder, "xtb", "afo"))
         rc = 0
         if not exists(join(afowd, "ml_feature.csv")):
-            write_xyz(self.coord, "coord")
-            rc = CallxTB(afowd, custom_settings={"charge": self.c, "uhf": self.m - 1}).afo()
+            if 'XTBML_BIN' in os.environ and os.environ['XTBML_BIN']:
+                # modified xtb exiest
+                write_xyz(self.coord, "coord")
+                rc = CallxTB(afowd, custom_settings={"charge": self.c, "uhf": self.m - 1}).afo()
+            else:
+                # use normal xtb version to generate molden file
+                write_xyz(self.coord, "coord")
+                rc = CallxTB(afowd, custom_settings={"charge": self.c, "uhf": self.m - 1}).afo_molden()
+                if rc==0:
+                    rc = CallsTDA(afowd, "molden.input").callml(0)
+                else:
+                    rc=1
+
         return afowd, rc
 
     def get_from_tc(self,subfolder=None):

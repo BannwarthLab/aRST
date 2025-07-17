@@ -18,7 +18,7 @@ def print_head():
     print(side + f"|{' ' * (border_width - 2)}|")
     print(side + border)
 
-    print(side+"# Author:             Y. Chen")
+    print(side+"# Author:             Y. Chen, C. Bannwarth")
     print(side+"# Institute:          Institute of Physical Chemistry")
     print(side+"#                     RWTH Aachen University")
     print(side+"# Version date:       03.2025")

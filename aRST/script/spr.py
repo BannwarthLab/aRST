@@ -388,7 +388,7 @@ class SDP:
                                               "mbo": mbo,
                                               })
 
-    def build_react_l(self, mode, tol=0.01,gaplim=0.9):
+    def build_react_l(self, mode, tol=0.01,gaplim=1.2):
         # refine react_l
         react_l = []
         for item in self.allbonds:

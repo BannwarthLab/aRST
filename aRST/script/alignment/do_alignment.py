@@ -47,7 +47,10 @@ def aligning_two_structures(reactants=None,at1=None,at2=None):
 
     # prepare scan_xyz
     coord1 = storage.allstruc.get_value(f"0.struc_info.general.coord")
-    coord2 = storage.allstruc.get_value(f"1.struc_info.general.coord")
+    if "1" in storage.allstruc.data.keys():
+        coord2 = storage.allstruc.get_value(f"1.struc_info.general.coord")
+    else:
+        coord2 = storage.allstruc.get_value(f"0.struc_info.general.coord")
 
     # generate reactiv complex
     aligningcoord1 = alignment(coord1, coord2, at1, at2,

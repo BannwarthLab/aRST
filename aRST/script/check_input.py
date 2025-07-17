@@ -29,6 +29,7 @@ required_input = {
         "reactivity": {
             "afo_method": (str, "gfn2"),  # method for afo feature calculations
         },
+        "singlepoint":{"method":(str,"gxtb")},
         "inter": {
             "number": (int, 0),  # number of intermolecular reaction paths to be searched in one cycle
             "search_mode": (int, 1),
@@ -216,10 +217,10 @@ def checking_parameter(setting):
             # accepted in aRST 1.0
             continue
         else:
-            allcorrect = False
-            print("Error parameter in ", item, ": This parameter is not accept in aRST")
+            # allcorrect = False # not quite program, but ignore the parameter
+            print("⚠️ Error parameter in ", item, ": This parameter is not accept in aRST, will be ignored!!")
     if not allcorrect:
-        raise ValueError("wrong input!")
+        raise ValueError("❌️ Wrong input!")
     else:
         # adding missing parameter to default val
         missing_par = [x for x in all_keys_in_shema if x not in all_keys_in_config]
@@ -235,16 +236,21 @@ def checking_parameter(setting):
 
 
 def checking_env(setting):
-    required_vars = ["ORCA_BIN","XTB_BIN"]#,"TRVT_BIN"
+    required_vars = ["XTB_BIN","STDA_BIN"]#,"TRVT_BIN" "GXTB_BIN" "ORCA_BIN",
     if setting.get_value("searching_setting.reactivity.afo_method") =="stda":
-        required_vars.append("STDA_BIN")
+        # required_vars.append("STDA_BIN")
         required_vars.append("MWFN_BIN")
         if setting.get_value("searching_setting.reactivity.MO_method") =="terachem":
             required_vars.append("TC_BIN")
-    elif setting.get_value("searching_setting.reactivity.afo_method") =="gfn2":
-        required_vars.append("XTBML_BIN")
+    # elif setting.get_value("searching_setting.reactivity.afo_method") =="gfn2":
+    #     required_vars.append("XTBML_BIN")
     if setting.get_value("searching_setting.disso.depotonation") or setting.get_value("searching_setting.disso.potonation"):
         required_vars.append("CREST_BIN")
+    if setting.get_value("searching_setting.singlepoint.method") =="gxtb":
+        required_vars.append("GXTB_BIN")
+        print("NOTE: aRST is using g-xTB development version for sp calculations, ALPB model is not surport in gxtb yet!!!")
+    else:
+        required_vars.append("ORCA_BIN") # bydefault use dft lvl sp comp.
 
     missing = [var for var in required_vars if var not in os.environ]
     if missing:

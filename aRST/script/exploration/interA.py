@@ -30,10 +30,9 @@ def get_interA_react_l(reactants0,printall=True):
     if printall:
         print_react_l(reactants0, react_l, rtype="interA")
         # write full react_l in file
-        if storage.setting.get_value("searching_setting.general.general", 1) == 1:
-            with open(join(storage.setting.wd0, "react_l"), "w") as f:
-                for item in react_l:
-                    f.write(json.dumps(item) + "\n")
+        with open(join(storage.setting.wd0, "react_l"), "w") as f:
+            for item in react_l:
+                f.write(json.dumps(item) + "\n")
 
     if storage.setting.get_value("searching_setting.inter.at1") is not None:
         # overwrite react_l with user's input

@@ -3,6 +3,10 @@ import aRST.script.initialization as storage
 from aRST.script.exploration.assign_reaction import SingleCycleSearch
 from aRST.script.spr import SPR,SDP
 from aRST.script.reactivity.print_stuff import *
+from aRST.script.head import print_jobhead
+from aRST.script.exploration.interA import *
+from aRST.script.exploration.intraA import *
+from aRST.script.exploration.intraD import *
 
 def show_afo(printnumber=10):
     reactants = storage.allstruc.reactants_ini
@@ -56,37 +60,24 @@ def show_afo(printnumber=10):
 
         printafo(status=2)
 
+    # assess interA reactivity
+    if len(reactants) > 1:
+        react_l = get_interA_react_l(reactants)
+        # write full react_l in file
+        with open(join(storage.setting.wd0, "react_l_interA"), "w") as f:
+            for item in react_l:
+                f.write(json.dumps(item) + "\n")
 
-    # # assess interA reactivity
-    # if len(reactants)>1:
-    #     print(f"Start doing reactivity assessment with given structues: ", reactants)
-    #     hydrogen = storage.setting.get_value("searching_setting.general.hydrogen", True)
-    #     halogen = storage.setting.get_value("searching_setting.general.halogen", True)
-    #     print(f"allow hydrogen atoms: {hydrogen}; allow halogen atoms: {halogen}")
-    #     spr = SPR(reactants,hydrogen,halogen)
-    #
-    #     for hadf,hbdf in zip(spr.HOAO_a,spr.HOAO_b):
-    #         hadf_sorted, hbdf_sorted = hadf.stack().nlargest(printnumber).reset_index(),\
-    #                                    hbdf.stack().nlargest(printnumber).reset_index()
-    #
-    #         HAat_index_l = hadf_sorted['level_0'].values
-    #         HAstruc_l = hadf_sorted['level_1'].values
-    #         HA_l = hadf_sorted.values
-    #
-    #         HBat_index_l = lbdf_sorted['level_0'].values
-    #         HBstruc_l = hbdf_sorted['level_1'].values
-    #         HB_l = hbdf_sorted.values
-    #
-    #         for i in range(min(len(HB_l),len(HA_l))):
-    #             # HA
-    #             struc_a = HAstruc_l[i]
-    #             at_a = HAat_index_l[i]
-    #             hoao_a = HA_l[i]
-    #
-    #             # HB
-    #             struc_b = HBstruc_l[i]
-    #             at_b = HBat_index_l[i]
-    #             hoao_b = HB_l[i]
+    # assess interA reactivity
+    react_l = get_intraA_react_l(reactants)
+    # write full react_l in file
+    with open(join(storage.setting.wd0, "react_l_intraA"), "w") as f:
+        for item in react_l:
+            f.write(json.dumps(item) + "\n")
 
-
-
+    # assess Disso reactivity
+    react_l = get_intraD_react_l(reactants,gaplim=3)
+    # write full react_l in file
+    with open(join(storage.setting.wd0, "react_l_disso"), "w") as f:
+        for item in react_l:
+            f.write(json.dumps(item) + "\n")

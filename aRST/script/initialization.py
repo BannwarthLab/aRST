@@ -4,7 +4,7 @@ import threading
 import os
 from os.path import join, exists
 from aRST.script.toolbox import create_folder, mydict, read_coord, get_strucinfo_from_path, write_xyz, get_all_keys
-from aRST.script.callsys import CallxTB, CallORCA
+from aRST.script.callsys import CallxTB, CallORCA,CallgXTB
 from aRST.script.check_input import checking_parameter, checking_env
 
 
@@ -161,7 +161,10 @@ class Allstruc:
                             (struc_info["constrain_l"], struc_info["ele_l"]))
 
         self.data.set_value(f"{strucid}.struc_info.energy.sp_gfn", struc_info["Esp_gfn"])
-        self.data.set_value(f"{strucid}.struc_info.energy.sp_dft", struc_info["Esp_orca"])
+        if "Esp_dft" in struc_info.keys():
+            self.data.set_value(f"{strucid}.struc_info.energy.sp_dft", struc_info["Esp_dft"])
+        else:
+            self.data.set_value(f"{strucid}.struc_info.energy.sp_gxtb", struc_info["Esp_gxtb"])
         # self.data.set_value(f"{strucid}.struc_info.energy.trv", struc_info["Etrv_gfn"])
         # self.data.set_value(f"{strucid}.struc_info.energy.solv", struc_info["Esolv_gfn"])
 
@@ -214,17 +217,33 @@ class Allstruc:
             if staus != 0:
                 print(f'Warning: struc {strucid} sp at xtb failed, continue anyhow')
 
-        ## orca sp
-        sp_orca = None
-        if not (forcedftopt or Setting.get_value("orca_setting.dftopt", False)) or coord.shape[0] == 1:
+        ## DFT or gxtb sp
+        sp_dft = None
+        if Setting.get_value("searching_setting.singlepoint.method", "gxtb") =="dft":
+            if not (forcedftopt or Setting.get_value("orca_setting.dftopt", False)) or coord.shape[0] == 1:
+                if not wd0:
+                    wd = create_folder(join(Setting.strucwd, strucid, "orca"))
+                else:
+                    wd = create_folder(join(wd0, "orca"))
+                write_xyz(coord, "coord")
+                staus = CallORCA(wd, custom_settings={"charge": charge, "m": m}).call()
+                if staus != 0:
+                    print(f'Warning: struc {strucid} sp at ORCA failed, continue anyhow')
+        else:
+            # gxtb sp
             if not wd0:
-                wd = create_folder(join(Setting.strucwd, strucid, "orca"))
+                wd = create_folder(join(Setting.strucwd, strucid, "gxtb"))
             else:
-                wd = create_folder(join(wd0, "orca"))
+                wd = create_folder(join(wd0, "gxtb"))
             write_xyz(coord, "coord")
-            staus = CallORCA(wd, custom_settings={"charge": charge, "m": m}).call()
-            if staus != 0:
-                print(f'Warning: struc {strucid} sp at ORCA failed, continue anyhow')
+            par = CallgXTB(wd, custom_settings={"charge": charge, "uhf": m - 1})
+            # write .charg and .uhf file
+            with open(".CHRG","w") as file:
+                file.write(f"{charge}\n")
+            with open(".UHF", "w") as file:
+                file.write(f"{m - 1}\n")
+            status = par.sp(rungfn=False)
+
 
         # #########  TRV  #########
         # wd = create_folder(join(Setting.strucwd, strucid, "xtb", "trv"))

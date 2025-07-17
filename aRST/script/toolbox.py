@@ -109,7 +109,8 @@ def read_atcharge(atchargepath):
 
 
 def get_strucinfo_from_path(strucid_path):
-    from aRST.script.callsys import CallxTB, CallORCA, CallMolBar
+    from aRST.script.callsys import CallxTB, CallORCA, CallMolBar,CallgXTB
+    import aRST.script.initialization as storage
     # determine coord
     if exists(join(strucid_path, "orca", "orca.xyz")):
         coord = read_coord(join(strucid_path, "orca", "orca.xyz"))
@@ -117,6 +118,8 @@ def get_strucinfo_from_path(strucid_path):
         coord = read_coord(join(strucid_path, "orca", "coord.xyz"))
     elif exists(join(strucid_path, "xtb", "xtbopt.xyz")):
         coord = read_coord(join(strucid_path, "orca", "xtbopt.xyz"))
+    elif exists(join(strucid_path, "gxtb", "gxtb.out")):
+        coord = read_coord(join(strucid_path, "gxtb", "coord.xyz"))
 
     # at least it should have xtb sp res
 
@@ -132,18 +135,26 @@ def get_strucinfo_from_path(strucid_path):
     atcharge = read_atcharge(join(strucid_path, "charges"))
     Esp_gfn = xtb.get_Esp_from_out()
     # Etrv_gfn = CallxTB(join(strucid_path, "xtb", "trv")).get_Etrv()
-    Esolv_gfn = CallxTB(join(strucid_path, "xtb", "solv")).get_Esolv()
+    # Esolv_gfn = CallxTB(join(strucid_path, "xtb", "solv")).get_Esolv()
     constrain_l, ele_l = xtb.get_topo()
-
-    Esp_orca = CallORCA(join(strucid_path, "orca")).get_energy()
-    m = CallORCA(join(strucid_path, "orca")).get_m()
-
     mb = CallMolBar(coord).get_mb()
-    return {"coord": coord, "nel": nel, "m": m, "c": charge, "atcharge": atcharge,
-            "Esp_gfn": Esp_gfn,
-            # "Etrv_gfn": Etrv_gfn,
-            # "Esolv_gfn": Esolv_gfn,
-            "constrain_l": constrain_l, "ele_l": ele_l, "Esp_orca": Esp_orca, "mb": mb}
+
+    if storage.setting.get_value("searching_setting.singlepoint.method") =="dft":
+        Esp_dft = CallORCA(join(strucid_path, "orca")).get_energy()
+        m = CallORCA(join(strucid_path, "orca")).get_m()
+        return {"coord": coord, "nel": nel, "m": m, "c": charge, "atcharge": atcharge,
+                "Esp_gfn": Esp_gfn,
+                # "Etrv_gfn": Etrv_gfn,
+                # "Esolv_gfn": Esolv_gfn,
+                "constrain_l": constrain_l, "ele_l": ele_l, "Esp_dft": Esp_dft, "mb": mb}
+    else:
+        Esp_gxtb = CallgXTB(join(strucid_path, "gxtb")).get_Esp_from_out()
+        m = 1 if nel%2==0 else 2
+        return {"coord": coord, "nel": nel, "m": m, "c": charge, "atcharge": atcharge,
+                "Esp_gfn": Esp_gfn,
+                # "Etrv_gfn": Etrv_gfn,
+                # "Esolv_gfn": Esolv_gfn,
+                "constrain_l": constrain_l, "ele_l": ele_l, "Esp_gxtb": Esp_gxtb, "mb": mb}
 
 
 def create_folder(wd):

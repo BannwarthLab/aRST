@@ -13,7 +13,7 @@ import aRST.script.initialization as storage
 from aRST.script.head import print_simulation
 
 
-def get_intraD_react_l(reactants0):
+def get_intraD_react_l(reactants0,gaplim=1.2):
     if storage.setting.get_value("searching_setting.disso.at1") is not None:
         # predifined reaction, used in one cycle
         at1 = storage.setting.get_value("searching_setting.disso.at1")
@@ -25,7 +25,7 @@ def get_intraD_react_l(reactants0):
         react_l = SDP(reactants0,
                       storage.setting.get_value("searching_setting.general.hydrogen", True),
                       storage.setting.get_value("searching_setting.general.halogen", True),
-                      ).build_react_l(storage.setting.get_value("searching_setting.disso.mode", 0))
+                      ).build_react_l(storage.setting.get_value("searching_setting.disso.mode", 0),gaplim=gaplim)
     cut = 2 if storage.setting.get_value("searching_setting.disso.concerted_pair", False) else 1
     for item in react_l:
         pairs = item["at_combi"][:cut]

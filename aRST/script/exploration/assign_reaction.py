@@ -6,7 +6,7 @@ import numpy as np
 
 from aRST.script.toolbox import read_afo_csv, FragmentAnalyzer, get_random_folder_name
 from aRST.script.exploration.prepare_afo import getAFO
-from aRST.script.callsys import CallORCA, CallMolBar
+from aRST.script.callsys import CallORCA, CallMolBar,CallgXTB
 from aRST.script.exploration.interA import *
 from aRST.script.exploration.intraA import *
 from aRST.script.exploration.intraD import *
@@ -334,27 +334,52 @@ class SingleCycleSearch:
             nel = frag["nel"]
             caltyp = "SP OPT" if coord.shape[0] > 1 and dftopt else "SP"
             m_l = [1, 3] if nel % 2 == 0 else [2]
-            sp_dft, m_fin, coord_fin = np.inf, m_l[0], coord  # initial setting in case DFT sp failed
-            for m in m_l:
-                wd = create_folder(
-                    join(storage.setting.bufferwd, frag['strucwd'], "orca", str(m)))
-                write_xyz(coord, "coord")
-                orcaprocess = CallORCA(wd,
-                                       custom_settings={"charge": charge,
-                                                        "m": m,
-                                                        "caltyp": caltyp})
-                staus = orcaprocess.call()
-                if staus == 0:
-                    energy = orcaprocess.get_energy()
-                    energy = np.inf if energy is None else energy  # jump when not converge
-                    if sp_dft is None or energy < sp_dft:
-                        sp_dft = energy
-                        m_fin = m
-                        coord_fin = read_coord(join(wd, "orca.xyz")) if exists(join(wd, "orca.xyz")) else coord
+            if storage.setting.get_value("searching_setting.singlepoint.method") == "dft":
+                sp_dft, m_fin, coord_fin = np.inf, m_l[0], coord  # initial setting in case DFT sp failed
+                for m in m_l:
+                    wd = create_folder(
+                        join(storage.setting.bufferwd, frag['strucwd'], "orca", str(m)))
+                    write_xyz(coord, "coord")
+                    orcaprocess = CallORCA(wd,
+                                           custom_settings={"charge": charge,
+                                                            "m": m,
+                                                            "caltyp": caltyp})
+                    staus = orcaprocess.call()
+                    if staus == 0:
+                        energy = orcaprocess.get_energy()
+                        energy = np.inf if energy is None else energy  # jump when not converge
+                        if sp_dft is None or energy < sp_dft:
+                            sp_dft = energy
+                            m_fin = m
+                            coord_fin = read_coord(join(wd, "orca.xyz")) if exists(join(wd, "orca.xyz")) else coord
 
-            frag["Esp_orca"] = sp_dft
-            frag["m"] = m_fin
-            frag["coord"] = coord_fin
+                frag["Esp_dft"] = sp_dft
+                frag["m"] = m_fin
+                frag["coord"] = coord_fin
+            else:
+                sp_gxtb, m_fin, coord_fin = np.inf, m_l[0], coord  # initial setting in case DFT sp failed
+                for m in m_l:
+                    wd = create_folder(
+                        join(storage.setting.bufferwd, frag['strucwd'], "gxtb", str(m)))
+                    write_xyz(coord, "coord")
+                    gxtbprocess = CallgXTB(wd,custom_settings={"charge": charge, "uhf":m-1})
+                    with open(".CHRG", "w") as file:
+                        file.write(f"{charge}\n")
+                    with open(".UHF", "w") as file:
+                        file.write(f"{m - 1}\n")
+                    staus = gxtbprocess.sp(rungfn=False)
+                    if staus == 0:
+                        energy = gxtbprocess.get_Esp_from_out()
+                        energy = np.inf if energy is None else energy  # jump when not converge
+                        if sp_gxtb is None or energy < sp_gxtb:
+                            sp_gxtb = energy
+                            m_fin = m
+                            coord_fin =  coord
+
+                frag["Esp_gxtb"] = sp_gxtb
+                frag["m"] = m_fin
+                frag["coord"] = coord_fin
+
 
         ######## GFN TRV & SOLV ########
         for frag in tmp_path_l[1]:
@@ -431,8 +456,12 @@ class SingleCycleSearch:
         else:
             info_temp["bond_changed"] = True
             # reactants != products; check if path guess thermodynamic assessable
-            E_r = [storage.allstruc.get_value(f"{i}.struc_info.energy.sp_dft") for i in reactants]
-            E_p = [i["Esp_orca"] for i in tmp_path_l[1]]
+            if "Esp_dft" in tmp_path_l[1][0].keys():
+                E_p = [i["Esp_dft"] for i in tmp_path_l[1]]
+                E_r = [storage.allstruc.get_value(f"{i}.struc_info.energy.sp_dft") for i in reactants]
+            else:
+                E_p = [i["Esp_gxtb"] for i in tmp_path_l[1]]
+                E_r = [storage.allstruc.get_value(f"{i}.struc_info.energy.sp_gxtb") for i in reactants]
             if not any([_ is None for _ in E_r]) and not any([_ is None for _ in E_r]):
                 E_rxn = sum(E_p) - sum(E_r)
             else:
@@ -561,7 +590,10 @@ class SingleCycleSearch:
         storage.allstruc.set_value(f"{newid}.struc_info.general.mb", CallMolBar(strucinfo_d["coord"]).get_mb())
         storage.allstruc.set_value(f"{newid}.struc_info.general.atcharge", strucinfo_d["atomic_charge"])
         storage.allstruc.set_value(f"{newid}.struc_info.general.atomic_connection", strucinfo_d["atomic_connection"])
-        storage.allstruc.set_value(f"{newid}.struc_info.energy.sp_dft", strucinfo_d["Esp_orca"])
+        if "Esp_dft" in strucinfo_d.keys():
+            storage.allstruc.set_value(f"{newid}.struc_info.energy.sp_dft", strucinfo_d["Esp_dft"])
+        else:
+            storage.allstruc.set_value(f"{newid}.struc_info.energy.sp_gxtb", strucinfo_d["Esp_gxtb"])
         # storage.allstruc.set_value(f"{newid}.struc_info.energy.trv", strucinfo_d["Etrv_gfn"])
         # storage.allstruc.set_value(f"{newid}.struc_info.energy.solv", strucinfo_d["Esolv_gfn"])
 
