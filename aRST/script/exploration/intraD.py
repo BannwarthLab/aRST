@@ -18,9 +18,9 @@ def get_intraD_react_l(reactants0,gaplim=1.2):
         # predifined reaction, used in one cycle
         at1 = storage.setting.get_value("searching_setting.disso.at1")
         at2 = storage.setting.get_value("searching_setting.disso.at2")
-        react_l = {"struc": [reactants0[0]],
+        react_l = [{"struc": [reactants0[0]],
                    "at_combi": [[str(at1), str(at2)]],
-                   "gap": 0}
+                   "gap": 0}]
     else:
         react_l = SDP(reactants0,
                       storage.setting.get_value("searching_setting.general.hydrogen", True),
@@ -34,7 +34,7 @@ def get_intraD_react_l(reactants0,gaplim=1.2):
 
 
 def check_scan_uhf_D(entry):
-    struc = entry["struc"]
+    struc = entry["struc"][0]
     nel = storage.allstruc.get_value(f"{struc}.struc_info.general.nel")
     if nel % 2 == 0:
         return [0, 2]
@@ -44,7 +44,7 @@ def check_scan_uhf_D(entry):
 
 def determine_pulling_distance(entry):
     d = storage.setting.get_value("searching_setting.disso.pulling_distance", "auto")
-    struc = entry["struc"]
+    struc = entry["struc"][0]
     coord = storage.allstruc.get_value(f"{struc}.struc_info.general.coord")
     at_l = entry["at_combi"]
 
