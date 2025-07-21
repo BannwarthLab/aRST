@@ -112,19 +112,16 @@ def get_strucinfo_from_path(strucid_path):
     from aRST.script.callsys import CallxTB, CallORCA, CallMolBar,CallgXTB
     import aRST.script.initialization as storage
     # determine coord
+    # dft opt geom > gfn2 opt geom > input geom
     if exists(join(strucid_path, "orca", "orca.xyz")):
         coord = read_coord(join(strucid_path, "orca", "orca.xyz"))
-    elif exists(join(strucid_path, "orca", "coord.xyz")):
-        coord = read_coord(join(strucid_path, "orca", "coord.xyz"))
     elif exists(join(strucid_path, "xtb", "xtbopt.xyz")):
-        coord = read_coord(join(strucid_path, "orca", "xtbopt.xyz"))
-    elif exists(join(strucid_path, "gxtb", "gxtb.out")):
+        coord = read_coord(join(strucid_path, "xtb", "xtbopt.xyz"))
+    # find sp coord
+    elif exists(join(strucid_path, "orca", "coord.xyz")): # dft sp
+        coord = read_coord(join(strucid_path, "orca", "coord.xyz"))
+    elif exists(join(strucid_path, "gxtb", "coord.xyz")): # gxtb sp
         coord = read_coord(join(strucid_path, "gxtb", "coord.xyz"))
-
-    # at least it should have xtb sp res
-
-    # elif exists(join(strucid_path, "xtb", "coord.xyz")):
-    #     coord = read_coord(join(strucid_path, "orca", "coord.xyz"))
     else:
         raise ValueError(f"{strucid_path} strucinfo doesn't exist!")
 
