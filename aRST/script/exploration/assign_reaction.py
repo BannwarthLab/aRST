@@ -6,7 +6,7 @@ import numpy as np
 
 from aRST.script.toolbox import read_afo_csv, FragmentAnalyzer, get_random_folder_name
 from aRST.script.exploration.prepare_afo import getAFO
-from aRST.script.callsys import CallORCA, CallMolBar,CallgXTB
+from aRST.script.callsys import CallORCA, CallMolBar, CallgXTB
 from aRST.script.exploration.interA import *
 from aRST.script.exploration.intraA import *
 from aRST.script.exploration.intraD import *
@@ -35,7 +35,7 @@ class SingleCycleSearch:
         else:
             return True
 
-    def prepare_AFO(self,afosubwd=None):
+    def prepare_AFO(self, afosubwd=None):
         for struc in self.reactants:
             if not self.check_featrues(struc):
                 coord = storage.allstruc.get_value(f"{struc}.struc_info.general.coord")
@@ -111,7 +111,9 @@ class SingleCycleSearch:
         output_interA, output_D, output_intraA = {}, {}, {}
 
         ## interA
-        if storage.setting.get_value("searching_setting.inter", 1) and len(self.reactants) > 1:
+        if len(self.reactants) > 1 and (
+                storage.setting.get_value("searching_setting.inter.number", 0) > 1 or storage.setting.get_value(
+                "searching_setting.inter.at1")):
             print()
             print_jobhead("Bimolecular Association")
             react_l = get_interA_react_l(self.reactants)
@@ -133,7 +135,8 @@ class SingleCycleSearch:
                         output_interA.update(res)
 
         ## intraA
-        if storage.setting.get_value("searching_setting.intra"):
+        if storage.setting.get_value("searching_setting.intra.number", 0) > 0 or \
+            storage.setting.get_value("searching_setting.intra.at1"):
             print()
             print_jobhead("Intramolecular Association")
             # Testing if depotonation is energetically favorable
@@ -166,7 +169,8 @@ class SingleCycleSearch:
                         output_intraA.update(res)
 
         ## intraD
-        if storage.setting.get_value("searching_setting.disso"):
+        if storage.setting.get_value("searching_setting.disso.number", 0) > 0 or \
+                storage.setting.get_value("searching_setting.disso.at1"):
             print()
             print_jobhead("Dissociation")
             # Testing if depotonation is energetically favorable
@@ -178,7 +182,7 @@ class SingleCycleSearch:
             elif storage.setting.get_value("searching_setting.disso.potonation", False):
                 # Testing if depotonation is energetically favorable
                 from aRST.script.exploration.depotonation import updating_reacntans
-                updating_reacntans(self.reactants,job="potonation")
+                updating_reacntans(self.reactants, job="potonation")
                 self.prepare_AFO(afosubwd="potonation")
             react_l = get_intraD_react_l(self.reactants)
             scanmode = storage.setting.get_value("searching_setting.general.scan_mode", 0)
@@ -255,7 +259,7 @@ class SingleCycleSearch:
                                     "charge": charge,
                                     "nel": nel,
                                     "Esp_gfn": Esp_gfn,
-                                    "strucwd": key+"/"+random_name,
+                                    "strucwd": key + "/" + random_name,
                                     "atomic_connection": ([], [str(coord.iloc[0, 0])])})
 
         def _handle_multi_at_geom(coord, charge, nel):
@@ -291,7 +295,7 @@ class SingleCycleSearch:
                                         "charge": charge,
                                         "nel": nel,
                                         "Esp_gfn": Esp_gfn,
-                                        "strucwd": key+"/"+random_name,
+                                        "strucwd": key + "/" + random_name,
                                         "atomic_connection": (constrain_l, ele_l)})
 
         _trate_more_geoms_in_endxyz(frag_data)
@@ -362,7 +366,7 @@ class SingleCycleSearch:
                     wd = create_folder(
                         join(storage.setting.bufferwd, frag['strucwd'], "gxtb", str(m)))
                     write_xyz(coord, "coord")
-                    gxtbprocess = CallgXTB(wd,custom_settings={"charge": charge, "uhf":m-1})
+                    gxtbprocess = CallgXTB(wd, custom_settings={"charge": charge, "uhf": m - 1})
                     with open(".CHRG", "w") as file:
                         file.write(f"{charge}\n")
                     with open(".UHF", "w") as file:
@@ -374,12 +378,11 @@ class SingleCycleSearch:
                         if sp_gxtb is None or energy < sp_gxtb:
                             sp_gxtb = energy
                             m_fin = m
-                            coord_fin =  coord
+                            coord_fin = coord
 
                 frag["Esp_gxtb"] = sp_gxtb
                 frag["m"] = m_fin
                 frag["coord"] = coord_fin
-
 
         ######## GFN TRV & SOLV ########
         for frag in tmp_path_l[1]:
@@ -407,7 +410,7 @@ class SingleCycleSearch:
             frag["Esolv_gfn"] = esolv
         return tmp_path_l
 
-    def evalueate_path(self, key, tmp_path_l, layer=0,linkoldnode=True,printdetail=True):
+    def evalueate_path(self, key, tmp_path_l, layer=0, linkoldnode=True, printdetail=True):
         atl = tmp_path_l[0]["at_l"]
         simuhf = tmp_path_l[0]["simuhf"]
         # [{reactants info},[{P1}, {P2}],products_mbl, bond_changed_stuats]
@@ -449,7 +452,7 @@ class SingleCycleSearch:
             # add new node with backward edge
             lastnode = rxnnetwork.get_lastnode_from_scanwd(key)
             edge_l = [lastnode]
-            rxnnetwork.add_newnode(info=info_temp, edge_l=edge_l,linkoldnode=linkoldnode)
+            rxnnetwork.add_newnode(info=info_temp, edge_l=edge_l, linkoldnode=linkoldnode)
             if printdetail:
                 print_simulation_details(status=1, key=key, atl=atl, sim_uhf=simuhf)
 
@@ -480,10 +483,10 @@ class SingleCycleSearch:
                 info_temp["products"] = products  #
                 # Erxn too large, add new node without determining products mb
 
-                rxnid = rxnnetwork.add_newnode(info=info_temp,linkoldnode=linkoldnode)
+                rxnid = rxnnetwork.add_newnode(info=info_temp, linkoldnode=linkoldnode)
                 if printdetail:
                     print_simulation_details(status=4, key=key, atl=atl,
-                                         sim_uhf=simuhf, otherkey=rxnid, E_sp=E_rxn_kcal)
+                                             sim_uhf=simuhf, otherkey=rxnid, E_sp=E_rxn_kcal)
 
             else:
                 info_temp["therdy_allow"] = True
@@ -522,12 +525,12 @@ class SingleCycleSearch:
                                 refnode_index = rxnnetwork.get_node_index_form_nodeid(node)
                                 if printdetail:
                                     print_simulation_details(status=2, key=key, atl=atl,
-                                                         sim_uhf=simuhf, otherkey=refnode_index)
+                                                             sim_uhf=simuhf, otherkey=refnode_index)
                             else:
                                 refnode_index = rxnnetwork.get_node_index_form_nodeid(node)
                                 if printdetail:
                                     print_simulation_details(status=3, key=key, atl=atl, sim_uhf=simuhf,
-                                                         otherkey=refnode_index)
+                                                             otherkey=refnode_index)
                             rxnexist = True
                             break
                     if not rxnexist:
@@ -549,13 +552,13 @@ class SingleCycleSearch:
                                 newstrucid = self.add_newstruc(tmp_path_l[1][i])
                                 products.append(newstrucid)
                         info_temp["products"] = products
-                        newnode_index = rxnnetwork.add_newnode(info=info_temp,linkoldnode=linkoldnode)
+                        newnode_index = rxnnetwork.add_newnode(info=info_temp, linkoldnode=linkoldnode)
                         if printdetail:
                             print_simulation_details(status=4, key=key, atl=atl, sim_uhf=simuhf, otherkey=newnode_index,
-                                                 E_sp=E_rxn_kcal)
+                                                     E_sp=E_rxn_kcal)
                     else:
                         info_temp["products"] = products_ref
-                        newnode_index = rxnnetwork.add_newnode(info=info_temp,linkoldnode=linkoldnode)
+                        newnode_index = rxnnetwork.add_newnode(info=info_temp, linkoldnode=linkoldnode)
 
                 else:
                     # can't identify, add as new node anyhow
@@ -574,10 +577,10 @@ class SingleCycleSearch:
                             newstrucid = self.add_newstruc(tmp_path_l[1][i])
                             products.append(newstrucid)
                     info_temp["products"] = products
-                    newnode_index = rxnnetwork.add_newnode(info=info_temp,linkoldnode=linkoldnode)
+                    newnode_index = rxnnetwork.add_newnode(info=info_temp, linkoldnode=linkoldnode)
                     if printdetail:
                         print_simulation_details(status=6, key=key, atl=atl, sim_uhf=simuhf, otherkey=newnode_index,
-                                             E_sp=E_rxn_kcal)
+                                                 E_sp=E_rxn_kcal)
 
     @staticmethod
     def add_newstruc(strucinfo_d):
@@ -668,6 +671,6 @@ def ReactionSearch(step=0):
             step += 1
     # clean up buffer_struc
     if exists(storage.setting.bufferwd) and not (
-    storage.setting.get_value("searching_setting.general.keepbuffstruc", False)):
+            storage.setting.get_value("searching_setting.general.keepbuffstruc", False)):
         import shutil
         shutil.rmtree(storage.setting.bufferwd, ignore_errors=True)
