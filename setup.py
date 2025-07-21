@@ -4,7 +4,7 @@ def read(fname):
     return open(os.path.join(os.path.dirname(__file__), fname), encoding='utf-8').read()
 setup(
     name = "aRST-chem",
-    version = "2.0.3",
+    version = "2.1.0",
     author = "Ying Chen, Christoph Bannwarth",
     author_email = "ying.chen@pc.rwth-aachen.de",
     description = ("an Automated Reaction Search Tool"),
