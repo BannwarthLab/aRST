@@ -111,7 +111,7 @@ class SingleCycleSearch:
         output_interA, output_D, output_intraA = {}, {}, {}
 
         ## interA
-        if storage.setting.get_value("searching_setting.inter", 1) and len(self.reactants) > 1:
+        if storage.setting.get_value("searching_setting.inter.number", 0)>0 and len(self.reactants) > 1:
             print()
             print_jobhead("Bimolecular Association")
             react_l = get_interA_react_l(self.reactants)
@@ -133,7 +133,7 @@ class SingleCycleSearch:
                         output_interA.update(res)
 
         ## intraA
-        if storage.setting.get_value("searching_setting.intra"):
+        if storage.setting.get_value("searching_setting.intra.number",0)>0:
             print()
             print_jobhead("Intramolecular Association")
             # Testing if depotonation is energetically favorable
@@ -166,7 +166,7 @@ class SingleCycleSearch:
                         output_intraA.update(res)
 
         ## intraD
-        if storage.setting.get_value("searching_setting.disso"):
+        if storage.setting.get_value("searching_setting.disso.number",0)>0:
             print()
             print_jobhead("Dissociation")
             # Testing if depotonation is energetically favorable
