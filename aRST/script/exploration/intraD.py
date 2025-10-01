@@ -10,31 +10,47 @@ from aRST.script.geom import Coord
 from aRST.script.callsys import CallxTB
 from aRST.script.do_scan import get_endxyz_from_mb
 import aRST.script.initialization as storage
-from aRST.script.head import print_simulation
+from aRST.script.head import print_simulation,print_react_l
 
 
-def get_intraD_react_l(reactants0,gaplim=1.2):
-    if storage.setting.get_value("searching_setting.disso.at1") is not None:
-        # predifined reaction, used in one cycle
-        at1 = storage.setting.get_value("searching_setting.disso.at1")
-        at2 = storage.setting.get_value("searching_setting.disso.at2")
-        react_l = [{"struc": [reactants0[0]],
-                   "at_combi": [[str(at1), str(at2)]],
-                   "gap": 0}]
-    else:
-        react_l = SDP(reactants0,
-                      storage.setting.get_value("searching_setting.general.hydrogen", True),
-                      storage.setting.get_value("searching_setting.general.halogen", True),
-                      ).build_react_l(storage.setting.get_value("searching_setting.disso.mode", 0),gaplim=gaplim)
+def get_intraD_react_l(reactants0,gaplim=1.2,printall=True):
+    react_l = SDP(reactants0,
+                  storage.setting.get_value("searching_setting.general.hydrogen", True),
+                  storage.setting.get_value("searching_setting.general.halogen", True),
+                  ).build_react_l(storage.setting.get_value("searching_setting.disso.mode", 0), gaplim=gaplim)
     cut = 2 if storage.setting.get_value("searching_setting.disso.concerted_pair", False) else 1
     for item in react_l:
         pairs = item["at_combi"][:cut]
         item["at_combi"] = pairs
+
+    if printall:
+        print(react_l)
+        print_react_l(reactants0, react_l, rtype="intraD")
+        # write full react_l in file
+        with open(join(storage.setting.wd0, "react_l"), "w") as f:
+            for item in react_l:
+                f.write(json.dumps(item) + "\n")
+
+    if storage.setting.get_value("searching_setting.disso.at1") is not None:
+        # predifined reaction, used in one cycle
+        at1 = storage.setting.get_value("searching_setting.disso.at1")
+        at2 = storage.setting.get_value("searching_setting.disso.at2")
+        if storage.setting.get_value("searching_setting.disso.at3") is not None:
+            at3 = storage.setting.get_value("searching_setting.disso.at3")
+            at4 = storage.setting.get_value("searching_setting.disso.at4")
+            react_l = [{"struc": reactants0[0],
+                        "at_combi": [[str(at1), str(at2)], [str(at3), str(at4)]],
+                        "gap": 0}]
+            storage.setting.set_value("searching_setting.disso.concerted_pair", True)
+        else:
+            react_l = [{"struc": reactants0[0],
+                       "at_combi": [[str(at1), str(at2)]],
+                       "gap": 0}]
     return react_l
 
 
 def check_scan_uhf_D(entry):
-    struc = entry["struc"][0]
+    struc = entry["struc"]
     nel = storage.allstruc.get_value(f"{struc}.struc_info.general.nel")
     if nel % 2 == 0:
         return [0, 2]
@@ -44,7 +60,7 @@ def check_scan_uhf_D(entry):
 
 def determine_pulling_distance(entry):
     d = storage.setting.get_value("searching_setting.disso.pulling_distance", "auto")
-    struc = entry["struc"][0]
+    struc = entry["struc"]
     coord = storage.allstruc.get_value(f"{struc}.struc_info.general.coord")
     at_l = entry["at_combi"]
 
@@ -167,7 +183,7 @@ def dissombff(reactants0, entry, reactionpath, count=0):
         scan_wd = join(storage.setting.scanwd, f"{reactionpath}_{count}")
         create_folder(scan_wd)
 
-        struc = entry["struc"][0]
+        struc = entry["struc"]
         coord = storage.allstruc.get_value(f"{struc}.struc_info.general.coord")
         write_xyz(coord, "coord")
         at_l = entry["at_combi"]

@@ -50,7 +50,7 @@ def get_intraA_react_l(reactants0,printall=True):
 
 
 def check_scan_uhf_intraA(entry):
-    struc = entry["struc"][0]
+    struc = entry["struc"]
     nel = storage.allstruc.get_value(f"{struc}.struc_info.general.nel")
     if nel % 2 == 0:
         return [0, 2]
@@ -65,7 +65,7 @@ def intraxtbscan(reactants0, entry, reactionpath, count=0):
         scan_wd = join(storage.setting.scanwd, f"{reactionpath}_{count}")
         create_folder(scan_wd)
 
-        struc = entry["struc"][0]
+        struc = entry["struc"]
         coord = storage.allstruc.get_value(f"{struc}.struc_info.general.coord")
         write_xyz(coord, "coord")
         at_l = entry["at_combi"]
@@ -160,7 +160,7 @@ def intrarmbff(reactants0, entry, reactionpath, count=0):
         scan_wd = join(storage.setting.scanwd, f"{reactionpath}_{count}")
         create_folder(scan_wd)
 
-        struc = entry["struc"][0]
+        struc = entry["struc"]
         coord = storage.allstruc.get_value(f"{struc}.struc_info.general.coord")
         write_xyz(coord, "coord")
         at_l = entry["at_combi"]

@@ -156,7 +156,6 @@ def refine_react_l(react_l, identical_atom_d, intra=False):
                                 searchitem["LUAO"] = item["LUAO"]
                                 break
     else:
-        # todo
         for item in react_l:
             struc = item["struc_combi"][0]
             at1, at2 = item["at_combi"]
