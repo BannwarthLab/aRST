@@ -183,13 +183,22 @@ def print_react_l(reactants,react_l,rtype="interA"):
     print(side + f"Reactants: {reactants}")
     print(side + f"tot.atom pairs: {len(react_l)}")
     print(side + "-" * border_width)
-    print(side + f"{'struc pair':^{col1}} {'atom pair':^{col2}} {'AFO gap':^{col3}}")
+    if "gap" in react_l[0].keys():
+        gapkey = "gap"
+        print(side + f"{'struc pair':^{col1}} {'atom pair':^{col2}} {'AFO gap':^{col3}}")
+    elif "mbo" in react_l[0].keys():
+        gapkey="mbo"
+        print(side + f"{'struc pair':^{col1}} {'atom pair':^{col2}} {'MBO':^{col3}}")
+    else:
+        gapkey = "embo"
+        print(side + f"{'struc pair':^{col1}} {'atom pair':^{col2}} {'eMBO':^{col3}}")
     print(side + "-" * border_width)
+
     for entry in react_l[:20]:
         struc_l = entry["struc_combi"] \
             if "struc_combi" in entry.keys() else entry["struc"]
         at_l = entry["at_combi"]
-        gap = entry["gap"]
+        gap = entry[gapkey]
         strgap = f"{gap:.2f}" if isinstance(gap, float) else "np.inf"
         print(side + f"{str(struc_l).center(col1)}"
                      f"{str(at_l).center(col2)}"
