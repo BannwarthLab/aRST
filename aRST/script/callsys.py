@@ -760,20 +760,20 @@ class CallgXTB:
 
             self.cmd = mydict(command_d)
 
-    def xtbsubprocess(self, cmd_string, writeenergy=False):
-        with open(f'{self.wd}/xtb.out', 'w') as stdout_file, open(f'{self.wd}/xtb_err.out', 'w') as stderr_file:
-            p = subprocess.Popen(cmd_string, stdout=stdout_file, stderr=stderr_file, shell=True)
-            p.wait()
-            rc = p.returncode
-        if rc == 0 and writeenergy:
-            with open(f'{self.wd}/xtb.out', 'r') as f:
-                lines = f.readlines()
-                for line in reversed(lines):
-                    if 'TOTAL ENERGY' in line:
-                        with open(f'{self.wd}/ENERGY', 'w') as f2:
-                            f2.write(str(re.findall(r'\-?\d+\.?\d*', line)[0]))
-                        break
-        return rc
+    # def xtbsubprocess(self, cmd_string, writeenergy=False):
+    #     with open(f'{self.wd}/xtb.out', 'w') as stdout_file, open(f'{self.wd}/xtb_err.out', 'w') as stderr_file:
+    #         p = subprocess.Popen(cmd_string, stdout=stdout_file, stderr=stderr_file, shell=True)
+    #         p.wait()
+    #         rc = p.returncode
+    #     if rc == 0 and writeenergy:
+    #         with open(f'{self.wd}/xtb.out', 'r') as f:
+    #             lines = f.readlines()
+    #             for line in reversed(lines):
+    #                 if 'TOTAL ENERGY' in line:
+    #                     with open(f'{self.wd}/ENERGY', 'w') as f2:
+    #                         f2.write(str(re.findall(r'\-?\d+\.?\d*', line)[0]))
+    #                     break
+    #     return rc
 
     def gxtbsubprocess(self, cmd_string):
         with open(f'{self.wd}/gxtb.out', 'w') as stdout_file, open(f'{self.wd}/gxtb_err.out', 'w') as stderr_file:
@@ -782,29 +782,29 @@ class CallgXTB:
             rc = p.returncode
         return rc
 
-    def generate_XTBcmd_string(self, opt=False):
-        cmd_string = os.environ['XTB_BIN'] + " "
-        coordfn = self.cmd.get_value("coordfn")
-        if coordfn is None:
-            raise Exception(f"coord in {self.wd} can't find right coordfn name")
-        cmd_string += f"{coordfn}.xyz "
-        if opt:
-            optlevel = self.cmd.get_value("optlevel")
-            cmd_string += f"--opt {optlevel} " if optlevel else "--opt "
-
-        cmd_string += f"--{self.cmd.get_value('method')} " \
-            if self.cmd.get_value('method') else ""
-        cmd_string += f"-c {self.cmd.get_value('charge')} " \
-            if self.cmd.get_value('charge') else ""
-        cmd_string += f"--uhf {self.cmd.get_value('uhf')} " \
-            if self.cmd.get_value('uhf') else ""
-        cmd_string += f"--etemp {self.cmd.get_value('etemp')} " \
-            if self.cmd.get_value('etemp') else ""
-        cmd_string += f"--alpb {self.cmd.get_value('alpb')} " \
-            if self.cmd.get_value('alpb') else ""
-        cmd_string += f"{self.cmd.get_value('extracmd')} " \
-            if self.cmd.get_value('extracmd') else ""
-        return cmd_string
+    # def generate_XTBcmd_string(self, opt=False):
+    #     cmd_string = os.environ['XTB_BIN'] + " "
+    #     coordfn = self.cmd.get_value("coordfn")
+    #     if coordfn is None:
+    #         raise Exception(f"coord in {self.wd} can't find right coordfn name")
+    #     cmd_string += f"{coordfn}.xyz "
+    #     if opt:
+    #         optlevel = self.cmd.get_value("optlevel")
+    #         cmd_string += f"--opt {optlevel} " if optlevel else "--opt "
+    #
+    #     cmd_string += f"--{self.cmd.get_value('method')} " \
+    #         if self.cmd.get_value('method') else ""
+    #     cmd_string += f"-c {self.cmd.get_value('charge')} " \
+    #         if self.cmd.get_value('charge') else ""
+    #     cmd_string += f"--uhf {self.cmd.get_value('uhf')} " \
+    #         if self.cmd.get_value('uhf') else ""
+    #     cmd_string += f"--etemp {self.cmd.get_value('etemp')} " \
+    #         if self.cmd.get_value('etemp') else ""
+    #     cmd_string += f"--alpb {self.cmd.get_value('alpb')} " \
+    #         if self.cmd.get_value('alpb') else ""
+    #     cmd_string += f"{self.cmd.get_value('extracmd')} " \
+    #         if self.cmd.get_value('extracmd') else ""
+    #     return cmd_string
 
     def generate_gXTBcmd_string(self):
         cmd_string = os.environ['GXTB_BIN'] + " -c "
@@ -814,11 +814,14 @@ class CallgXTB:
         cmd_string += f"{coordfn}.xyz "
         return cmd_string
 
-    def sp(self, writeenergy=False,rungfn=True):
-        if rungfn:
-            # run gfn2 sp to get .charg and .uhf
-            cmd_string1 = self.generate_cmd_string(opt=False)
-            rc1 = self.xtbsubprocess(cmd_string, writeenergy)
+    def sp(self, writeenergy=False):
+        # write .charg and .uhf file
+        if self.cmd.get_value('charge') != 0:
+            with open(join(self.wd, ".charg"), 'w') as file:
+                file.write(str(self.cmd.get_value('charge')))
+        if self.cmd.get_value('uhf') != 0:
+            with open(join(self.wd, ".uhf"), 'w') as file:
+                file.write(str(self.cmd.get_value('uhf')))
 
         # run gxtb sp
         cmd_string2 = self.generate_gXTBcmd_string()
