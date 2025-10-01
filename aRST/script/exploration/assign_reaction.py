@@ -111,9 +111,7 @@ class SingleCycleSearch:
         output_interA, output_D, output_intraA = {}, {}, {}
 
         ## interA
-        if len(self.reactants) > 1 and (
-                storage.setting.get_value("searching_setting.inter.number", 0) > 1 or storage.setting.get_value(
-                "searching_setting.inter.at1")):
+        if len(self.reactants) > 1 and(storage.setting.get_value("searching_setting.inter.number", 0)>0 or storage.setting.get_value("searching_setting.inter.at1")):
             print()
             print_jobhead("Bimolecular Association")
             react_l = get_interA_react_l(self.reactants)
@@ -371,7 +369,7 @@ class SingleCycleSearch:
                         file.write(f"{charge}\n")
                     with open(".UHF", "w") as file:
                         file.write(f"{m - 1}\n")
-                    staus = gxtbprocess.sp(rungfn=False)
+                    staus = gxtbprocess.sp()
                     if staus == 0:
                         energy = gxtbprocess.get_Esp_from_out()
                         energy = np.inf if energy is None else energy  # jump when not converge
