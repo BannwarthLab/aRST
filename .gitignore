@@ -1,0 +1,19 @@
+# macOS
+.DS_Store
+**/.DS_Store
+
+# JetBrains
+.idea/
+*.iml
+
+# Python
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Archives / binaries (only if they are not source)
+*.zip
+*.tar.gz
