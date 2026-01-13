@@ -17,3 +17,9 @@ build/
 # Archives / binaries (only if they are not source)
 *.zip
 *.tar.gz
+
+
+ logo.png
+logo_2.png
+stda/
+vis/
