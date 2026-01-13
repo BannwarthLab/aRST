@@ -11,9 +11,9 @@ from aRST.script.callsys import CallxTB
 from aRST.script.do_scan import get_endxyz_from_mb
 import aRST.script.initialization as storage
 from aRST.script.head import print_simulation,print_react_l
+import copy
 
-
-def get_intraD_react_l(reactants0,gaplim=1.2,printall=True):
+def get_intraD_react_l(reactants0,gaplim=5,printall=True):
     react_l = SDP(reactants0,
                   storage.setting.get_value("searching_setting.general.hydrogen", True),
                   storage.setting.get_value("searching_setting.general.halogen", True),
@@ -24,7 +24,6 @@ def get_intraD_react_l(reactants0,gaplim=1.2,printall=True):
         item["at_combi"] = pairs
 
     if printall:
-        print(react_l)
         print_react_l(reactants0, react_l, rtype="intraD")
         # write full react_l in file
         with open(join(storage.setting.wd0, "react_l"), "w") as f:
@@ -198,7 +197,7 @@ def dissombff(reactants0, entry, reactionpath, count=0):
         with open(join(scan_wd, "atl"), "w") as f:
             f.write(json.dumps(entry))
         # get atomic connection
-        atom_connection, ele = storage.allstruc.get_value(f"{struc}.struc_info.general.atomic_connection")
+        atom_connection, ele = copy.deepcopy(storage.allstruc.get_value(f"{struc}.struc_info.general.atomic_connection"))
         with open(join(scan_wd, "newbond"), "w") as f:
             f.write("")
 
@@ -207,8 +206,9 @@ def dissombff(reactants0, entry, reactionpath, count=0):
             at2 = int(item[1])
             value = np.round(float(item[3]), 2)
             atom_connection.append({"atoms": [at1, at2], "value": value})
-            with open(join(scan_wd, "newbond"), "a+") as f:
-                f.write(json.dumps({"atoms": [at1, at2], "value": value}))
+        with open(join(scan_wd, "newbond"), "a+") as f:
+            for item in atom_connection:
+                f.write(json.dumps(item)+"\n")
         coordinates = [list(coord.loc[line, 1:4]) for line in range(coord.shape[0])]
 
         mbxyz0 = get_endxyz_from_mb(atom_connection, coordinates, ele, set_angles=False)

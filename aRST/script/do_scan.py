@@ -27,7 +27,7 @@ def build_push_l(coord, at_l, nat1=0,d=0.98):
 
     return push_l
 
-def get_endxyz_from_mb(constrain_l, coordinates, ele,set_angles=True,custum_constraints=None):
+def get_endxyz_from_mb(constrain_l, coordinates, ele,set_angles=True,custum_constraints=None,repulsion_charge=100):
     from molbar.idealize import idealize_structure_from_coordinates
     # Define constraints
     if custum_constraints is None:
@@ -38,7 +38,7 @@ def get_endxyz_from_mb(constrain_l, coordinates, ele,set_angles=True,custum_cons
             'set_angles': set_angles,
             'set_dihedrals': False,
             'set_repulsion': True,
-            'repulsion_charge': 100.0,
+            'repulsion_charge': repulsion_charge,
             'constraints': {'bonds': constrain_l}
         }
     else:

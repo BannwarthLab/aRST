@@ -79,6 +79,9 @@ required_input = {
         "dftopt": (bool, False),  # if doing DFT opt for product structure
         "solmode": (str, "ch2cl2"),  # CPCM solvation model, aRST only pass keyword to orca program
         "ncpu": (int, 1),  # parallel calculations for orca
+    },
+    "mbFF_setting":{# this settings go into bond formation process using harmonic FF
+        "repulsion_charge":((int, float), 100),  # charge used in the Coulomb term in a harmonic potential
     }
 }
 

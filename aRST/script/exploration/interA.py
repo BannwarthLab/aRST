@@ -14,7 +14,7 @@ from aRST.script.do_scan import build_push_l
 from aRST.script.do_scan import get_endxyz_from_mb
 import aRST.script.initialization as storage
 from aRST.script.head import print_simulation, print_react_l
-
+import copy
 
 def get_interA_react_l(reactants0,printall=True):
     react_l = SPR(reactants0,
@@ -205,9 +205,9 @@ def intermbff(reactants0, entry, reactionpath, count=0):
         with open(join(scan_wd, "atl"), "w") as f:
             f.write(json.dumps(entry))
         # get atomic connection
-        atom_connection1, ele1 = storage.allstruc.get_value(f"{struc1}.struc_info.general.atomic_connection")
-        atom_connection2, ele2 = storage.allstruc.get_value(f"{struc2}.struc_info.general.atomic_connection")
-        add_atom_connection2 = copy.deepcopy(atom_connection2)
+        atom_connection1, ele1 = copy.deepcopy(storage.allstruc.get_value(f"{struc1}.struc_info.general.atomic_connection"))
+        atom_connection2, ele2 = copy.deepcopy(storage.allstruc.get_value(f"{struc2}.struc_info.general.atomic_connection"))
+        add_atom_connection2 = atom_connection2
         for item in add_atom_connection2:
             for at in range(len(item["atoms"])):
                 item["atoms"][at] += nat_coord1
@@ -221,8 +221,9 @@ def intermbff(reactants0, entry, reactionpath, count=0):
             at1, at2 = int(item[0]), int(item[1])
             value = np.round(float(item[3]), 2)
             atom_connection.append({"atoms": [at1, at2], "value": value})
-            with open(join(scan_wd, "newbond"), "a+") as f:
-                f.write(json.dumps({"atoms": [at1, at2], "value": value}))
+        with open(join(scan_wd, "newbond"), "a+") as f:
+            for item in atom_connection:
+                f.write(json.dumps(item)+"\n")
         coordinates = [list(alignedcoord.loc[line, 1:4]) for line in range(alignedcoord.shape[0])]
         # mbxyz=get_endxyz_from_mb(atom_connection, coordinates, ele, set_angles=True)
         mbxyz0 = get_endxyz_from_mb(atom_connection, coordinates, ele, set_angles=False)

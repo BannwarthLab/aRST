@@ -11,6 +11,7 @@ from aRST.script.geom import Coord
 from aRST.script.callsys import CallxTB
 import aRST.script.initialization as storage
 from aRST.script.head import print_simulation,print_react_l
+import copy
 
 
 def get_intraA_react_l(reactants0,printall=True):
@@ -172,8 +173,8 @@ def intrarmbff(reactants0, entry, reactionpath, count=0):
 
         with open(join(scan_wd, "atl"), "w") as f:
             f.write(json.dumps(entry))
-        # get atomic connection
-        atom_connection, ele = storage.allstruc.get_value(f"{struc}.struc_info.general.atomic_connection")
+        # get atomic connection (COPY!)
+        atom_connection, ele = copy.deepcopy(storage.allstruc.get_value(f"{struc}.struc_info.general.atomic_connection"))
         with open(join(scan_wd, "newbond"), "w") as f:
             f.write("")
 
@@ -181,19 +182,43 @@ def intrarmbff(reactants0, entry, reactionpath, count=0):
             at1, at2 = int(item[0]), int(item[1])
             value = np.round(float(item[3]), 2)
             atom_connection.append({"atoms": [at1, at2], "value": value})
-            with open(join(scan_wd, "newbond"), "a+") as f:
-                f.write(json.dumps({"atoms": [at1, at2], "value": value}))
+
+        with open(join(scan_wd, "newbond"), "a+") as f:
+            for item in atom_connection:
+                f.write(json.dumps(item)+"\n")
+
         coordinates = [list(coord.loc[line, 1:4]) for line in range(coord.shape[0])]
 
-        mbxyz0 = get_endxyz_from_mb(atom_connection, coordinates, ele, set_angles=False)
-        write_xyz(mbxyz0, "coord_mb0")
-        mbxyz0 = pd.read_table(join(scan_wd, "coord_mb0.xyz"), header=None, skiprows=2, sep='\s+')
-        coordinates = [list(mbxyz0.loc[line, 1:4]) for line in range(mbxyz0.shape[0])]
-        mbxyz = get_endxyz_from_mb(atom_connection, coordinates, ele, set_angles=True)
+        # try first forcing set_angles=Ture to generate target bond connection
+        mb_test = get_endxyz_from_mb(atom_connection, coordinates, ele,
+                                     set_angles=True,
+                                     repulsion_charge=storage.setting.get_value("mbFF_setting.repulsion_charge",100))
+        connectd_trigger = True
+        for item in push_l:
+            at1, at2 = int(item[0]), int(item[1])
+            value = np.round(float(item[3]), 2)
+            bond_length = Coord(mb_test).get_ats_distance(at1-1, at2-1)
+            if bond_length>value*1.05:
+                connectd_trigger=False
+                break
+        if not connectd_trigger:
+            # otherwise do 2. FF constrain opt
+            mbxyz0 = get_endxyz_from_mb(atom_connection, coordinates, ele,
+                                     set_angles=False,
+                                     repulsion_charge=storage.setting.get_value("mbFF_setting.repulsion_charge",100))
+            write_xyz(mbxyz0, "coord_mb0")
+            mbxyz0 = pd.read_table(join(scan_wd, "coord_mb0.xyz"), header=None, skiprows=2, sep='\s+')
+            coordinates = [list(mbxyz0.loc[line, 1:4]) for line in range(mbxyz0.shape[0])]
+            mbxyz = get_endxyz_from_mb(atom_connection, coordinates, ele,
+                                     set_angles=True,
+                                     repulsion_charge=storage.setting.get_value("mbFF_setting.repulsion_charge",100))
+        else:
+            mbxyz = mb_test
         write_xyz(mbxyz, "coord_mb")
         status = CallxTB(scan_wd,
                          custom_settings={"charge": charge, "uhf": u, "coordfn": "coord_mb",
-                                          "k": storage.setting.get_value("xtb_setting.k", 1)}
+                                          "k": storage.setting.get_value("xtb_setting.k", 1),
+                                          "etemp": storage.setting.get_value("xtb_setting.scan_etemp", 4000)}
                          ).constrained_opt(newbond=atom_connection[-len(push_l):])
         if status == 0:
             endxyz = read_coord(join(scan_wd, "xtbopt.xyz"))
