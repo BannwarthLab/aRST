@@ -184,7 +184,7 @@ def write_xyz(xyz, name):
         f.write('\n')
         for i in range(nat):
             at, x, y, z = xyz.iloc[i, 0], xyz.iloc[i, 1], xyz.iloc[i, 2], xyz.iloc[i, 3]
-            f.write('%2s %12.4f %12.4f %12.4f\n' % (at, x, y, z))
+            f.write('%2s %12.8f %12.8f %12.8f\n' % (at, x, y, z))
         f.write('\n')
 
 

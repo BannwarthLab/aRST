@@ -58,42 +58,59 @@ def check_scan_uhf_D(entry):
 
 
 def determine_pulling_distance(entry):
-    d = storage.setting.get_value("searching_setting.disso.pulling_distance", "auto")
     struc = entry["struc"]
     coord = storage.allstruc.get_value(f"{struc}.struc_info.general.coord")
     at_l = entry["at_combi"]
 
+    # output
     push_l = []
-    if d == "auto":
-        if len(at_l) > 1:
-            for pair in at_l[:2]:
-                # storage.setting.get_value("searching_setting.disso.pulling_distance", 2) default as 2x covalent radii
-                at1, at2 = pair
-                d12 = np.round(Coord(coord).get_ats_distance(int(at1), int(at2)), 2)
-                dend = 5 * d12
-                # push_l requires atom index starting with 1
-                at1 = int(at1) + 1
-                at2 = int(at2) + 1
-                push_l.append([at1, at2, d12, dend])
 
-        else:
-            from aRST.script.toolbox import GraphAnalyzer
-            bo = storage.allstruc.get_value(f"{struc}.struc_info.reactivity.bo")
-            at1, at2 = at_l[0]
-            d12 = np.round(Coord(coord).get_ats_distance(int(at1), int(at2)), 2)
-            # exam topo structure of reactant
-            dend = GraphAnalyzer(coord, bo).get_t2t_path(int(at1), int(at2))
-            at1 = int(at1) + 1
-            at2 = int(at2) + 1
-            push_l.append([at1, at2, d12, dend])
-    else:
+    # now determine the definition of pulling distance
+    if storage.setting.get_value("searching_setting.disso.pulling_distance_add", None) is not None:
+        ## A: Defined as an adding distance to the current distance
+        add_dis = float(storage.setting.get_value("searching_setting.disso.pulling_distance_add", None))
         for pair in at_l[:2]:
-            at1, at2 = pair
-            d12 = np.round(Coord(coord).get_ats_distance(int(at1), int(at2)), 2)
-            dend = d * d12
-            at1 = int(at1) + 1
-            at2 = int(at2) + 1
-            push_l.append([at1, at2, d12, dend])
+            at1, at2 = map(int, pair)
+            dis_current = np.round(Coord(coord).get_ats_distance(at1, at2), 3)
+            dis_tar = dis_current+add_dis
+            at1_reindex = at1 + 1
+            at2_reindex = at2 + 1
+            push_l.append([at1_reindex, at2_reindex, dis_current, dis_tar])
+
+    else:
+        ## B: Defined as a multiple of the current distance
+        mul_dis = storage.setting.get_value("searching_setting.disso.pulling_distance", "auto")
+        if mul_dis=="auto":
+            ### Automatically set the pulling distance:
+            # If there is only one bond needs to be pulled,
+            # target pull distance will be set to the tot. bond length between this atom pair
+            # (benefit of ring-opening reaction for stretching molecules).
+            # Otherwise just pull to defalut setting (5x current covalent radii)
+            if len(at_l)==1:
+                from aRST.script.toolbox import GraphAnalyzer
+                at1, at2 = map(int, at_l[0])
+                bo = storage.allstruc.get_value(f"{struc}.struc_info.reactivity.bo")
+                dis_current = np.round(Coord(coord).get_ats_distance(at1, at2), 2)
+                terminals_length = GraphAnalyzer(coord, bo).get_t2t_path(at1, at2)
+                at1_reindex = at1 + 1
+                at2_reindex = at2 + 1
+                push_l.append([at1_reindex, at2_reindex, dis_current, terminals_length])
+            else:
+                for pair in at_l[:2]:
+                    at1, at2 = map(int, pair)
+                    dis_current = np.round(Coord(coord).get_ats_distance(at1, at2), 3)
+                    cradii_sum = float(Coord(coord).get_rr_distance(at1)) + float(Coord(coord).get_rr_distance(at2))
+                    at1_reindex = at1 + 1
+                    at2_reindex = at2 + 1
+                    push_l.append([at1_reindex, at2_reindex, dis_current, cradii_sum*5])
+        else:
+            for pair in at_l[:2]:
+                at1, at2 = map(int, pair)
+                dis_current = np.round(Coord(coord).get_ats_distance(at1, at2), 3)
+                cradii_sum = float(Coord(coord).get_rr_distance(at1) + Coord(coord).get_rr_distance(at2))
+                at1_reindex = at1 + 1
+                at2_reindex = at2 + 1
+                push_l.append([at1_reindex, at2_reindex, dis_current, cradii_sum * float(mul_dis)])
     return push_l
 
 

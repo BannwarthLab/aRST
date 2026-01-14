@@ -188,7 +188,8 @@ concerted_pair=False               # bool, if search for the second equivalent a
 [searching_setting.disso]
 number=1                           # int, number of the weakest bonds to be searched in one cycle
 concerted_pair=False               # bool, if search for the second equivalent atom pair with degenerated AFO gap (useful for Diels–Alder reactions)
-pulling_distance=2                 # int, scale of pulling distance
+pulling_distance=2                 # int, scale of pulling distance, e.g the selected reactive atomic pair will be pulled to twice the sum of its covalent radii.
+pulling_distance_add=2             # int, length of pulling distance, e.g the selected reactive atomic pair will be pulled to a distance of two angstroms longer than the current interatomic distance.
 depotonation=False                 # bool, if search for potential stable depotonated form of reactant structures in CREST
 potonation=False                   # bool, if search for potential stable potonated form of reactant structures in CREST
 ```
