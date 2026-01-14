@@ -13,11 +13,7 @@ import aRST.script.initialization as storage
 from aRST.script.head import print_simulation,print_react_l
 import copy
 
-<<<<<<< HEAD
-def get_intraD_react_l(reactants0,gaplim=1.2,printall=True):
-=======
 def get_intraD_react_l(reactants0,gaplim=5,printall=True):
->>>>>>> origin/feature/add-input-par-for-molbarFF
     react_l = SDP(reactants0,
                   storage.setting.get_value("searching_setting.general.hydrogen", True),
                   storage.setting.get_value("searching_setting.general.halogen", True),

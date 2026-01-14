@@ -223,11 +223,7 @@ def intermbff(reactants0, entry, reactionpath, count=0):
             atom_connection.append({"atoms": [at1, at2], "value": value})
         with open(join(scan_wd, "newbond"), "a+") as f:
             for item in atom_connection:
-<<<<<<< HEAD
-                f.write(json.dumps(f'{item}\n'))
-=======
                 f.write(json.dumps(item)+"\n")
->>>>>>> origin/feature/add-input-par-for-molbarFF
         coordinates = [list(alignedcoord.loc[line, 1:4]) for line in range(alignedcoord.shape[0])]
         # mbxyz=get_endxyz_from_mb(atom_connection, coordinates, ele, set_angles=True)
         mbxyz0 = get_endxyz_from_mb(atom_connection, coordinates, ele, set_angles=False)
