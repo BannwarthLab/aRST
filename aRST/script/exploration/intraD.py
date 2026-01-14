@@ -13,7 +13,11 @@ import aRST.script.initialization as storage
 from aRST.script.head import print_simulation,print_react_l
 import copy
 
+<<<<<<< HEAD
 def get_intraD_react_l(reactants0,gaplim=1.2,printall=True):
+=======
+def get_intraD_react_l(reactants0,gaplim=5,printall=True):
+>>>>>>> origin/feature/add-input-par-for-molbarFF
     react_l = SDP(reactants0,
                   storage.setting.get_value("searching_setting.general.hydrogen", True),
                   storage.setting.get_value("searching_setting.general.halogen", True),
@@ -24,7 +28,6 @@ def get_intraD_react_l(reactants0,gaplim=1.2,printall=True):
         item["at_combi"] = pairs
 
     if printall:
-        print(react_l)
         print_react_l(reactants0, react_l, rtype="intraD")
         # write full react_l in file
         with open(join(storage.setting.wd0, "react_l"), "w") as f:
@@ -209,7 +212,7 @@ def dissombff(reactants0, entry, reactionpath, count=0):
             atom_connection.append({"atoms": [at1, at2], "value": value})
         with open(join(scan_wd, "newbond"), "a+") as f:
             for item in atom_connection:
-                f.write(json.dumps(f'{item}\n'))
+                f.write(json.dumps(item)+"\n")
         coordinates = [list(coord.loc[line, 1:4]) for line in range(coord.shape[0])]
 
         mbxyz0 = get_endxyz_from_mb(atom_connection, coordinates, ele, set_angles=False)

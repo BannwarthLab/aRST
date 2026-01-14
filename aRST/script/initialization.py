@@ -242,7 +242,7 @@ class Allstruc:
                 file.write(f"{charge}\n")
             with open(".UHF", "w") as file:
                 file.write(f"{m - 1}\n")
-            status = par.sp(rungfn=False)
+            status = par.sp()
 
 
         # #########  TRV  #########

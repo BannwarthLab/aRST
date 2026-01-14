@@ -148,7 +148,7 @@ class CallCrest:
                 "charge": 0,
                 "uhf": 0,
                 "alpb": setting.get_value("xtb_setting.alpb", "h2o"),
-                "etemp": setting.get_value("xtb_setting.struc_etemp", "4000"),
+                "etemp": setting.get_value("xtb_setting.struc_etemp", "300"),
                 }
 
     def __init__(self, wd, command_d=None, custom_settings=None):

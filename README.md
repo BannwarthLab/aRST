@@ -151,7 +151,7 @@ spr_mode=0                             # int(0/1/2), there are up to eight diffe
                                        # 2: consider only the lowest AFO gap from the opposite spin channels (HL_ab and HL_ba)
 scan_mode=0                            # int(0/1), method for simulating bond-change events
                                        # 0: use scanning algorithm to perform a relaxed PES scan in xtb
-                                       # 1: use harmonic force field optimization to define expected product topology using MolBar package
+                                       # 1: use harmonic force field (mb FF) optimization to define expected product topology using MolBar package, tuning parameter for this FF see below.
 sep_mode=0                             # int(0/1), treatment style of primary product structure after processing bond-change events
                                        # 0(default): separate the passible fragments directly from the superstructure (For example, in SN2 reactions, multiple product structures may already exist within the superstructure. Separating the geometry before optimization helps push the reaction to the product site.)
                                        # 1:  do fully relaxed optimization on the superstructure and then separate the passible fragments
@@ -237,6 +237,9 @@ basis=None                          # str, basis used in geometry optimization a
 dftopt=False                        # bool, if doing optimization for product geometries
 solmode="ch2cl2"                    # str, keyword with the name of the solvent used in cpcm solvent model
 ncpu = 1                            # int, running a calculation in parallel
+
+[mbFF_setting]                      
+repulsion_charge=100                # float/int, charge used in the Coulomb term in a harmonic potential E_coul = sum Q/r_ij  
 ```
 
 ## Running a Task
