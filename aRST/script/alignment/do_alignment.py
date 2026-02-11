@@ -46,20 +46,23 @@ def aligning_two_structures(reactants=None,at1=None,at2=None):
     create_folder(align_wd)
 
     # prepare scan_xyz
-    coord1 = storage.allstruc.get_value(f"0.struc_info.general.coord")
+    coordinate1 = storage.allstruc.get_value(f"0.struc_info.general.coordinate")
+    ele_l1 = storage.allstruc.get_value(f"0.struc_info.general.ele_l")
     if "1" in storage.allstruc.data.keys():
-        coord2 = storage.allstruc.get_value(f"1.struc_info.general.coord")
+        coordinate2 = storage.allstruc.get_value(f"1.struc_info.general.coordinate")
+        ele_l2 = storage.allstruc.get_value(f"1.struc_info.general.ele_l")
     else:
-        coord2 = storage.allstruc.get_value(f"0.struc_info.general.coord")
+        coordinate2 = storage.allstruc.get_value(f"0.struc_info.general.coordinate")
+        ele_l2 = storage.allstruc.get_value(f"0.struc_info.general.ele_l")
 
     # generate reactiv complex
-    aligningcoord1 = alignment(coord1, coord2, at1, at2,
+    aligningcoord1,ele_l_merge = alignment(coordinate1,ele_l1,coordinate2,ele_l2, at1, at2,
                              extra_setting={"maxovlap": False,
                                  "aligning_distance": storage.setting.get_value(
                                      "searching_setting.inter.aligning_distance", 5)})
-    write_xyz(aligningcoord1, f"coord_default")
-    alignedcoord2 = alignment(coord1, coord2, at1, at2,
+    write_xyz(aligningcoord1,ele_l_merge, f"coord_default")
+    alignedcoord2,ele_l_merge = alignment(coordinate1,ele_l1,coordinate2,ele_l2, at1, at2,
                              extra_setting={"maxovlap": True,
                                  "aligning_distance": storage.setting.get_value(
                                      "searching_setting.inter.aligning_distance", 5)})
-    write_xyz(alignedcoord2, f"coord_maxovelap")
+    write_xyz(alignedcoord2,ele_l_merge, f"coord_maxovelap")

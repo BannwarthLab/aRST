@@ -1,9 +1,5 @@
-import sys
 from collections import Counter
-from os.path import join, exists
-
-import numpy as np
-
+from os.path import exists
 from aRST.script.toolbox import read_afo_csv, FragmentAnalyzer, get_random_folder_name
 from aRST.script.exploration.prepare_afo import getAFO
 from aRST.script.callsys import CallORCA, CallMolBar, CallgXTB
@@ -22,10 +18,10 @@ class SingleCycleSearch:
     @staticmethod
     def check_featrues(struc):
         # check if coord, nel, afo, mbo exist
-        coord = storage.allstruc.get_value(f"{struc}.struc_info.general.coord")
+        coordinate = storage.allstruc.get_value(f"{struc}.struc_info.general.coordinate")
         nel = storage.allstruc.get_value(f"{struc}.struc_info.general.nel")
         c = storage.allstruc.get_value(f"{struc}.struc_info.general.charge")
-        if not all(v is not None for v in [coord, nel, c]):
+        if not all(v is not None for v in [coordinate, nel, c]):
             print(
                 f"Warning: {struc} doesn't have enough coord, nel, c, this struc will be neglet in the reaction searching")
 
@@ -38,10 +34,11 @@ class SingleCycleSearch:
     def prepare_AFO(self, afosubwd=None):
         for struc in self.reactants:
             if not self.check_featrues(struc):
-                coord = storage.allstruc.get_value(f"{struc}.struc_info.general.coord")
+                coordinate = storage.allstruc.get_value(f"{struc}.struc_info.general.coordinate")
+                ele_l = storage.allstruc.get_value(f"{struc}.struc_info.general.ele_l")
                 nel = storage.allstruc.get_value(f"{struc}.struc_info.general.nel")
                 c = storage.allstruc.get_value(f"{struc}.struc_info.general.charge")
-                if coord.shape[0] == 1 and coord.iloc[0, 0] == "H":
+                if len(ele_l) == 1 and ele_l[0] == "H":
                     mbo = None
                     afo = pd.DataFrame(
                         columns=['index', 'HOAO_a (eV)', 'HOAO_b (eV)', 'LUAO_a (eV)', 'LUAO_b (eV)', 'Atom'])
@@ -221,7 +218,7 @@ class SingleCycleSearch:
         endxyz_info = tmp_path_l[1]
 
         # get constrained opt nfragment
-        fragmentation = FragmentAnalyzer(endxyz_info["coord"], endxyz_info["bo"], endxyz_info["atomic_charge"])
+        fragmentation = FragmentAnalyzer(endxyz_info["coordinate"],endxyz_info["ele_l"], endxyz_info["bo"], endxyz_info["atomic_charge"])
         frag_data = fragmentation.fragment_data
         status = fragmentation.status
         if status != 0:
@@ -233,40 +230,42 @@ class SingleCycleSearch:
         def _trate_more_geoms_in_endxyz(frag_data):
             # target: doing unconstrained opt + (short md) for each fragments
             for frag in frag_data:
-                coord = frag["coord"]
+                coordinate = frag["coordinate"]
+                ele_l = frag["ele_l"]
                 charge = frag["charge_int"]
                 nel = frag["nel"]
                 atcharge = frag["atcharge"]
-                if coord.shape[0] > 1:
-                    _handle_multi_at_geom(coord, charge, nel)
+                if len(ele_l) > 1:
+                    _handle_multi_at_geom(coordinate,ele_l, charge, nel)
                 else:
-                    _handle_single_at_geom(coord, charge, nel, atcharge)
+                    _handle_single_at_geom(coordinate,ele_l, charge, nel, atcharge)
 
-        def _handle_single_at_geom(coord, charge, nel, atcharge):
+        def _handle_single_at_geom(coordinate,ele_l, charge, nel, atcharge):
             random_name = get_random_folder_name()
             spwd = join(storage.setting.bufferwd, key, random_name, "xtb")
             create_folder(spwd)
-            write_xyz(coord, "coord")
+            write_xyz(coordinate,ele_l, "coord")
             uhf = 0 if nel % 2 == 0 else 1
 
             # doing xtb sp in random folder
             xtbparse = CallxTB(spwd, custom_settings={"charge": charge, "uhf": uhf})
             status = xtbparse.sp()
             Esp_gfn = xtbparse.get_Esp_from_out()
-            endxyz_info_new.append({"coord": coord,
+            endxyz_info_new.append({"coordinate": coordinate,
+                                    "ele_l":ele_l,
                                     "atomic_charge": atcharge,
                                     "charge": charge,
                                     "nel": nel,
                                     "Esp_gfn": Esp_gfn,
                                     "strucwd": key + "/" + random_name,
-                                    "atomic_connection": ([], [str(coord.iloc[0, 0])])})
+                                    "atomic_connection": []})
 
-        def _handle_multi_at_geom(coord, charge, nel):
+        def _handle_multi_at_geom(coordinate,ele_l, charge, nel):
             # 1. fully relax
             random_name = get_random_folder_name()
             optwd = join(storage.setting.bufferwd, key, random_name, "xtb")
             create_folder(optwd)
-            write_xyz(coord, "coord")
+            write_xyz(coordinate,ele_l, "coord")
             uhf = 0 if nel % 2 == 0 else 1
 
             # doing xtb opt in random folder
@@ -276,12 +275,12 @@ class SingleCycleSearch:
                 status = xtbparse.sp()  # switch to sp
             Esp_gfn = xtbparse.get_Esp_from_out()
             # receive opt res
-            coord = read_coord(join(optwd, "xtbopt.xyz")) if exists(join(optwd, "xtbopt.xyz")) else coord
+            coordinate,ele_l= read_coord(join(optwd, "xtbopt.xyz")) if exists(join(optwd, "xtbopt.xyz")) else coordinate
             bo = read_bo(join(optwd, "wbo"))
-            constrain_l, ele_l = xtbparse.get_topo()
+            constrain_l=get_topo(coordinate,ele_l,bo)
             atcharge = read_atcharge(join(optwd, "charges"))
             # now testing if more_geoms again
-            tested_fragemnation = FragmentAnalyzer(coord, bo, atcharge)
+            tested_fragemnation = FragmentAnalyzer(coordinate,ele_l, bo, atcharge)
             tested_frag_data = tested_fragemnation.fragment_data
             if tested_fragemnation.status != 0:
                 raise ValueError(f"fragmentation has error, check {optwd}")
@@ -289,28 +288,29 @@ class SingleCycleSearch:
                 _trate_more_geoms_in_endxyz(tested_frag_data)
             elif len(tested_frag_data) == 1:
                 # add geom directly
-                endxyz_info_new.append({"coord": coord,
+                endxyz_info_new.append({"coordinate": coordinate,
+                                        "ele_l":ele_l,
                                         "atomic_charge": atcharge,
                                         "charge": charge,
                                         "nel": nel,
                                         "Esp_gfn": Esp_gfn,
                                         "strucwd": key + "/" + random_name,
-                                        "atomic_connection": (constrain_l, ele_l)})
+                                        "atomic_connection": constrain_l})
 
         _trate_more_geoms_in_endxyz(frag_data)
         # check up if number of nel; c; nat are correct
         totc_2 = sum(np.round(frag["charge"]) for frag in endxyz_info_new)
         totnel_2 = sum(int(frag["nel"]) for frag in endxyz_info_new)
-        totnat_2 = sum(int(frag["coord"].shape[0]) for frag in endxyz_info_new)
+        totnat_2 = sum(len(frag["ele_l"]) for frag in endxyz_info_new)
         totc = endxyz_info["charge"]
         totnel = endxyz_info["nel"]
-        totnat = endxyz_info["coord"].shape[0]
+        totnat = len(endxyz_info["ele_l"])
         all_equal = (totc == totc_2) and (totnel == totnel_2) and (totnat == totnat_2)
         if not all_equal:
             raise ValueError(f"Fragmentation in supra molecule in path {key} failed, check!")
 
         # now evaluate if reaction simulation fall back to starting geom
-        products_mbl = [CallMolBar(i["coord"]).get_mb() for i in endxyz_info_new]
+        products_mbl = [CallMolBar(i["coordinate"],i["ele_l"]).get_mb() for i in endxyz_info_new]
         tmp_path_l.append(products_mbl)
         products_mbl = [" | ".join(item.split(" | ")[:cut]) for item in products_mbl]
         bond_changed = True  # default as true
@@ -332,17 +332,18 @@ class SingleCycleSearch:
         dftopt = storage.setting.get_value("orca_setting.dftopt", False)
 
         for frag in tmp_path_l[1]:
-            coord = frag["coord"]
+            coordinate = frag["coordinate"]
+            ele_l = frag["ele_l"]
             charge = frag["charge"]
             nel = frag["nel"]
-            caltyp = "SP OPT" if coord.shape[0] > 1 and dftopt else "SP"
+            caltyp = "SP OPT" if len(ele_l) > 1 and dftopt else "SP"
             m_l = [1, 3] if nel % 2 == 0 else [2]
             if storage.setting.get_value("searching_setting.singlepoint.method") == "dft":
-                sp_dft, m_fin, coord_fin = np.inf, m_l[0], coord  # initial setting in case DFT sp failed
+                sp_dft, m_fin, coordinate_fin = np.inf, m_l[0], coordinate  # initial setting in case DFT sp failed
                 for m in m_l:
                     wd = create_folder(
                         join(storage.setting.bufferwd, frag['strucwd'], "orca", str(m)))
-                    write_xyz(coord, "coord")
+                    write_xyz(coordinate,ele_l, "coord")
                     orcaprocess = CallORCA(wd,
                                            custom_settings={"charge": charge,
                                                             "m": m,
@@ -354,17 +355,17 @@ class SingleCycleSearch:
                         if sp_dft is None or energy < sp_dft:
                             sp_dft = energy
                             m_fin = m
-                            coord_fin = read_coord(join(wd, "orca.xyz")) if exists(join(wd, "orca.xyz")) else coord
+                            coordinate_fin,ele_l = read_coord(join(wd, "orca.xyz")) if exists(join(wd, "orca.xyz")) else coordinate
 
                 frag["Esp_dft"] = sp_dft
                 frag["m"] = m_fin
-                frag["coord"] = coord_fin
+                frag["coordinate"] = coordinate_fin
             else:
-                sp_gxtb, m_fin, coord_fin = np.inf, m_l[0], coord  # initial setting in case DFT sp failed
+                sp_gxtb, m_fin, coordinate_fin = np.inf, m_l[0], coordinate  # initial setting in case DFT sp failed
                 for m in m_l:
                     wd = create_folder(
                         join(storage.setting.bufferwd, frag['strucwd'], "gxtb", str(m)))
-                    write_xyz(coord, "coord")
+                    write_xyz(coordinate,ele_l, "coord")
                     gxtbprocess = CallgXTB(wd, custom_settings={"charge": charge, "uhf": m - 1})
                     with open(".CHRG", "w") as file:
                         file.write(f"{charge}\n")
@@ -377,15 +378,16 @@ class SingleCycleSearch:
                         if sp_gxtb is None or energy < sp_gxtb:
                             sp_gxtb = energy
                             m_fin = m
-                            coord_fin = coord
+                            coordinate_fin = coordinate
 
                 frag["Esp_gxtb"] = sp_gxtb
                 frag["m"] = m_fin
-                frag["coord"] = coord_fin
+                frag["coordinate"] = coordinate_fin
 
-        ######## GFN TRV & SOLV ########
+        ######## GFN TRV & SOLV ######## # not use for now
         for frag in tmp_path_l[1]:
-            coord = frag["coord"]
+            coordinate = frag["coordinate"]
+            ele_l  =frag["ele_l"]
             charge = frag["charge"]
             uhf = frag["m"] - 1
             etrv = 0
@@ -585,11 +587,12 @@ class SingleCycleSearch:
     def add_newstruc(strucinfo_d):
         newid = str(len(storage.allstruc.data.keys()))
 
-        storage.allstruc.set_value(f"{newid}.struc_info.general.coord", strucinfo_d["coord"])
+        storage.allstruc.set_value(f"{newid}.struc_info.general.coordinate", strucinfo_d["coordinate"])
+        storage.allstruc.set_value(f"{newid}.struc_info.general.ele_l", strucinfo_d["ele_l"])
         storage.allstruc.set_value(f"{newid}.struc_info.general.charge", strucinfo_d["charge"])
         storage.allstruc.set_value(f"{newid}.struc_info.general.multiplicity", strucinfo_d["m"])
         storage.allstruc.set_value(f"{newid}.struc_info.general.nel", strucinfo_d["nel"])
-        storage.allstruc.set_value(f"{newid}.struc_info.general.mb", CallMolBar(strucinfo_d["coord"]).get_mb())
+        storage.allstruc.set_value(f"{newid}.struc_info.general.mb", CallMolBar(strucinfo_d["coordinate"],strucinfo_d["ele_l"]).get_mb())
         storage.allstruc.set_value(f"{newid}.struc_info.general.atcharge", strucinfo_d["atomic_charge"])
         storage.allstruc.set_value(f"{newid}.struc_info.general.atomic_connection", strucinfo_d["atomic_connection"])
         if "Esp_dft" in strucinfo_d.keys():

@@ -74,7 +74,22 @@ def get_all_keys(d, parent_key=""):
 
 def read_coord(coordpath):
     coord = pd.read_table(coordpath, header=None, skiprows=2, sep='\s+') if exists(coordpath) else None
-    return coord
+    coordinate = coord.iloc[:, 1:4].to_numpy(dtype=np.float64)
+    ele_l = coord.iloc[:, 0].to_numpy()
+    return coordinate, ele_l
+
+
+def get_topo(coordinate, ele_l, bo):
+    from aRST.script.geom import Coord
+    topo_l = []
+    instance = Coord(coordinate, ele_l)
+    for index in range(bo.shape[0]):  # index starts from 1
+        at1, at2 = bo.iloc[index, :2]
+        at1 = int(at1)
+        at2 = int(at2)
+        dist = instance.get_ats_distance(at1 - 1, at2 - 1)
+        topo_l.append({"atoms": [at1, at2], "value": dist})
+    return topo_l
 
 
 def read_bo(bopath):
@@ -109,49 +124,49 @@ def read_atcharge(atchargepath):
 
 
 def get_strucinfo_from_path(strucid_path):
-    from aRST.script.callsys import CallxTB, CallORCA, CallMolBar,CallgXTB
+    from aRST.script.callsys import CallxTB, CallORCA, CallMolBar, CallgXTB
     import aRST.script.initialization as storage
     # determine coord
     # dft opt geom > gfn2 opt geom > input geom
     if exists(join(strucid_path, "orca", "orca.xyz")):
-        coord = read_coord(join(strucid_path, "orca", "orca.xyz"))
+        coordinate, ele_l = read_coord(join(strucid_path, "orca", "orca.xyz"))
     elif exists(join(strucid_path, "xtb", "xtbopt.xyz")):
-        coord = read_coord(join(strucid_path, "xtb", "xtbopt.xyz"))
+        coordinate, ele_l = read_coord(join(strucid_path, "xtb", "xtbopt.xyz"))
     # find sp coord
-    elif exists(join(strucid_path, "orca", "coord.xyz")): # dft sp
-        coord = read_coord(join(strucid_path, "orca", "coord.xyz"))
-    elif exists(join(strucid_path, "gxtb", "coord.xyz")): # gxtb sp
-        coord = read_coord(join(strucid_path, "gxtb", "coord.xyz"))
+    elif exists(join(strucid_path, "orca", "coord.xyz")):  # dft sp
+        coordinate, ele_l = read_coord(join(strucid_path, "orca", "coord.xyz"))
+    elif exists(join(strucid_path, "gxtb", "coord.xyz")):  # gxtb sp
+        coordinate, ele_l = read_coord(join(strucid_path, "gxtb", "coord.xyz"))
     else:
         raise ValueError(f"{strucid_path} strucinfo doesn't exist!")
 
     xtb = CallxTB(join(strucid_path, "xtb"))
     charge = xtb.get_charge_from_out()
-    ele_l = coord.iloc[:, 0].tolist()
     nel = int(sum([element[_] for _ in ele_l])) - charge
     atcharge = read_atcharge(join(strucid_path, "charges"))
     Esp_gfn = xtb.get_Esp_from_out()
     # Etrv_gfn = CallxTB(join(strucid_path, "xtb", "trv")).get_Etrv()
     # Esolv_gfn = CallxTB(join(strucid_path, "xtb", "solv")).get_Esolv()
-    constrain_l, ele_l = xtb.get_topo()
-    mb = CallMolBar(coord).get_mb()
+    bo = read_bo(join(strucid_path, "xtb", "wbo"))
+    constrain_l = get_topo(coordinate, ele_l, bo)
+    mb = CallMolBar(coordinate, ele_l).get_mb()
 
-    if storage.setting.get_value("searching_setting.singlepoint.method") =="dft":
+    if storage.setting.get_value("searching_setting.singlepoint.method") == "dft":
         Esp_dft = CallORCA(join(strucid_path, "orca")).get_energy()
         m = CallORCA(join(strucid_path, "orca")).get_m()
-        return {"coord": coord, "nel": nel, "m": m, "c": charge, "atcharge": atcharge,
+        return {"coordinate": coordinate, "ele_l": ele_l, "nel": nel, "m": m, "c": charge, "atcharge": atcharge,
                 "Esp_gfn": Esp_gfn,
                 # "Etrv_gfn": Etrv_gfn,
                 # "Esolv_gfn": Esolv_gfn,
-                "constrain_l": constrain_l, "ele_l": ele_l, "Esp_dft": Esp_dft, "mb": mb}
+                "constrain_l": constrain_l, "Esp_dft": Esp_dft, "mb": mb}
     else:
         Esp_gxtb = CallgXTB(join(strucid_path, "gxtb")).get_Esp_from_out()
-        m = 1 if nel%2==0 else 2
-        return {"coord": coord, "nel": nel, "m": m, "c": charge, "atcharge": atcharge,
+        m = 1 if nel % 2 == 0 else 2
+        return {"coordinate": coordinate, "ele_l": ele_l, "nel": nel, "m": m, "c": charge, "atcharge": atcharge,
                 "Esp_gfn": Esp_gfn,
                 # "Etrv_gfn": Etrv_gfn,
                 # "Esolv_gfn": Esolv_gfn,
-                "constrain_l": constrain_l, "ele_l": ele_l, "Esp_gxtb": Esp_gxtb, "mb": mb}
+                "constrain_l": constrain_l, "Esp_gxtb": Esp_gxtb, "mb": mb}
 
 
 def create_folder(wd):
@@ -175,29 +190,26 @@ def get_random_folder_name():
     return random_name
 
 
-def write_xyz(xyz, name):
+def write_xyz(coordinate, ele_l, name):
     pwd = os.getcwd()
-    # xyz.round(10)
-    nat = xyz.shape[0]
-    with open(f'{pwd}/{name}.xyz', 'w') as f:
-        f.write(f'{nat}\n')
-        f.write('\n')
-        for i in range(nat):
-            at, x, y, z = xyz.iloc[i, 0], xyz.iloc[i, 1], xyz.iloc[i, 2], xyz.iloc[i, 3]
-            f.write('%2s %12.8f %12.8f %12.8f\n' % (at, x, y, z))
-        f.write('\n')
+    nat = len(ele_l)
+    with open(f"{pwd}/{name}.xyz", "w") as f:
+        f.write(f"{nat}\n\n")
+        for at, (x, y, z) in zip(ele_l, coordinate):
+            f.write(f"{at:2s} {x:18.14f} {y:18.14f} {z:18.14f}\n")
+        f.write("\n")
 
 
 class FragmentAnalyzer:
-    def __init__(self, coord, bo, atcharge):
+    def __init__(self, coordinate, ele_l, bo, atcharge):
 
         # supra struc info
-        self.Snat = coord.shape[0]
+        self.Snat = len(ele_l)
         self.Sbo = bo
         self.Satcharge = atcharge
         self.Scharge = np.round(atcharge.iloc[:, 0].sum())
-        self.Scoord = coord
-        self.Sele_l = coord.iloc[:, 0].tolist()
+        self.Scoordinate = coordinate
+        self.Sele_l = ele_l
         self.Snel = int(sum([element[_] for _ in self.Sele_l])) - self.Scharge
 
         # build up graph
@@ -256,11 +268,12 @@ class FragmentAnalyzer:
 
         # Update fragment data with integer values
         for i, frag in enumerate(fragment_data):
-            coord = self.Scoord.iloc[self.fragments[i]]
-            ele_l = coord.iloc[:, 0].tolist()
+            coordinate = self.Scoordinate[self.fragments[i]]
+            ele_l = self.Sele_l[self.fragments[i]]
             charge_int = int(int_fragment_charges[i])
             nel = int(sum([element[_] for _ in ele_l]) - charge_int)
-            frag["coord"] = coord
+            frag["coordinate"] = coordinate
+            frag["ele_l"] = ele_l
             frag["charge_int"] = charge_int
             frag["nel"] = nel
         return fragment_data
@@ -291,14 +304,13 @@ class FragmentAnalyzer:
 #
 class GraphAnalyzer:
 
-    def __init__(self, coord, bo=None):
+    def __init__(self, coordinate, ele_l, bo=None):
 
-        self.nat = coord.shape[0]
+        self.nat = len(ele_l)
         self.atoms = []
         self.coordinates = []
-        for i in range(self.nat):
-            self.atoms.append(coord.iloc[i, 0])
-            self.coordinates.append(np.array(coord.iloc[i, 1:4]))
+        self.coordinates = coordinate
+        self.atoms = ele_l
         self.wbo = bo
 
         # get topo matrix
@@ -369,6 +381,8 @@ def convert_for_json(d, exclude_keys=None):
     if exclude_keys is None:
         exclude_keys = set()
 
+    if isinstance(d, np.ndarray):
+        return d.tolist()
     if isinstance(d, pd.DataFrame):
         return {"__dataframe__": d.to_json()}  # Store as JSON string
     elif isinstance(d, list):
