@@ -211,7 +211,7 @@ def alignment(coord1, coord2, at1, at2, **kwargs):
         P1[::, 0] = -vtmp
 
     stuc1 = Coord(stuc1, at1).change_cs(P1)
-    xyz1 = stuc1.copy(deep=True)
+    xyz1 = stuc1.copy()
 
     stuc2 = Coord(stuc2, at2).shift(d=0)
     mv2, P2 = Coord(stuc2, at2).get_principal_moment_vec()
@@ -232,7 +232,7 @@ def alignment(coord1, coord2, at1, at2, **kwargs):
     d = d_pre * np.round(rr * relativ_r, 2)
 
     stuc2 = Coord(stuc2, at2).shift(d)
-    xyz2 = stuc2.copy(deep=True)  # for the bug if cood1=cood2, the class will be inherited
+    xyz2 = stuc2.copy()  # for the bug if cood1=cood2, the class will be inherited
 
     coord_merge = pd.concat([xyz1, xyz2])
     return coord_merge, rr
