@@ -1,11 +1,7 @@
-import numpy as np
-
-import aRST.script.initialization as storage
 from aRST.script.exploration.assign_reaction import SingleCycleSearch
 from aRST.script.exploration.network import rxnnetwork
 from aRST.script.exploration.interA import *
 from aRST.script.head import print_simulation_details,print_react_l
-import random
 from collections import Counter
 from os.path import exists
 

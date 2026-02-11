@@ -1,4 +1,3 @@
-import sys
 import toml
 import threading
 import os
@@ -76,12 +75,14 @@ class Allstruc:
         ## reactants
         reactants = [_ for _ in Setting.get_value("geom").keys() if "reactant" in _]
         for id, struc in enumerate(reactants):
-            coord = read_coord(join(Setting.wd0, Setting.get_value(f"geom.{struc}.name")))
+            coordinate, ele_l = read_coord(join(Setting.wd0, Setting.get_value(f"geom.{struc}.name")))
             c = Setting.get_value(f"geom.{struc}.charge")
             m = Setting.get_value(f"geom.{struc}.multiplicity")
-            if all(v is not None for v in [coord, c, m]):
+            if all(v is not None for v in [coordinate, c, m]):
                 # set up new id anyhow
-                self.data.set_value(f"{str(id)}.struc_info.general.coord", coord)
+                self.data.set_value(f"{str(id)}.struc_info.general.coordinate", coordinate)
+                self.data.set_value(f"{str(id)}.struc_info.general.ele_l", ele_l)
+
                 self.data.set_value(f"{str(id)}.struc_info.general.charge", c)
                 self.data.set_value(f"{str(id)}.struc_info.general.multiplicity", m)
             else:
@@ -97,11 +98,12 @@ class Allstruc:
         self.data_refp = mydict({})
         products = [_ for _ in Setting.get_value("geom").keys() if "product" in _]
         for id, struc in enumerate(products):
-            coord = read_coord(join(Setting.wd0, Setting.get_value(f"geom.{struc}.name")))
+            coordinate, ele_l = read_coord(join(Setting.wd0, Setting.get_value(f"geom.{struc}.name")))
             c = Setting.get_value(f"geom.{struc}.charge")
             m = Setting.get_value(f"geom.{struc}.multiplicity")
-            if all(v is not None for v in [coord, c, m]):
-                self.data_refp.set_value(f"{str(id)}.struc_info.general.coord", coord)
+            if all(v is not None for v in [coordinate, c, m]):
+                self.data_refp.set_value(f"{str(id)}.struc_info.general.coordinate", coordinate)
+                self.data.set_value(f"{str(id)}.struc_info.general.ele_l", ele_l)
                 self.data_refp.set_value(f"{str(id)}.struc_info.general.charge", c)
                 self.data_refp.set_value(f"{str(id)}.struc_info.general.multiplicity", m)
             else:
@@ -118,19 +120,19 @@ class Allstruc:
                     self.set_value_from_struc_info(str(id), struc_info)
                 except:
                     print(f"{str(id)} strucinfo doesn't exist!, start to refine it")
-                    coord = read_coord(join(Setting.wd0, Setting.get_value(f"geom.{struc}.name")))
+                    coordinate, ele_l = read_coord(join(Setting.wd0, Setting.get_value(f"geom.{struc}.name")))
                     c = Setting.get_value(f"geom.{struc}.charge")
                     m = Setting.get_value(f"geom.{struc}.multiplicity")
-                    struc_info = self.refine_struc_info(coord, c, m, Setting, str(id))
+                    struc_info = self.refine_struc_info(coordinate,ele_l, c, m, Setting, strucid=str(id))
                     self.set_value_from_struc_info(str(id), struc_info)
 
 
         else:
             for id, struc in enumerate(reactants):
-                coord = read_coord(join(Setting.wd0, Setting.get_value(f"geom.{struc}.name")))
+                coordinate, ele_l = read_coord(join(Setting.wd0, Setting.get_value(f"geom.{struc}.name")))
                 c = Setting.get_value(f"geom.{struc}.charge")
                 m = Setting.get_value(f"geom.{struc}.multiplicity")
-                struc_info = self.refine_struc_info(coord, c, m, Setting, str(id))
+                struc_info = self.refine_struc_info(coordinate,ele_l, c, m, Setting, strucid=str(id))
                 self.set_value_from_struc_info(str(id), struc_info)
 
     def set_value_from_struc_info(self, strucid, struc_info):
@@ -151,14 +153,14 @@ class Allstruc:
                 strucid = str(_)
                 break
 
-        self.data.set_value(f"{strucid}.struc_info.general.coord", struc_info["coord"])
+        self.data.set_value(f"{strucid}.struc_info.general.coordinate", struc_info["coordinate"])
+        self.data.set_value(f"{strucid}.struc_info.general.ele_l", struc_info["ele_l"])
         self.data.set_value(f"{strucid}.struc_info.general.nel", struc_info["nel"])
         self.data.set_value(f"{strucid}.struc_info.general.multiplicity", struc_info["m"])
         self.data.set_value(f"{strucid}.struc_info.general.charge", struc_info["c"])
         self.data.set_value(f"{strucid}.struc_info.general.atcharge", struc_info["atcharge"])
         self.data.set_value(f"{strucid}.struc_info.general.mb", struc_info["mb"])
-        self.data.set_value(f"{strucid}.struc_info.general.atomic_connection",
-                            (struc_info["constrain_l"], struc_info["ele_l"]))
+        self.data.set_value(f"{strucid}.struc_info.general.atomic_connection",struc_info["constrain_l"])
 
         self.data.set_value(f"{strucid}.struc_info.energy.sp_gfn", struc_info["Esp_gfn"])
         if "Esp_dft" in struc_info.keys():
@@ -169,34 +171,34 @@ class Allstruc:
         # self.data.set_value(f"{strucid}.struc_info.energy.solv", struc_info["Esolv_gfn"])
 
     @staticmethod
-    def refine_struc_info(coord, charge, m, Setting, strucid=0, wd0=None):
+    def refine_struc_info(coordinate,ele_l, charge, m, Setting, strucid=0, wd0=None):
 
         #########  OPT  #########
 
         # do gfn opt if required
-        if Setting.get_value("read.general.gfn2opt", False) and coord.shape[0] > 1:
+        if Setting.get_value("read.general.gfn2opt", False) and len(ele_l) > 1:
             if not wd0:
                 wd = create_folder(join(Setting.strucwd, strucid, "xtb"))
             else:
                 wd = create_folder(join(wd0, "xtb"))
-            write_xyz(coord, "coord")
+            write_xyz(coordinate,ele_l, "coord")
             staus = CallxTB(wd, custom_settings={"charge": charge, "uhf": m - 1}).opt()
             if staus == 0:
-                coord = read_coord(join(wd, "xtbopt.xyz"))
+                coordinate, ele_l = read_coord(join(wd, "xtbopt.xyz"))
             else:
                 print(f'Warning: struc {strucid} opt at xtb failed, continue with unopt struc')
 
         # do DFT opt if required
         forcedftopt = Setting.get_value("read.general.dftopt", False)
-        if (forcedftopt or Setting.get_value("orca_setting.dftopt", False)) and coord.shape[0] > 1:
+        if (forcedftopt or Setting.get_value("orca_setting.dftopt", False)) and len(ele_l) > 1:
             if not wd0:
                 wd = create_folder(join(Setting.strucwd, strucid, "orca"))
             else:
                 wd = create_folder(join(wd0, "orca"))
-            write_xyz(coord, "coord")
+            write_xyz(coordinate,ele_l, "coord")
             staus = CallORCA(wd, custom_settings={"charge": charge, "m": m, "caltyp": "SP OPT"}).call()
             if staus == 0:
-                coord = read_coord(join(wd, "orca.xyz"))
+                coordinate, ele_l = read_coord(join(wd, "orca.xyz"))
             else:
                 print(f'Warning: struc {strucid} opt at ORCA failed, continue with unopt struc')
 
@@ -206,13 +208,13 @@ class Allstruc:
         if not wd0:
             if not exists(join(Setting.strucwd, strucid, "xtb", "xtbopt.xyz")):
                 wd = create_folder(join(Setting.strucwd, strucid, "xtb"))
-                write_xyz(coord, "coord")
+                write_xyz(coordinate, ele_l, "coord")
                 staus = CallxTB(wd, custom_settings={"charge": charge, "uhf": m - 1}).sp()
                 if staus != 0:
                     print(f'Warning: struc {strucid} sp at xtb failed, continue anyhow')
         else:
             wd = create_folder(join(wd0, "xtb"))
-            write_xyz(coord, "coord")
+            write_xyz(coordinate, ele_l, "coord")
             staus = CallxTB(wd, custom_settings={"charge": charge, "uhf": m - 1}).sp()
             if staus != 0:
                 print(f'Warning: struc {strucid} sp at xtb failed, continue anyhow')
@@ -220,12 +222,12 @@ class Allstruc:
         ## DFT or gxtb sp
         sp_dft = None
         if Setting.get_value("searching_setting.singlepoint.method", "gxtb") =="dft":
-            if not (forcedftopt or Setting.get_value("orca_setting.dftopt", False)) or coord.shape[0] == 1:
+            if not (forcedftopt or Setting.get_value("orca_setting.dftopt", False)) or len(ele_l) == 1:
                 if not wd0:
                     wd = create_folder(join(Setting.strucwd, strucid, "orca"))
                 else:
                     wd = create_folder(join(wd0, "orca"))
-                write_xyz(coord, "coord")
+                write_xyz(coordinate, ele_l, "coord")
                 staus = CallORCA(wd, custom_settings={"charge": charge, "m": m}).call()
                 if staus != 0:
                     print(f'Warning: struc {strucid} sp at ORCA failed, continue anyhow')
@@ -235,7 +237,7 @@ class Allstruc:
                 wd = create_folder(join(Setting.strucwd, strucid, "gxtb"))
             else:
                 wd = create_folder(join(wd0, "gxtb"))
-            write_xyz(coord, "coord")
+            write_xyz(coordinate, ele_l, "coord")
             par = CallgXTB(wd, custom_settings={"charge": charge, "uhf": m - 1})
             # write .charg and .uhf file
             with open(".CHRG","w") as file:

@@ -1,11 +1,10 @@
-import traceback
 from os.path import join, exists
 import os
 import shutil
 import subprocess
 import re
-from aRST.script.toolbox import mydict
-import pandas as pd
+from aRST.script.toolbox import mydict,read_coord
+
 
 
 def remove_file(old_path, new_path):
@@ -107,10 +106,10 @@ class CallORCA:
 
     def get_geomres(self):
         if exists(join(self.wd, 'orca.xyz')):
-            coord = pd.read_table(join(self.wd, 'orca.xyz'), header=None, skiprows=2, sep='\s+')
+            coordinate,ele_l = read_coord(join(self.wd, 'orca.xyz'))
         else:
-            coord = pd.read_table(join(self.wd, 'coord.xyz'), header=None, skiprows=2, sep='\s+')
-        return coord
+            coordinate, ele_l = read_coord(join(self.wd, 'coord.xyz'))
+        return coordinate, ele_l
 
     def get_energy(self, out="orca.out"):
         Esp = None
@@ -203,6 +202,7 @@ class CallCrest:
         return rc
 
     def read_update_coord(self,job):
+        import numpy as np
         outwd = f'{self.wd}/crest.out'
         with open(outwd, "r") as file:
             lines = file.readlines()
@@ -221,13 +221,13 @@ class CallCrest:
             nstruc,deltaE,Etot = line.split()
             deltaE_l.append(float(deltaE))
         if min(deltaE_l)>0:
-            coord = None
+            coordinate,ele_l = None,None
         else:
             nstruc = deltaE_l.index(min(deltaE_l))
             ensemblewd = f'{self.wd}/deprotonated.xyz' if job=="depotonation" else f'{self.wd}/protonated.xyz'
-            coord_l = []
+            coordinate_l = []
+            ele_ls = []
             with open(ensemblewd, 'r') as f:
-
                 while True:
                     # Read frame header
                     line = f.readline()
@@ -237,16 +237,21 @@ class CallCrest:
                     # Read comment line (contains energy)
                     comment_line = f.readline().strip()
 
-                    # Read atomic coordinates
-                    data = []
-                    for _ in range(num_atoms):
+                    elems = np.empty(num_atoms, dtype=str)
+                    coords = np.empty((num_atoms, 3), dtype=np.float64)
+                    for i in range(num_atoms):
                         parts = f.readline().split()
-                        data.append([parts[0], float(parts[1]), float(parts[2]), float(parts[3])])
+                        elems[i] = parts[0]
+                        coords[i, 0] = float(parts[1])
+                        coords[i, 1] = float(parts[2])
+                        coords[i, 2] = float(parts[3])
 
-                    coord = pd.DataFrame(data)
-                    coord_l.append(coord)
-            coord = coord_l[nstruc]
-        return coord
+                    ele_ls.append(elems)
+                    coordinate_l.append(coords)
+
+            coordinate = coordinate_l[nstruc]
+            ele_l = ele_ls[nstruc]
+        return coordinate,ele_l
 
 
 
@@ -500,7 +505,8 @@ class CallxTB:
         import numpy as np
 
         # cut geomblock in md.trj
-        coord_l = []
+        coordinate_l = []
+        ele_ls = []
         energies = []
         trjwd = f'{self.wd}/xtb.trj'
 
@@ -517,34 +523,39 @@ class CallxTB:
                     # Read comment line (contains energy)
                     comment_line = f.readline().strip()
                     energy = float(comment_line.split()[1])  # Assumes format: "energy: <value> ..."
-
-                    # Read atomic coordinates
-                    data = []
-                    for _ in range(num_atoms):
-                        parts = f.readline().split()
-                        data.append([parts[0], float(parts[1]), float(parts[2]), float(parts[3])])
-
-                    coord = pd.DataFrame(data)
-                    coord_l.append(coord)
                     energies.append(energy)
-            return coord_l, energies
 
-        def filter_outliers(coord_l, energies, z_threshold=2.5):
+                    elems = np.empty(num_atoms, dtype=str)
+                    coords = np.empty((num_atoms, 3), dtype=np.float64)
+                    for i in range(num_atoms):
+                        parts = f.readline().split()
+                        elems[i] = parts[0]
+                        coords[i, 0] = float(parts[1])
+                        coords[i, 1] = float(parts[2])
+                        coords[i, 2] = float(parts[3])
+
+                    ele_ls.append(elems)
+                    coordinate_l.append(coords)
+            return coordinate_l,ele_ls, energies
+
+        def filter_outliers(coordinate_l,ele_ls, energies, z_threshold=2.5):
             from scipy.stats import zscore
             z_scores = np.abs(zscore(energies))
             non_outliers = np.where(z_scores < z_threshold)[0]
 
-            clean_coord_l = [coord_l[i] for i in non_outliers]
+            clean_coordinate_l = [coordinate_l[i] for i in non_outliers]
+            clean_ele_l = [ele_ls[i] for i in non_outliers]
             clean_energies = [energies[i] for i in non_outliers]
 
-            return clean_coord_l, clean_energies
+            return clean_coordinate_l,clean_ele_l, clean_energies
 
-        frames, energies = parse_xtb_trj(trjwd, nat)
-        clean_coord_l, clean_energies = filter_outliers(coord_l, energies)
+        coordinate_l,ele_ls, energies = parse_xtb_trj(trjwd, nat)
+        clean_coord_l,clean_ele_l, clean_energies = filter_outliers(coordinate_l,ele_ls, energies)
         lowest_idx = np.argmin(clean_energies)
-        coord_emin = clean_coord_l[lowest_idx]
+        coordinate_emin = clean_coord_l[lowest_idx]
+        ele_l_emin = clean_ele_l[lowest_idx]
         emin = clean_energies[lowest_idx]
-        return coord_emin, emin
+        return coordinate_emin,ele_l_emin, emin
 
     def get_moldeninput(self):
         cmd = self.generate_cmd_string()
@@ -597,36 +608,36 @@ class CallxTB:
                 Esolv = float(file.readlines()[0])
         return Esolv
 
-    def get_topo(self, out="xtbtopo.mol"):
-        # constrain_l, ele required in mb; at index starts with 1
-        constrain_l, ele = None, None
-        coord = None
-        for file in os.listdir(self.wd):
-            if file.endswith("xyz"):
-                from aRST.script.toolbox import read_coord
-                coord = read_coord(join(self.wd, file))
-                break
-        if coord is not None:
-            if exists(join(self.wd, out)):
-                constrain_l, ele = [], []
-                from aRST.script.geom import Coord
-                # V2000
-                with open(join(self.wd, out)) as f:
-                    lines = f.readlines()
-                ln_parts = lines[3].split()
-                nat, nbond = int(ln_parts[0]), int(ln_parts[1])
-
-                for i in range(nat):
-                    ele.append(lines[4 + i].split()[3])
-                for i in range(nbond):
-                    ln_parts = lines[4 + nat + i].split()
-                    at1, at2 = int(ln_parts[0]), int(ln_parts[1])
-                    bond_length = Coord(coord).get_ats_distance(at1 - 1, at2 - 1)
-                    constrain_l.append({"atoms": [at1, at2], "value": bond_length})
-            else:
-                # single at
-                constrain_l, ele = [], [str(coord.iloc[0, 0])]
-        return constrain_l, ele
+    # def get_topo(self, out="xtbtopo.mol"):
+    #     # constrain_l, ele required in mb; at index starts with 1
+    #     constrain_l, ele = None, None
+    #     coord = None
+    #     for file in os.listdir(self.wd):
+    #         if file.endswith("xyz"):
+    #             from aRST.script.toolbox import read_coord
+    #             coord = read_coord(join(self.wd, file))
+    #             break
+    #     if coord is not None:
+    #         if exists(join(self.wd, out)):
+    #             constrain_l, ele = [], []
+    #             from aRST.script.geom import Coord
+    #             # V2000
+    #             with open(join(self.wd, out)) as f:
+    #                 lines = f.readlines()
+    #             ln_parts = lines[3].split()
+    #             nat, nbond = int(ln_parts[0]), int(ln_parts[1])
+    #
+    #             for i in range(nat):
+    #                 ele.append(lines[4 + i].split()[3])
+    #             for i in range(nbond):
+    #                 ln_parts = lines[4 + nat + i].split()
+    #                 at1, at2 = int(ln_parts[0]), int(ln_parts[1])
+    #                 bond_length = Coord(coord).get_ats_distance(at1 - 1, at2 - 1)
+    #                 constrain_l.append({"atoms": [at1, at2], "value": bond_length})
+    #         else:
+    #             # single at
+    #             constrain_l, ele = [], [str(coord.iloc[0, 0])]
+    #     return constrain_l, ele
 
 
 class CallTerachem:
@@ -723,14 +734,13 @@ class CallMultiwfn:
 
 
 class CallMolBar:
-    def __init__(self, coord):
-        self.coord = coord
+    def __init__(self, coordinate,ele_l):
+        self.coordinate = coordinate
+        self.ele_l = ele_l
 
     def get_mb(self):
         from molbar.barcode import get_molbar_from_coordinates
-        coord_l = [self.coord.loc[i, 1:3].tolist() for i in self.coord.index]
-        ele_l = [self.coord.loc[i, 0] for i in self.coord.index]
-        mb = get_molbar_from_coordinates(coord_l, ele_l)
+        mb = get_molbar_from_coordinates(self.coordinate, self.ele_l)
         return mb
 
 
@@ -815,12 +825,12 @@ class CallgXTB:
         return cmd_string
 
     def sp(self, writeenergy=False):
-        # write .charg and .uhf file
+        # write .CHRG and .UHF file
         if self.cmd.get_value('charge') != 0:
-            with open(join(self.wd, ".charg"), 'w') as file:
+            with open(join(self.wd, ".CHRG"), 'w') as file:
                 file.write(str(self.cmd.get_value('charge')))
         if self.cmd.get_value('uhf') != 0:
-            with open(join(self.wd, ".uhf"), 'w') as file:
+            with open(join(self.wd, ".UHF"), 'w') as file:
                 file.write(str(self.cmd.get_value('uhf')))
 
         # run gxtb sp
