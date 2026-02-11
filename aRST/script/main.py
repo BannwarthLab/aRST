@@ -2,11 +2,7 @@
 # import warnings
 # warnings.simplefilter("ignore", UserWarning)
 # warnings.simplefilter("ignore", RuntimeWarning)
-
-import os
-import shutil
 import sys
-import time
 import traceback
 from aRST.script.head import *
 from argparse import ArgumentParser

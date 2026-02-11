@@ -1,9 +1,5 @@
-import pandas as pd
-import aRST.script.initialization as storage
 from aRST.script.exploration.assign_reaction import SingleCycleSearch
-from aRST.script.spr import SPR,SDP
 from aRST.script.reactivity.print_stuff import *
-from aRST.script.head import print_jobhead
 from aRST.script.exploration.interA import *
 from aRST.script.exploration.intraA import *
 from aRST.script.exploration.intraD import *
@@ -17,7 +13,9 @@ def show_afo(printnumber=10):
     print(f"allow hydrogen atoms: {hydrogen}\nallow halogen atoms: {halogen}")
     spr = SPR(reactants, hydrogen, halogen)
 
-    coord_l = [storage.allstruc.get_value(f"{_}.struc_info.general.coord") for _ in reactants]
+    coordinates = [storage.allstruc.get_value(f"{_}.struc_info.general.coordinate") for _ in reactants]
+    ele_ls = [storage.allstruc.get_value(f"{_}.struc_info.general.ele_l") for _ in reactants]
+
 
     for i, list in enumerate([[spr.HOAO_a, spr.HOAO_b],[spr.LUAO_a, spr.LUAO_b]]):
         df_a,df_b =list
@@ -45,12 +43,12 @@ def show_afo(printnumber=10):
         for j in range(min(len(afo_l_a), len(afo_l_b))):
             struc_a = struc_l_a[j]
             at_a = at_l_a[j]
-            ele_a =  coord_l[int(struc_a)].iloc[at_a,0]
+            ele_a = ele_ls[struc_a][at_a]
             afo_a = afo_l_a[j][2]
 
             struc_b = struc_l_b[j]
             at_b = at_l_b[j]
-            ele_b = coord_l[int(struc_b)].iloc[at_b, 0]
+            ele_b = ele_ls[struc_b][at_b]
             afo_b = afo_l_b[j][2]
 
 

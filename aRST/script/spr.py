@@ -340,20 +340,26 @@ class SDP:
     def __init__(self, reactants,
                  allow_hydrogen=True,
                  allow_halogen=True,
-                 bo_l=None, coord_l=None):
+                 bo_l=None,
+                 # coordinate_l=None,
+                 ele_ls=None):
         self.reactants = reactants
         self.allbonds = []
         self.dfs = []
-        if not bo_l is None:
+        if bo_l is not None:
             self.dfs = bo_l
-            self.coord_l = coord_l
+            # self.coordinate_l = coordinate_l
+            self.ele_ls = ele_ls
+
         else:
             self.dfs = [storage.allstruc.get_value(f"{_}.struc_info.reactivity.bo") for _ in self.reactants]
-            self.coord_l = [storage.allstruc.get_value(f"{_}.struc_info.general.coord") for _ in self.reactants]
+            # self.coordinate_l = [storage.allstruc.get_value(f"{_}.struc_info.general.coordinate") for _ in self.reactants]
+            self.ele_ls= [storage.allstruc.get_value(f"{_}.struc_info.general.ele_l") for _ in self.reactants]
 
         for i in range(len(reactants)):
             struc = self.reactants[i]
-            coord = self.coord_l[i]
+            # coordinate = self.coordinate_l[i]
+            ele_l = self.ele_ls[i]
             bodf = self.dfs[i]
             if bodf is not None:
                 # read through df
@@ -361,7 +367,7 @@ class SDP:
                     at1, at2 = bodf.iloc[index, :2]
                     at1 = int(at1) - 1
                     at2 = int(at2) - 1
-                    ele1, ele2 = coord.iloc[at1, 0], coord.iloc[at2, 0]
+                    ele1, ele2 = ele_l[at1], ele_l[at2]
                     if not allow_hydrogen:
                         if ele1 == "H" or ele2 == "H":
                             continue

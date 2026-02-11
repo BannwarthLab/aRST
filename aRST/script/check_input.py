@@ -1,7 +1,7 @@
-import sys
+
 from aRST.script.toolbox import mydict, get_all_keys
 import os
-import shutil
+
 
 required_input = {
     "read": {

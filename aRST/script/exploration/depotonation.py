@@ -13,18 +13,19 @@ def updating_reacntans(reactants,job="depotonation"):
 
     for struc in reactants:
         c = storage.allstruc.get_value(f"{struc}.struc_info.general.charge")
-        constrain_l, ele = storage.allstruc.get_value(f"{struc}.struc_info.general.atomic_connection")
+        constrain_l = storage.allstruc.get_value(f"{struc}.struc_info.general.atomic_connection")
         if job=="depotonation":
             if not "H" in ele:
                 continue
 
         E0 = storage.allstruc.get_value(f"{struc}.struc_info.energy.sp_dft")
-        coord = storage.allstruc.get_value(f"{struc}.struc_info.general.coord")
+        coordinate = storage.allstruc.get_value(f"{struc}.struc_info.general.coordinate")
+        ele_l = storage.allstruc.get_value(f"{struc}.struc_info.general.ele_l")
         m = int(storage.allstruc.get_value(f"{struc}.struc_info.general.multiplicity"))
 
         tmpfolder = create_folder(join(storage.setting.bufferwd, get_random_folder_name(),job))
         # call depotonation
-        write_xyz(coord, "coord")
+        write_xyz(coordinate,ele_l, "coord")
         crest_parse = CallCrest(tmpfolder,
                          custom_settings={"charge": c, "uhf": m-1})
         if job=="depotonation":
@@ -35,9 +36,9 @@ def updating_reacntans(reactants,job="depotonation"):
             continue
 
         if status==0:
-            updated_coord = crest_parse.read_update_coord(job=job)
+            updated_coordinate,updated_ele_l = crest_parse.read_update_coord(job=job)
 
-            if updated_coord is not None:
+            if updated_coordinate is not None:
                 # reset AFO features
                 storage.allstruc.set_value(f"{struc}.struc_info.reactivity.afo",None)
                 storage.allstruc.set_value(f"{struc}.struc_info.reactivity.bo", None)
@@ -52,7 +53,7 @@ def updating_reacntans(reactants,job="depotonation"):
                         f"  updated to reactant")
                     c += 1
 
-                storage.allstruc.refine_struc_info(updated_coord, c, m, storage.setting,struc,wd0=tmpfolder)
+                storage.allstruc.refine_struc_info(updated_coordinate,updated_ele_l, c, m, storage.setting,strucid=struc,wd0=tmpfolder)
                 struc_info = get_strucinfo_from_path(tmpfolder)
                 storage.allstruc.set_value_from_struc_info(struc, struc_info)
                 tarwd = join(storage.setting.strucwd, struc,job)

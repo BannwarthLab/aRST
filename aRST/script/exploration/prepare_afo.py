@@ -7,15 +7,18 @@ import shutil
 
 
 class getAFO:
-    def __init__(self, strucid=0, setting=None, coord=None, c=None, m=None):
-        if coord is None:
-            self.coord = storage.allstruc.get_value(f"{strucid}.struc_info.general.coord")
+    def __init__(self, strucid=0, setting=None, coordinate=None,ele_l=None
+        ,c=None, m=None):
+        if coordinate is None:
+            self.coordinate = storage.allstruc.get_value(f"{strucid}.struc_info.general.coordinate")
+            self.ele_l = storage.allstruc.get_value(f"{strucid}.struc_info.general.ele_l")
             self.c = storage.allstruc.get_value(f"{strucid}.struc_info.general.charge")
             self.m = storage.allstruc.get_value(f"{strucid}.struc_info.general.multiplicity")
             self.setting = storage.setting
 
         else:
-            self.coord = coord
+            self.coordinate = coordinate
+            self.ele_l=ele_l
             self.c = c
             self.m = m
             self.setting = setting
@@ -28,11 +31,11 @@ class getAFO:
         if not exists(join(afowd, "ml_feature.csv")):
             if 'XTBML_BIN' in os.environ and os.environ['XTBML_BIN']:
                 # modified xtb exiest
-                write_xyz(self.coord, "coord")
+                write_xyz(self.coordinate,self.ele_l, "coord")
                 rc = CallxTB(afowd, custom_settings={"charge": self.c, "uhf": self.m - 1}).afo()
             else:
                 # use normal xtb version to generate molden file
-                write_xyz(self.coord, "coord")
+                write_xyz(self.coordinate,self.ele_l, "coord")
                 rc = CallxTB(afowd, custom_settings={"charge": self.c, "uhf": self.m - 1}).afo_molden()
                 if rc==0:
                     rc = CallsTDA(afowd, "molden.input").callml(0)
@@ -48,7 +51,7 @@ class getAFO:
         rc = 0
         if not exists(join(afowd, "ml_feature.csv")):
             tcwd = create_folder(join(self.setting.strucwd, self.struc, "tc"))
-            write_xyz(self.coord, "coord")
+            write_xyz(self.coordinate,self.ele_l, "coord")
             inputcmd_d = {"coordfn": "coord",
                           "c": self.c,
                           "m": self.m,
@@ -73,7 +76,7 @@ class getAFO:
         rc = 0
         if not exists(join(afowd, "ml_feature.csv")):
             orcawd = create_folder(join(self.setting.strucwd, self.struc, "orcaml")) if not subfolder else create_folder(join(self.setting.strucwd, self.struc,subfolder, "orcaml"))
-            write_xyz(self.coord, "coord")
+            write_xyz(self.coordinate,self.ele_l, "coord")
             staus = CallORCA(orcawd,
                              custom_settings={"charge": self.c, "m": self.m,
                                               "functional": self.setting.get_value(
