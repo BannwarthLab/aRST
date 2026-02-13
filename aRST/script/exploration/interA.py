@@ -67,10 +67,7 @@ def generate_reactive_complex(entry):
 
     # generate reactiv complex
     at_l = entry["at_combi"]
-    at1, at2 = at_l[0]
-    at1 = int(at1)
-    at2 = int(at2)
-    coordinate_merge, ele_merged = alignment(coordinate1, ele_l1, coordinate2, ele_l2, at1, at2,
+    coordinate_merge, ele_merged = alignment(coordinate1, ele_l1, coordinate2, ele_l2, at_l,
                                              extra_setting={"maxovlap": storage.setting.get_value(
                                                  "searching_setting.inter.maxovlap", False),
                                                  "aligning_distance": storage.setting.get_value(

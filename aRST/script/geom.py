@@ -8,15 +8,16 @@ warnings.filterwarnings("ignore")
 
 
 class Coord:
-    def __init__(self, coordinate, ele_l):
+    def __init__(self, coordinate, ele_l, centerats=None):
         self.coordinate = coordinate
         self.ele_l = ele_l
         self.rcov_l = np.array([float(r0[e]) for e in self.ele_l], dtype=np.float64)
-        self.rcov_l_scaled = np.array([(4/3)*_ for _ in self.rcov_l], dtype=np.float64)
+        self.rcov_l_scaled = np.array([(4 / 3) * _ for _ in self.rcov_l], dtype=np.float64)
         self.nat = len(self.ele_l)
         self.nat_l = np.array([float(element[e]) for e in self.ele_l], dtype=np.int16)
+        self.centerats = centerats
 
-    def get_principal_moment_vec(self, at):
+    def get_principal_moment_vec(self, centerats_ext=None):
         t1, t2, t3, t4, t5, t6 = 0, 0, 0, 0, 0, 0
         # matrix for moments of inertia is of form, with CN in mass as weight
         # *           |   y**2+z**2                         |
@@ -25,11 +26,19 @@ class Coord:
         xv, yv, zv = 0, 0, 0
         neighbor_atl = []
 
-        ax, ay, az = self.coordinate[at]
-        rcov_c_scaled = self.rcov_l_scaled[at]
+        if centerats_ext is None:
+            coords = [self.coordinate[i] for i in self.centerats]
+            ax, ay, az = [sum(values) / len(values) for values in zip(*coords)]
+            rcov_c_scaled = sum(self.rcov_l_scaled[i] for i in self.centerats) / len(self.centerats)
+            centerats = self.centerats
+        else:
+            coords = [self.coordinate[i] for i in centerats_ext]
+            ax, ay, az = [sum(values) / len(values) for values in zip(*coords)]
+            rcov_c_scaled = sum(self.rcov_l_scaled[i] for i in centerats_ext) / len(centerats_ext)
+            centerats = centerats_ext
 
         for i in range(len(self.ele_l)):
-            if i == at:
+            if i in centerats:
                 continue
             bx, by, bz = self.coordinate[i]
             x = bx - ax
@@ -72,9 +81,15 @@ class Coord:
         #     print(P.round(3))
         return mv, P, v, neighbor_atl
 
-    def shift(self, center_at, d):
+    def shift(self, d, centerats_ext=None):
         # shift the molecule with aktiv as center to (0,0,d)
-        shift_vec = self.coordinate[center_at].copy()
+        if centerats_ext is None:
+            coords = [self.coordinate[i] for i in self.centerats]
+            shift_vec = np.array([sum(values) / len(values) for values in zip(*coords)])
+        else:
+            coords = [self.coordinate[i] for i in centerats_ext]
+            shift_vec = np.array([sum(values) / len(values) for values in zip(*coords)])
+
         shift_vec[2] -= d
         self.coordinate -= shift_vec
         return self
@@ -90,9 +105,10 @@ class Coord:
                 f.write(f"{at:2s} {x:18.14f} {y:18.14f} {z:18.14f}\n")
             f.write("\n")
 
-    def write_p(self, at, P, name, dst, length=2, porder=None):
+    def write_p(self, P, name, dst, length=2, porder=None):
         # display p vector in chimera, defalut length =2
-        x, y, z = self.coordinate[at]
+        coords = [self.coordinate[i] for i in self.centerats]
+        x, y, z = [sum(values) / len(values) for values in zip(*coords)]
         P_scalred = np.copy(P)
         for i in range(P_scalred.shape[1]):
             tmp = np.linalg.norm(P[:, i])
@@ -158,17 +174,16 @@ class Coord:
     def choose_combination(self, at1, at2, at3, at4):
         # atl =  [[at1,at2],[at3,at4]]
         # at1 = 0,0,0; at2 = 0,0,z
-        d12 = self.get_ats_distance(at1,at2)
-        d34 = self.get_ats_distance(at3,at4)
-        d14 = self.get_ats_distance(at1,at4)
-        d32 = self.get_ats_distance(at3,at2)
+        d12 = self.get_ats_distance(at1, at2)
+        d34 = self.get_ats_distance(at3, at4)
+        d14 = self.get_ats_distance(at1, at4)
+        d32 = self.get_ats_distance(at3, at2)
         straight = d12 + d34
         swapped = d14 + d32
         if straight <= swapped:
             return "straight"
         else:
             return "swapped"
-
 
     def get_ats_distance(self, at1, at2):
         ax, ay, az = self.coordinate[at1]
@@ -256,19 +271,20 @@ def l2r(P):
     return P
 
 
-def alignment(coordinate1, ele_l1, coordinate2, ele_l2, at1, at2, extra_setting=None, writingP=False):
+def alignment(coordinate1, ele_l1, coordinate2, ele_l2, at_l, extra_setting=None, writingP=False):
     # copy coord so that won't affect global variant
     struc1 = coordinate1.copy()
     struc2 = coordinate2.copy()
 
-    struc1 = Coord(struc1, ele_l1).shift(center_at=at1, d=0)
-    mv1, P1, v1, neighbor_atl1 = struc1.get_principal_moment_vec(at1)
+    centerats_1 = [int(_[0]) for _ in at_l]
+    struc1 = Coord(struc1, ele_l1, centerats=centerats_1).shift(d=0)
+    mv1, P1, v1, neighbor_atl1 = struc1.get_principal_moment_vec()
 
     # make sure p point into the direction of the smallest resistance and keep right-handed
     P1 = check_orient(P1, mv1)
     if writingP:
         struc1.write_xyz("coord1")
-        struc1.write_p(at1, P1, "p1_primitive", os.getcwd(), 2)
+        struc1.write_p(P1, "p1_primitive", os.getcwd(), 2)
 
     # find main reaction direction
     P1, new_porder = check_range(P1, v1)
@@ -276,16 +292,17 @@ def alignment(coordinate1, ele_l1, coordinate2, ele_l2, at1, at2, extra_setting=
     # change coordinate system to main axes system
     struc1.change_cs(P1)
     if writingP:
-        struc1.write_p(at1, P1, "p1_oriented", os.getcwd(), 2, new_porder)
+        struc1.write_p(P1, "p1_oriented", os.getcwd(), 2, new_porder)
 
     # now do 2. structure
-    struc2 = Coord(struc2, ele_l2).shift(center_at=at2, d=0)
-    mv2, P2, v2, neighbor_atl2 = struc2.get_principal_moment_vec(at2)
+    centerats_2 = [int(_[1]) for _ in at_l]
+    struc2 = Coord(struc2, ele_l2,centerats=centerats_2).shift(d=0)
+    mv2, P2, v2, neighbor_atl2 = struc2.get_principal_moment_vec()
 
     P2 = check_orient(P2, mv2)
     if writingP:
         struc2.write_xyz("coord2")
-        struc2.write_p(at2, P2, "p2_primitive", os.getcwd(), 2)
+        struc2.write_p(P2, "p2_primitive", os.getcwd(), 2)
 
     # find main reaction direction
     P2, new_porder = check_range(P2, v2)
@@ -302,16 +319,16 @@ def alignment(coordinate1, ele_l1, coordinate2, ele_l2, at1, at2, extra_setting=
 
     struc2.change_cs(P2)
     if writingP:
-        struc2.write_p(at2, P2, "p2_oriented", os.getcwd(), 2, new_porder)
+        struc2.write_p(P2, "p2_oriented", os.getcwd(), 2, new_porder)
 
     # shift struc2 to (0,0,d)
-    cov_r_at12 = r0[struc1.ele_l[at1]] + r0[struc2.ele_l[at2]]
+    cov_r_at12 = r0[struc1.ele_l[centerats_1[0]]] + r0[struc2.ele_l[centerats_2[0]]]
     relativ_r = extra_setting.get('aligning_distance', 5)  # 5 times of rr by default
     d = np.round(cov_r_at12 * relativ_r, 3)
-    struc2 = struc2.shift(center_at=at2, d=d)
+    struc2 = struc2.shift(d=d)
 
     # merge two structures
     coordinate_merge = np.vstack((struc1.coordinate, struc2.coordinate))
     ele_merge = np.concatenate([struc1.ele_l, struc2.ele_l])
 
-    return coordinate_merge,ele_merge
+    return coordinate_merge, ele_merge
