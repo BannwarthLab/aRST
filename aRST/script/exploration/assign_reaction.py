@@ -108,12 +108,15 @@ class SingleCycleSearch:
         output_interA, output_D, output_intraA = {}, {}, {}
 
         ## interA
-        if len(self.reactants) > 1 and(storage.setting.get_value("searching_setting.inter.number", 0)>0 or storage.setting.get_value("searching_setting.inter.at1")):
+        ninter = storage.setting.get_value("searching_setting.inter.number", 0)
+        atom_pairs = storage.setting.get_value("searching_setting.inter.atom_pair")
+        if len(self.reactants) > 1 and (ninter!=0 or atom_pairs is not None):
+            if atom_pairs:
+                ninter = len(atom_pairs)
             print()
             print_jobhead("Bimolecular Association")
             react_l = get_interA_react_l(self.reactants)
             scanmode = storage.setting.get_value("searching_setting.general.scan_mode", 0)
-            ninter = storage.setting.get_value("searching_setting.inter.number", 1)
             if ninter == "all":
                 ninter = len(react_l)
             if scanmode == 0:
@@ -130,8 +133,11 @@ class SingleCycleSearch:
                         output_interA.update(res)
 
         ## intraA
-        if storage.setting.get_value("searching_setting.intra.number", 0) > 0 or \
-            storage.setting.get_value("searching_setting.intra.at1"):
+        nintra = storage.setting.get_value("searching_setting.intra.number",0)
+        atom_pairs = storage.setting.get_value("searching_setting.intra.atom_pair")
+        if nintra != 0 or atom_pairs is not None:
+            if atom_pairs:
+                nintra=len(atom_pairs)
             print()
             print_jobhead("Intramolecular Association")
             # Testing if depotonation is energetically favorable
@@ -147,7 +153,6 @@ class SingleCycleSearch:
                 self.prepare_AFO(afosubwd="potonation")
             react_l = get_intraA_react_l(self.reactants)
             scanmode = storage.setting.get_value("searching_setting.general.scan_mode", 0)
-            nintra = storage.setting.get_value("searching_setting.intra.number", 1)
             if nintra == "all":
                 nintra = len(react_l)
             if scanmode == 0:
@@ -164,8 +169,11 @@ class SingleCycleSearch:
                         output_intraA.update(res)
 
         ## intraD
-        if storage.setting.get_value("searching_setting.disso.number", 0) > 0 or \
-                storage.setting.get_value("searching_setting.disso.at1"):
+        ndisso = storage.setting.get_value("searching_setting.disso.number", 0)
+        atom_pairs = storage.setting.get_value("searching_setting.disso.atom_pair")
+        if ndisso != 0 or atom_pairs is not None:
+            if atom_pairs:
+                ndisso=len(atom_pairs)
             print()
             print_jobhead("Dissociation")
             # Testing if depotonation is energetically favorable
@@ -181,7 +189,6 @@ class SingleCycleSearch:
                 self.prepare_AFO(afosubwd="potonation")
             react_l = get_intraD_react_l(self.reactants)
             scanmode = storage.setting.get_value("searching_setting.general.scan_mode", 0)
-            ndisso = storage.setting.get_value("searching_setting.disso.number", 1)
             if ndisso == "all":
                 ndisso = len(react_l)
             if scanmode == 0:
