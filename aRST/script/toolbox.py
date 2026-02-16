@@ -81,14 +81,15 @@ def read_coord(coordpath):
 
 def get_topo(coordinate, ele_l, bo):
     from aRST.script.geom import Coord
+    # index starts from 1
     topo_l = []
     instance = Coord(coordinate, ele_l)
     for index in range(bo.shape[0]):  # index starts from 1
-        at1, at2 = bo.iloc[index, :2]
+        at1, at2, mbo = bo.iloc[index, :3]
         at1 = int(at1)
         at2 = int(at2)
         dist = instance.get_ats_distance(at1 - 1, at2 - 1)
-        topo_l.append({"atoms": [at1, at2], "value": dist})
+        topo_l.append({"atoms": [at1, at2], "value": dist, "mbo": float(mbo)})
     return topo_l
 
 

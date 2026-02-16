@@ -5,41 +5,8 @@ import pandas as pd
 import aRST.script.initialization as storage
 
 
-def build_react_l(h_df, l_df, search_mode):
-    """
-    loop over Hdf and Ldf to build up atomic pairs
-    """
-    react_l = []
-    for il, (istruc_l, row_l) in enumerate(l_df.items()):
-        for ih, (istruc_h, row_h) in enumerate(h_df.items()):
-            # Test search_mode
-            if search_mode == 0 and il != ih:  # only search struc1 == struc2
-                continue
-            elif search_mode == 1 and il == ih:  # only search struc1 != struc2
-                continue
-
-            # loop row to get H and L values
-            for iat_l, L in row_l.items():
-                if isinstance(L, str) or np.isnan(L) or np.isinf(L):
-                    continue
-                for iat_h, H in row_h.items():
-                    if isinstance(H, str) or np.isnan(H) or np.isinf(H):
-                        continue
-                    gap = np.round(np.round(L, 2) - np.round(H, 2), 2)
-                    if int(istruc_l) <= int(istruc_h):
-                        react_l.append({"struc_combi": [str(istruc_h), str(istruc_l)],
-                                        "at_combi": [str(iat_h), str(iat_l)],
-                                        "HOAO": H,
-                                        "LUAO": L,
-                                        "gap": gap})
-                    else:
-                        react_l.append({"struc_combi": [str(istruc_l), str(istruc_h)],
-                                        "at_combi": [str(iat_l), str(iat_h)],
-                                        "HOAO": H,
-                                        "LUAO": L,
-                                        "gap": gap})
-    return react_l
-
+def ceil_tol(x, round_tol=0.01, tol=1e-9):
+    return np.ceil((x - tol) / round_tol) * round_tol
 
 
 def find_identical_at_from_afo(HOAO_a, HOAO_b, LUAO_a, LUAO_b, tol=0.01):
@@ -118,7 +85,7 @@ def refine_react_l(react_l, identical_atom_d, intra=False):
                         break
 
                 all_combi = list(product(degenerate_at1, degenerate_at2))
-                if int(struc1) ==int(struc2):
+                if int(struc1) == int(struc2):
                     all_combi2 = list(product(degenerate_at2, degenerate_at1))
                     all_combi.extend(all_combi2)
                 used_l1 = []
@@ -143,10 +110,10 @@ def refine_react_l(react_l, identical_atom_d, intra=False):
                 # change gap
                 for searchitem in out_react_l:
                     search_struc1, search_struc2 = searchitem["struc_combi"]
-                    if int(search_struc1) ==int(struc1) and int(search_struc2) ==int(struc2):
+                    if int(search_struc1) == int(struc1) and int(search_struc2) == int(struc2):
                         search_allcombi = searchitem["at_combi"]
                         triger = next((True for tmpitem in search_allcombi
-                                       if int(tmpitem[0]) ==int(at1) and int(tmpitem[1]) ==int(at2)),False)
+                                       if int(tmpitem[0]) == int(at1) and int(tmpitem[1]) == int(at2)), False)
                         if triger:
                             currentgap = item["gap"]
                             oldgap = searchitem["gap"]
@@ -212,13 +179,9 @@ def refine_react_l(react_l, identical_atom_d, intra=False):
 
 class SPR:
     # atom index starts with 0
-    def __init__(self, reactants,
-                 allow_hydrogen=True,
-                 allow_halogen=True,
-                 afo_l=None):
+    def __init__(self, reactants, spr_mode, afo_l=None):
         self.reactants = reactants
-        self.allowhydrogen = allow_halogen
-        self.allowhalogen = allow_halogen
+        # self.elculde_elements = [] if elculde_elements is None else elculde_elements
 
         if afo_l is None:
             maxnat = max(storage.allstruc.get_value(f'{i}.struc_info.reactivity.afo').shape[0] for i in self.reactants)
@@ -231,6 +194,9 @@ class SPR:
         self.LUAO_a = pd.DataFrame(columns=self.reactants, index=range(maxnat))
         self.LUAO_b = pd.DataFrame(columns=self.reactants, index=range(maxnat))
 
+        # build up a elements array
+        self.elements = np.full((maxnat, len(self.reactants)), np.nan)
+
         newcolumn_names = ["HOAO_a (eV)", "HOAO_b (eV)", "LUAO_a (eV)", "LUAO_b (eV)"]
         dfs = [self.HOAO_a, self.HOAO_b, self.LUAO_a, self.LUAO_b]
 
@@ -238,30 +204,13 @@ class SPR:
             strucid = self.reactants[istruc]
             if afo_l is None:
                 mldf_original = storage.allstruc.get_value(f'{strucid}.struc_info.reactivity.afo').copy()
-
             else:
                 mldf_original = afo_l[istruc].copy()
-                # remove all hydrogen/halogen if not allowed
-            if not allow_hydrogen:
-                # get index
-                hindex = mldf_original[mldf_original['Atom'] == 1].index.tolist()
-                mldf_original.loc[hindex, "HOAO_a (eV)"] = -np.inf
-                mldf_original.loc[hindex, "HOAO_b (eV)"] = -np.inf
-                mldf_original.loc[hindex, "LUAO_a (eV)"] = np.inf
-                mldf_original.loc[hindex, "LUAO_a (eV)"] = np.inf
 
-            if not allow_halogen:
-                # get index
-                hindex = mldf_original[mldf_original['Atom'] == 9 or
-                                       mldf_original['Atom'] == 17 or
-                                       mldf_original['Atom'] == 35 or
-                                       mldf_original['Atom'] == 53 or
-                                       mldf_original['Atom'] == 85].index.tolist()
-                # change values
-                mldf_original.loc[hindex, "HOAO_a (eV)"] = -np.inf
-                mldf_original.loc[hindex, "HOAO_b (eV)"] = -np.inf
-                mldf_original.loc[hindex, "LUAO_a (eV)"] = np.inf
-                mldf_original.loc[hindex, "LUAO_a (eV)"] = np.inf
+            # fill in element array
+            atom_list = list(mldf_original["Atom"])
+            atom_list.extend([-1] * (maxnat - len(atom_list)))
+            self.elements[:, istruc] = atom_list
 
             for df, column_name in zip(dfs, newcolumn_names):
                 tmpl = list(mldf_original.loc[:, column_name])
@@ -269,58 +218,163 @@ class SPR:
                     tmpl.append(np.nan)
                 df.iloc[:, istruc] = tmpl  # .reset_index(drop=True)
 
-    def inter(self, spr_mode):
-        identical_atom_d = find_identical_at_from_afo(self.HOAO_a,self.HOAO_b,self.LUAO_a,self.LUAO_b)
-        final_react = []
+        # Convert to numpy once
+        self.HOAO_a_np = self.HOAO_a.to_numpy(dtype=float)
+        self.HOAO_b_np = self.HOAO_b.to_numpy(dtype=float)
+        self.LUAO_a_np = self.LUAO_a.to_numpy(dtype=float)
+        self.LUAO_b_np = self.LUAO_b.to_numpy(dtype=float)
+
         if spr_mode == 1:
-            react_aa = build_react_l(self.HOAO_a, self.LUAO_a, search_mode=1)
-            react_bb = build_react_l(self.HOAO_b, self.LUAO_b, search_mode=1)
-            for react in [react_aa, react_bb]:
-                final_react.extend(react)
+            self.pairs = [
+                (self.HOAO_a_np, self.LUAO_a_np),
+                (self.HOAO_b_np, self.LUAO_b_np),
+            ]
         elif spr_mode == 2:
-            react_ab = build_react_l(self.HOAO_a, self.LUAO_b, search_mode=1)
-            react_ba = build_react_l(self.HOAO_b, self.LUAO_a, search_mode=1)
-            for react in [react_ab, react_ba]:
-                final_react.extend(react)
-
+            self.pairs = [
+                (self.HOAO_a_np, self.LUAO_b_np),
+                (self.HOAO_b_np, self.LUAO_a_np),
+            ]
         else:
-            react_aa = build_react_l(self.HOAO_a, self.LUAO_a, search_mode=1)
-            react_bb = build_react_l(self.HOAO_b, self.LUAO_b, search_mode=1)
-            react_ab = build_react_l(self.HOAO_a, self.LUAO_b, search_mode=1)
-            react_ba = build_react_l(self.HOAO_b, self.LUAO_a, search_mode=1)
+            self.pairs = [
+                (self.HOAO_a_np, self.LUAO_a_np),
+                (self.HOAO_b_np, self.LUAO_b_np),
+                (self.HOAO_a_np, self.LUAO_b_np),
+                (self.HOAO_b_np, self.LUAO_a_np),
+            ]
 
-            for react in [react_aa, react_bb, react_ab, react_ba]:
-                final_react.extend(react)
+    def build_react_l(self, H, L, struc_ids, search_mode,
+                      equivalent_afogap_tol=0.01,
+                      exclude_elements=None,
+                      exclude_pairs=None
+                      ):
+        """
+        Output:
+          list of dicts:
+            {
+              "struc_combi": [struc1, struc2],
+              "at_combi": [at1, at2],
+              "HOAO": H,
+              "LUAO": L,
+              "gap": gap
+            }
+        """
+        exclude_elements = [] if exclude_elements is None else exclude_elements
+        exclude_pairs = [] if exclude_pairs is None else exclude_pairs
+        ex_el = {tuple(p) for p in exclude_pairs}
+        ex_el |= {(b, a) for (a, b) in ex_el}
+        decimals = int(round(-np.log10(equivalent_afogap_tol)))  # for print afo gap
 
+        react_l = []
+        nat, nstruc = H.shape
+        for il in range(nstruc):
+            Lcol = L[:, il]
+            L_elements = self.elements[:, il]
+            L_ok = np.isfinite(Lcol)
+            if exclude_elements:
+                L_ok &= ~np.isin(L_elements, exclude_elements)
+
+            for ih in range(nstruc):
+                if search_mode == 0 and il != ih:
+                    continue
+                if search_mode == 1 and il == ih:
+                    continue
+                Hcol = H[:, ih]
+                H_elements = self.elements[:, ih]
+
+                H_ok = np.isfinite(Hcol)
+                if exclude_elements:
+                    H_ok &= (~np.isin(H_elements, exclude_elements))
+
+                # Broadcast to get all (iat_l, iat_h) gaps
+                # gap[i_l, i_h] corresponds to L[i_l] - H[i_h]
+                gap_mat = ceil_tol(Lcol[:, None] - Hcol[None, :], round_tol=equivalent_afogap_tol)
+                valid = L_ok[:, None] & H_ok[None, :]
+                i_l, i_h = np.where(valid)
+                if i_l.size == 0:
+                    continue
+
+                if ex_el:
+                    Z_l = self.elements[i_l, il]
+                    Z_h = self.elements[i_h, ih]
+                    keep = np.array([(int(zl), int(zh)) not in ex_el for zl, zh in zip(Z_l, Z_h)], dtype=bool)
+                    if not np.any(keep):
+                        continue
+                    i_l = i_l[keep]
+                    i_h = i_h[keep]
+
+                gaps = gap_mat[i_l, i_h]
+                hoao_vals = Hcol[i_h]
+                luao_vals = Lcol[i_l]
+
+                s_l = struc_ids[il]
+                s_h = struc_ids[ih]
+
+                if s_l <= s_h:
+                    struc1, struc2 = str(s_h), str(s_l)
+                    at1 = i_h
+                    at2 = i_l
+                else:
+                    struc1, struc2 = str(s_l), str(s_h)
+                    at1 = i_l
+                    at2 = i_h
+
+                for k in range(len(gaps)):
+                    react_l.append({
+                        "struc_combi": [struc1, struc2],
+                        "at_combi": [str(int(at1[k])), str(int(at2[k]))],
+                        "HOAO": float(hoao_vals[k]),
+                        "LUAO": float(luao_vals[k]),
+                        "gap": round(float(gaps[k]), decimals),
+                    })
+        return react_l
+
+    def inter(self, equivalent_afogap_tol=0.01, exclude_elements=None, exclude_pairs=None):
+        identical_atom_d = find_identical_at_from_afo(self.HOAO_a,
+                                                      self.HOAO_b,
+                                                      self.LUAO_a,
+                                                      self.LUAO_b,
+                                                      tol=equivalent_afogap_tol)
+        final_react = []
+        struc_ids = np.array(self.reactants, dtype=int)
+        for hoao, luao in self.pairs:
+            final_react.extend(
+                self.build_react_l(
+                    hoao,
+                    luao,
+                    struc_ids,
+                    search_mode=1,
+                    equivalent_afogap_tol=equivalent_afogap_tol,
+                    exclude_elements=exclude_elements,
+                    exclude_pairs=exclude_pairs
+                )
+            )
         final_react = sorted(refine_react_l(final_react, identical_atom_d), key=lambda x: x['gap'])
         return final_react
 
-    def intra(self, spr_mode):
-        identical_atom_d = find_identical_at_from_afo(self.HOAO_a,self.HOAO_b,self.LUAO_a,self.LUAO_b)
+    def intra(self, equivalent_afogap_tol=0.01, exclude_elements=None, exclude_pairs=None):
+        identical_atom_d = find_identical_at_from_afo(self.HOAO_a,
+                                                      self.HOAO_b,
+                                                      self.LUAO_a,
+                                                      self.LUAO_b,
+                                                      tol=equivalent_afogap_tol)
         final_react = []
-        if spr_mode == 1:
-            react_aa = build_react_l(self.HOAO_a, self.LUAO_a, search_mode=0)
-            react_bb = build_react_l(self.HOAO_b, self.LUAO_b, search_mode=0)
-            for react in [react_aa, react_bb]:
-                final_react.extend(react)
-        elif spr_mode == 2:
-            react_ab = build_react_l(self.HOAO_a, self.LUAO_b, search_mode=0)
-            react_ba = build_react_l(self.HOAO_b, self.LUAO_a, search_mode=0)
-            for react in [react_ab, react_ba]:
-                final_react.extend(react)
-
-        else:
-            react_aa = build_react_l(self.HOAO_a, self.LUAO_a, search_mode=0)
-            react_bb = build_react_l(self.HOAO_b, self.LUAO_b, search_mode=0)
-            react_ab = build_react_l(self.HOAO_a, self.LUAO_b, search_mode=0)
-            react_ba = build_react_l(self.HOAO_b, self.LUAO_a, search_mode=0)
-
-            for react in [react_aa, react_bb, react_ab, react_ba]:
-                final_react.extend(react)
+        struc_ids = np.array(self.reactants, dtype=int)
+        for hoao, luao in self.pairs:
+            final_react.extend(
+                self.build_react_l(
+                    hoao,
+                    luao,
+                    struc_ids,
+                    search_mode=0,
+                    equivalent_afogap_tol=equivalent_afogap_tol,
+                    exclude_elements=exclude_elements,
+                    exclude_pairs=exclude_pairs
+                )
+            )
 
         tmp_react = sorted(refine_react_l(final_react, identical_atom_d, intra=True), key=lambda x: x['gap'])
         # del all connected bond
-        allbonds = SDP(self.reactants, self.allowhydrogen, self.allowhalogen).allbonds
+        allbonds = SDP(self.reactants, exclude_elements=exclude_elements, exclude_pairs=exclude_pairs).allbonds
         final_react = []
         for item in tmp_react:
             struc = item["struc"]
@@ -328,8 +382,8 @@ class SPR:
             trigger = True
             for item2 in allbonds:
                 if item2["struc"] == struc:
-                    if item2["at_combi"] == atl or len(set(atl))==1:
-                        trigger=False
+                    if item2["at_combi"] == atl or len(set(atl)) == 1:
+                        trigger = False
             if trigger:
                 final_react.append(item)
         return final_react
@@ -338,70 +392,87 @@ class SPR:
 class SDP:
     # atom index starts with 0
     def __init__(self, reactants,
-                 allow_hydrogen=True,
-                 allow_halogen=True,
                  bo_l=None,
-                 # coordinate_l=None,
-                 ele_ls=None):
+                 ele_ls=None,
+                 exclude_elements=None, exclude_pairs=None
+                 ):
         self.reactants = reactants
         self.allbonds = []
         self.dfs = []
         if bo_l is not None:
             self.dfs = bo_l
-            # self.coordinate_l = coordinate_l
             self.ele_ls = ele_ls
-
         else:
             self.dfs = [storage.allstruc.get_value(f"{_}.struc_info.reactivity.bo") for _ in self.reactants]
-            # self.coordinate_l = [storage.allstruc.get_value(f"{_}.struc_info.general.coordinate") for _ in self.reactants]
-            self.ele_ls= [storage.allstruc.get_value(f"{_}.struc_info.general.ele_l") for _ in self.reactants]
+            self.ele_ls = [storage.allstruc.get_value(f"{_}.struc_info.general.ele_l") for _ in self.reactants]
+        exclude_elements = [] if exclude_elements is None else exclude_elements
+        exclude_pairs = [] if exclude_pairs is None else exclude_pairs
+        from aRST.script.element import element
+        exclude_elements_set = set(exclude_elements)
+        exclude_pairs_set = {tuple(p) for p in exclude_pairs}
+        exclude_pairs_set |= {(b, a) for (a, b) in exclude_pairs_set}  # symmetric
 
-        for i in range(len(reactants)):
-            struc = self.reactants[i]
-            # coordinate = self.coordinate_l[i]
+        def keep_bond(at1, at2, mbo, z_l):
+            # mbo threshold (apply to both sources)
+            if mbo < 0.3:
+                return None
+
+            z1 = int(z_l[at1])
+            z2 = int(z_l[at2])
+
+            if z1 in exclude_elements_set or z2 in exclude_elements_set:
+                return None
+            if (z1, z2) in exclude_pairs_set:
+                return None
+
+            if at1 < at2:
+                at1, at2 = at2, at1
+
+            return at1, at2, mbo
+
+        allbonds = []
+        for i, struc in enumerate(self.reactants):
             ele_l = self.ele_ls[i]
+            z_l = np.array([element[x] for x in ele_l], dtype=np.int16)
+
+            topolist = storage.allstruc.get_value(f"{struc}.struc_info.general.atomic_connection")
             bodf = self.dfs[i]
-            if bodf is not None:
-                # read through df
-                for index in range(bodf.shape[0]):
-                    at1, at2 = bodf.iloc[index, :2]
+
+            if topolist is not None:
+                for conn in topolist:
+                    at1, at2 = conn["atoms"]
                     at1 = int(at1) - 1
                     at2 = int(at2) - 1
-                    ele1, ele2 = ele_l[at1], ele_l[at2]
-                    if not allow_hydrogen:
-                        if ele1 == "H" or ele2 == "H":
-                            continue
-                    if not allow_halogen:
-                        if ele1 in ["F", "Cl", "cl", "Br", "I"] or ele2 in ["F", "Cl", "cl", "Br", "I"]:
-                            continue
-                    mbo = bodf.iloc[index, 2]
-                    if mbo < 0.3:
+                    mbo = float(conn["mbo"])
+                    out = keep_bond(at1, at2, mbo, z_l)
+                    if out is None:
                         continue
-                    if at1 < at2:
-                        at1, at2 = at2,at1
-                    else:
-                        at1, at2 = at1, at2
-                    if bodf.shape[1] > 2:
-                        embo = bodf.iloc[index, 3]
-                        self.allbonds.append({"struc": struc,
-                                              "at_combi": [str(at1), str(at2)],
-                                              "mbo": mbo,
-                                              "embo": embo})
-                    else:
-                        self.allbonds.append({"struc": struc,
-                                              "at_combi": [str(at1), str(at2)],
-                                              "mbo": mbo,
-                                              })
+                    at1, at2, mbo = out
 
-    def build_react_l(self, mode, tol=0.01,gaplim=1.2):
+                    allbonds.append({"struc": struc, "at_combi": [str(at1), str(at2)], "mbo": mbo})
+
+            else:
+                if bodf is None:
+                    continue
+
+                for row in bodf.itertuples(index=False):
+                    at1 = int(row[0]) - 1
+                    at2 = int(row[1]) - 1
+                    mbo = float(row[2])
+                    out = keep_bond(at1, at2, mbo, z_l)
+                    if out is None:
+                        continue
+                    at1, at2, mbo = out
+                    allbonds.append({"struc": struc, "at_combi": [str(at1), str(at2)], "mbo": mbo})
+        self.allbonds = sorted(allbonds, key=lambda x: x["mbo"])
+
+    def build_react_l(self, tol=0.01):
         # refine react_l
         react_l = []
         for item in self.allbonds:
             struc = item["struc"]
             at1, at2 = item["at_combi"]
             mbo = item["mbo"]
-            if mode == 0 and mbo>gaplim:
-                continue
             if not react_l:
                 react_l.append(item)
                 react_l[0]["at_combi"] = [[at1, at2]]
@@ -419,12 +490,4 @@ class SDP:
                     react_l.append(item)
                     react_l[-1]["at_combi"] = [[at1, at2]]
 
-        if mode == 0:
-            return sorted(react_l, key=lambda x: x["mbo"])
-        else:
-            # embo as bo
-            if "embo" in react_l[0].keys():
-                return sorted(react_l, key=lambda x: x["embo"])
-            else:
-                print("Warning: embo doesn't exist in struc info, change back to MBO assessment")
-                return sorted(react_l, key=lambda x: x["mbo"])
+        return sorted(react_l, key=lambda x: x["mbo"])
