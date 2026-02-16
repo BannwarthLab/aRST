@@ -15,10 +15,11 @@ import copy
 
 
 def get_interA_react_l(reactants0, printall=True):
-    react_l = SPR(reactants0,
-                  storage.setting.get_value("searching_setting.general.hydrogen", True),
-                  storage.setting.get_value("searching_setting.general.halogen", True)
-                  ).inter(storage.setting.get_value("searching_setting.general.spr_mode", 0))
+    react_l = SPR(reactants0,storage.setting.get_value("searching_setting.general.spr_mode", 0)).inter(
+        equivalent_afogap_tol=storage.setting.get_value("searching_setting.general.equivalent_afogap_tol", 0.01),
+        exclude_elements=storage.setting.get_value("searching_setting.general.exclude_elements"),
+        exclude_pairs=storage.setting.get_value("searching_setting.general.exclude_pairs")
+    )
     cut = 2 if storage.setting.get_value("searching_setting.inter.concerted_pair", False) else 1
     for item in react_l:
         pairs = item["at_combi"][:cut]
@@ -32,27 +33,21 @@ def get_interA_react_l(reactants0, printall=True):
             for item in react_l:
                 f.write(json.dumps(item) + "\n")
 
-    if storage.setting.get_value("searching_setting.inter.at1") is not None:
+    atom_pairs = storage.setting.get_value("searching_setting.inter.atom_pair")
+    if atom_pairs is not None:
         # overwrite react_l with user's input
         # predifined reaction, used in one cycle
-        at1 = storage.setting.get_value("searching_setting.inter.at1")
-        at2 = storage.setting.get_value("searching_setting.inter.at2")
-        if storage.setting.get_value("searching_setting.inter.at3") is not None:
-            at3 = storage.setting.get_value("searching_setting.inter.at3")
-            at4 = storage.setting.get_value("searching_setting.inter.at4")
-            react_l = [{"struc_combi": [reactants0[0], reactants0[1]],
-                        "at_combi": [[str(at1), str(at2)], [str(at3), str(at4)]],
-                        "gap": 0,
-                        "force_combination":True}
-                       ]
+        at1,at2 = atom_pairs[0]
+        react_l = [{"struc_combi": [reactants0[0], reactants0[1]],
+                    "at_combi": [[str(at1), str(at2)]],
+                    "gap": 0,
+                    "force_combination": True}]
+        if len(atom_pairs)>1:
             storage.setting.set_value("searching_setting.inter.concerted_pair", True)
-        else:
-            react_l = [{"struc_combi": [reactants0[0], reactants0[1]],
-                        "at_combi": [[str(at1), str(at2)]],
-                        "gap": 0,
-                        "force_combination":False}
-                       ]
-
+            for atom_pair in atom_pairs[1:]:
+                at_combi_list = react_l[0]["at_combi"]
+                at3,at4 = atom_pair
+                at_combi_list.append([str(at3), str(at4)])
     return react_l
 
 
@@ -77,8 +72,8 @@ def generate_reactive_complex(entry):
     nelA = storage.allstruc.get_value(f"{struc1}.struc_info.general.nel")
     nelB = storage.allstruc.get_value(f"{struc2}.struc_info.general.nel")
 
-    force_combination =entry["force_combination"]
-    push_l = build_push_l(coordinate_merge, ele_merged, at_l, nat_coord1,force_combination=force_combination
+    force_combination = False if "force_combination" not in entry.keys() else entry["force_combination"]
+    push_l = build_push_l(coordinate_merge, ele_merged, at_l, nat_coord1, force_combination=force_combination
                           )
     return struc1, struc2, at_l, coordinate_merge, ele_merged, nat_coord1, charge, nelA + nelB, push_l
 

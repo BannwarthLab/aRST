@@ -76,7 +76,6 @@ class SingleCycleSearch:
                     storage.allstruc.set_value(f"{struc}.struc_info.reactivity.afo", afo)
 
                     # set bo
-                    # TODO: BUGFIX, use wbo as mbo
                     mbo = None
                     for file in [join(afowd, "wboe"), join(afowd, "bde"), join(afowd, "embo")]:
                         mbo = read_bo(file)

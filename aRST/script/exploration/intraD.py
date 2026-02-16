@@ -15,9 +15,9 @@ import copy
 
 def get_intraD_react_l(reactants0, gaplim=5, printall=True):
     react_l = SDP(reactants0,
-                  storage.setting.get_value("searching_setting.general.hydrogen", True),
-                  storage.setting.get_value("searching_setting.general.halogen", True),
-                  ).build_react_l(storage.setting.get_value("searching_setting.disso.mode", 0), gaplim=gaplim)
+                  exclude_elements=storage.setting.get_value("searching_setting.general.exclude_elements"),
+                  exclude_pairs=storage.setting.get_value("searching_setting.general.exclude_pairs")
+                  ).build_react_l(tol=0.01)
     cut = 2 if storage.setting.get_value("searching_setting.disso.concerted_pair", False) else 1
     for item in react_l:
         pairs = item["at_combi"][:cut]
@@ -29,22 +29,21 @@ def get_intraD_react_l(reactants0, gaplim=5, printall=True):
         with open(join(storage.setting.wd0, "react_l"), "w") as f:
             for item in react_l:
                 f.write(json.dumps(item) + "\n")
-
-    if storage.setting.get_value("searching_setting.disso.at1") is not None:
+    atom_pairs = storage.setting.get_value("searching_setting.disso.atom_pair")
+    if atom_pairs is not None:
+        # overwrite react_l with user's input
         # predifined reaction, used in one cycle
-        at1 = storage.setting.get_value("searching_setting.disso.at1")
-        at2 = storage.setting.get_value("searching_setting.disso.at2")
-        if storage.setting.get_value("searching_setting.disso.at3") is not None:
-            at3 = storage.setting.get_value("searching_setting.disso.at3")
-            at4 = storage.setting.get_value("searching_setting.disso.at4")
-            react_l = [{"struc": reactants0[0],
-                        "at_combi": [[str(at1), str(at2)], [str(at3), str(at4)]],
-                        "gap": 0}]
+        at1, at2 = atom_pairs[0]
+        react_l = [{"struc_combi": [reactants0[0], reactants0[1]],
+                    "at_combi": [[str(at1), str(at2)]],
+                    "gap": 0,
+                    "force_combination": True}]
+        if len(atom_pairs) > 1:
             storage.setting.set_value("searching_setting.disso.concerted_pair", True)
-        else:
-            react_l = [{"struc": reactants0[0],
-                        "at_combi": [[str(at1), str(at2)]],
-                        "gap": 0}]
+            for atom_pair in atom_pairs[1:]:
+                at_combi_list = react_l[0]["at_combi"]
+                at3, at4 = atom_pair
+                at_combi_list.append([str(at3), str(at4)])
     return react_l
 
 
@@ -259,7 +258,7 @@ def dissombff(reactants0, entry, reactionpath, count=0):
                 if status2 == 0:
                     endxyz, ele_l_end = read_coord(join(optwd, "xtbopt.xyz"))
                     bo = read_bo(join(optwd, "wbo"))
-                    constrain_l= get_topo(endxyz,ele_l_end,bo)
+                    constrain_l = get_topo(endxyz, ele_l_end, bo)
                     atcharge = read_atcharge(join(optwd, "charges"))
 
             output_d[f"{reactionpath}_{count}"] = [{"reactants": [struc],
