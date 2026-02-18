@@ -37,6 +37,7 @@ class Coord:
             rcov_c_scaled = sum(self.rcov_l_scaled[i] for i in centerats_ext) / len(centerats_ext)
             centerats = centerats_ext
 
+        center = np.array([ax,ay,az])
         for i in range(len(self.ele_l)):
             if i in centerats:
                 continue
@@ -79,7 +80,7 @@ class Coord:
         v, P = np.linalg.eigh(arep)
         #     print(v.round(3))
         #     print(P.round(3))
-        return mv, P, v, neighbor_atl
+        return mv, P, v, center, neighbor_atl
 
     def shift(self, d, centerats_ext=None):
         # shift the molecule with aktiv as center to (0,0,d)
@@ -209,122 +210,126 @@ def get_angle(v1, v2):  # 0-180
     return theta
 
 
-def check_orient(P, mv, rh_cs=True):
-    # default to optput right-handed P
-    tmp, tmp2 = [], []
-    current_type = check_rl(P)  # true = left handed
+def half_axis_scores(p, center, neighbors):
+    p = p / np.linalg.norm(p)
+    s_plus = 0.0
+    s_minus = 0.0
 
-    for i in range(3):
-        p = np.array(P[:, i])
-        theta = get_angle(p, mv)
-        tmp2.append(abs(abs(theta) - 90))
+    for r in neighbors:
+        v = r - center
+        proj = np.dot(v, p)  # +: neighbor atom in p_plus space; -:otherwise
+        d_perp = np.linalg.norm(v - proj * p)  # distance to axis line
 
-        if theta < 90:
-            tmp.append(i)
-            P[:, i] = -p
+        # penalty for atoms close to the approach line
+        pen = 1.0 / (d_perp ** 2 + 1e-6)
 
-    if len(tmp) == 1 or len(tmp) == 3:
-        if (rh_cs and current_type) or (not rh_cs and not current_type):
-            i = tmp2.index(min(tmp2))
-            P[:, i] = -P[:, i]
+        if proj >= 0:
+            s_plus += pen
         else:
-            return P
+            s_minus += pen
 
-    return P
-
-
-def check_range(P, v):
-    #
-    v = v.round(2)
-    v = [i for i in v]
-    # a=b=c spherical pr=pc
-    # a<b=c prolate pr=pa !
-    # a=b<c oblate pr=pc
-    # a=0 b=c linear pr=pc
-    # a+b = c oblate, plane pr=pc
-    column_order = [0, 1, 2]
-    if v[1] == v[2] and v[0] != 0:  # prolate
-        column_order = [0, 1, 2]
-        pr_index = v.index(min(v))
-        for i in range(2 - pr_index):
-            column_order.insert(0, column_order.pop())
-        P = P[:, column_order]
-    else:
-        P = P
-    return P, column_order
+    return s_plus, s_minus
 
 
-def check_rl(P):
-    # retrun true if P is left-handed
-    a, b, c = P[::, 0], P[::, 1], P[::, 2]
-    cross_p = [np.round(j, 3) for j in np.cross(b, c)]
-    dot_p = np.dot(a, cross_p)
-    if dot_p > 0:
-        return True
-    else:
-        return False
+def orient_P(P, center, neighbors):
+    P = P.copy()
+    per_axis = []
+    for i in range(3):
+        p = P[:, i].copy()
+        s_plus, s_minus = half_axis_scores(p, center, neighbors)
+
+        # choose sign with lower score
+        if s_plus <= s_minus:
+            sign = +1.0
+            best = s_plus
+            worst = s_minus
+        else:
+            sign = -1.0
+            best = s_minus
+            worst = s_plus
+
+        per_axis.append({
+            "i": i,
+            "s_plus": float(s_plus),
+            "s_minus": float(s_minus),
+            "sign": float(sign),  # multiply column by this
+            "best": float(best),  # openness score (lower = better)
+            "worst": float(worst),
+        })
+
+    # apply the best sign choice to each original column
+    for item in per_axis:
+        P[:, item["i"]] *= item["sign"]
+
+    # reorder p-axes: [p_most_block,p_mid p_most_open]
+    ranked = sorted(per_axis, key=lambda d: d["best"])  # [best, mid, worst]
+    # indices in original P order after sign applied:
+    idx_best, idx_mid, idx_worst = [r["i"] for r in ranked]
+
+    order = [idx_worst,idx_mid,idx_best]
+
+    P = P[:, order]
 
 
-def l2r(P):
-    column_order = [1, 0, 2]
-    P = P[:, column_order]
+    # enforce det(P) = 1 (rotation-only)
+    if np.linalg.det(P) < 0:
+        best_lookup = {d["i"]: d["best"] for d in per_axis}
+        # columns 0 and 1 correspond to original axes order[0], order[1]
+        col_to_flip = 0 if best_lookup[order[0]] >= best_lookup[order[1]] else 1
+        P[:, col_to_flip] *= -1
+
     return P
 
 
 def alignment(coordinate1, ele_l1, coordinate2, ele_l2, at_l, extra_setting=None, writingP=False):
+    #                  B ------  x
+    #                / |
+    #               /  |z
+    #              y  z|
+    #                  A ------  y
+    #                /
+    #               /
+    #              x
+
     # copy coord so that won't affect global variant
     struc1 = coordinate1.copy()
     struc2 = coordinate2.copy()
 
     centerats_1 = [int(_[0]) for _ in at_l]
     struc1 = Coord(struc1, ele_l1, centerats=centerats_1).shift(d=0)
-    mv1, P1, v1, neighbor_atl1 = struc1.get_principal_moment_vec()
-
-    # make sure p point into the direction of the smallest resistance and keep right-handed
-    P1 = check_orient(P1, mv1)
+    mv1, P1, v1, center1, neighbor1 = struc1.get_principal_moment_vec()
+    P1 = orient_P(P1,center1,neighbor1)
     if writingP:
         struc1.write_xyz("coord1")
-        struc1.write_p(P1, "p1_primitive", os.getcwd(), 2)
-
-    # find main reaction direction
-    P1, new_porder = check_range(P1, v1)
+        struc1.write_p(P1, "p1", os.getcwd(), 2)
 
     # change coordinate system to main axes system
     struc1.change_cs(P1)
-    if writingP:
-        struc1.write_p(P1, "p1_oriented", os.getcwd(), 2, new_porder)
 
     # now do 2. structure
     centerats_2 = [int(_[1]) for _ in at_l]
-    struc2 = Coord(struc2, ele_l2,centerats=centerats_2).shift(d=0)
-    mv2, P2, v2, neighbor_atl2 = struc2.get_principal_moment_vec()
+    struc2 = Coord(struc2, ele_l2, centerats=centerats_2).shift(d=0)
+    mv2, P2, v2,center2, neighbor2 = struc2.get_principal_moment_vec()
 
-    P2 = check_orient(P2, mv2)
-    if writingP:
-        struc2.write_xyz("coord2")
-        struc2.write_p(P2, "p2_primitive", os.getcwd(), 2)
-
-    # find main reaction direction
-    P2, new_porder = check_range(P2, v2)
-
-    P2[:, 2] = -P2[:, 2]
-
-    P2[:, 0] = -P2[:, 0]
-    P2[:, 1] = -P2[:, 1]
+    P2 = orient_P(P2, center2, neighbor2)
+    P2[:, 2] *= -1
+    P2[:, [0, 1]] = P2[:, [1, 0]]
 
     maxovlap = extra_setting.get("maxovlap", False)
     if maxovlap:
-        P2[:, 0] = -P2[:, 0]
-        P2[:, 1] = -P2[:, 1]
+        P2[:, 1] *= -1
+        P2[:, 0] *= -1
+
+    if writingP:
+        struc2.write_xyz("coord2")
+        struc2.write_p(P2, "p2", os.getcwd(), 2)
 
     struc2.change_cs(P2)
-    if writingP:
-        struc2.write_p(P2, "p2_oriented", os.getcwd(), 2, new_porder)
 
     # shift struc2 to (0,0,d)
     cov_r_at12 = r0[struc1.ele_l[centerats_1[0]]] + r0[struc2.ele_l[centerats_2[0]]]
     relativ_r = extra_setting.get('aligning_distance', 5)  # 5 times of rr by default
-    d = np.round(cov_r_at12 * relativ_r, 3)
+    d = np.round(cov_r_at12 * relativ_r, 5)
     struc2 = struc2.shift(d=d)
 
     # merge two structures
