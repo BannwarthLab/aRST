@@ -41,8 +41,19 @@ class getAFO:
                     rc = CallsTDA(afowd, "molden.input").callml(0)
                 else:
                     rc=1
-
         return afowd, rc
+
+    def get_from_gxtb(self,subfolder=None):
+        """
+        internal usage: molden-version of gxtb
+        """
+        afowd = create_folder(join(self.setting.strucwd, self.struc, "gxtb")) \
+            if not subfolder else create_folder(join(self.setting.strucwd, self.struc, subfolder, "gxtb", "afo"))
+        rc = 1
+        if not exists(join(afowd, "ml_feature.csv")):
+            rc = CallsTDA(afowd, "molden.input").callml(0)
+        return afowd, rc
+
 
     def get_from_tc(self,subfolder=None):
         afowd = join(self.setting.strucwd, self.struc, "stda") \

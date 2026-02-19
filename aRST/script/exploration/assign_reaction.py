@@ -59,6 +59,8 @@ class SingleCycleSearch:
                 else:
                     if str.lower(storage.setting.get_value("searching_setting.reactivity.afo_method")) == "gfn2":
                         afowd, status = getAFO(strucid=struc).get_from_xtb(afosubwd)
+                    elif str.lower(storage.setting.get_value("searching_setting.reactivity.afo_method")) == "gxtb":
+                        afowd, status = getAFO(strucid=struc).get_from_gxtb(afosubwd)
                     elif str.lower(storage.setting.get_value("searching_setting.reactivity.afo_method")) == "terachem":
                         afowd, status = getAFO(strucid=struc).get_from_tc(afosubwd)
                     else:
