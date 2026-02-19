@@ -3,8 +3,7 @@ import os
 import shutil
 import subprocess
 import re
-from aRST.script.toolbox import mydict,read_coord
-
+from aRST.script.toolbox import mydict, read_coord
 
 
 def remove_file(old_path, new_path):
@@ -106,7 +105,7 @@ class CallORCA:
 
     def get_geomres(self):
         if exists(join(self.wd, 'orca.xyz')):
-            coordinate,ele_l = read_coord(join(self.wd, 'orca.xyz'))
+            coordinate, ele_l = read_coord(join(self.wd, 'orca.xyz'))
         else:
             coordinate, ele_l = read_coord(join(self.wd, 'coord.xyz'))
         return coordinate, ele_l
@@ -170,7 +169,7 @@ class CallCrest:
         return rc
 
     def generate_cmd_string(self):
-        cmd_string = os.environ['CREST_BIN']+" "
+        cmd_string = os.environ['CREST_BIN'] + " "
         coordfn = self.cmd.get_value("coordfn")
         if coordfn is None:
             raise Exception(f"coord in {self.wd} can't find right coordfn name")
@@ -195,13 +194,14 @@ class CallCrest:
         cmd_string += " --deprotonate "
         rc = self.crestsubprocess(cmd_string)
         return rc
+
     def potonation(self):
         cmd_string = self.generate_cmd_string()
         cmd_string += " --protonate "
         rc = self.crestsubprocess(cmd_string)
         return rc
 
-    def read_update_coord(self,job):
+    def read_update_coord(self, job):
         import numpy as np
         outwd = f'{self.wd}/crest.out'
         with open(outwd, "r") as file:
@@ -217,14 +217,14 @@ class CallCrest:
                 trigger = False
                 break
         deltaE_l = []
-        for line in lines[startline+1:end]:
-            nstruc,deltaE,Etot = line.split()
+        for line in lines[startline + 1:end]:
+            nstruc, deltaE, Etot = line.split()
             deltaE_l.append(float(deltaE))
-        if min(deltaE_l)>0:
-            coordinate,ele_l = None,None
+        if min(deltaE_l) > 0:
+            coordinate, ele_l = None, None
         else:
             nstruc = deltaE_l.index(min(deltaE_l))
-            ensemblewd = f'{self.wd}/deprotonated.xyz' if job=="depotonation" else f'{self.wd}/protonated.xyz'
+            ensemblewd = f'{self.wd}/deprotonated.xyz' if job == "depotonation" else f'{self.wd}/protonated.xyz'
             coordinate_l = []
             ele_ls = []
             with open(ensemblewd, 'r') as f:
@@ -251,9 +251,7 @@ class CallCrest:
 
             coordinate = coordinate_l[nstruc]
             ele_l = ele_ls[nstruc]
-        return coordinate,ele_l
-
-
+        return coordinate, ele_l
 
 
 class CallxTB:
@@ -296,7 +294,7 @@ class CallxTB:
                         break
         return rc
 
-    def generate_cmd_string(self, opt=False, xtbmlversion=False,bar1M=False):
+    def generate_cmd_string(self, opt=False, xtbmlversion=False, bar1M=False):
         if xtbmlversion:
             cmd_string = os.environ['XTBML_BIN'] + " "
         else:
@@ -344,6 +342,7 @@ class CallxTB:
         p.wait()
         rc = p.returncode
         return rc
+
     def afo_molden(self):
         cmd_string = self.generate_cmd_string(opt=False, xtbmlversion=True)
         cmd_string += "--molden "
@@ -440,7 +439,7 @@ class CallxTB:
     def constrained_opt(self, newbond):
         with open(f'{self.wd}/scan.inp', 'w') as f:
             f.write(f'$constrain\n'
-                    f'force constant={self.cmd.get_value("k","1")}\n')
+                    f'force constant={self.cmd.get_value("k", "1")}\n')
             for item in newbond:
                 at1, at2 = item["atoms"]
                 value = item["value"]
@@ -536,9 +535,9 @@ class CallxTB:
 
                     ele_ls.append(elems)
                     coordinate_l.append(coords)
-            return coordinate_l,ele_ls, energies
+            return coordinate_l, ele_ls, energies
 
-        def filter_outliers(coordinate_l,ele_ls, energies, z_threshold=2.5):
+        def filter_outliers(coordinate_l, ele_ls, energies, z_threshold=2.5):
             from scipy.stats import zscore
             z_scores = np.abs(zscore(energies))
             non_outliers = np.where(z_scores < z_threshold)[0]
@@ -547,15 +546,15 @@ class CallxTB:
             clean_ele_l = [ele_ls[i] for i in non_outliers]
             clean_energies = [energies[i] for i in non_outliers]
 
-            return clean_coordinate_l,clean_ele_l, clean_energies
+            return clean_coordinate_l, clean_ele_l, clean_energies
 
-        coordinate_l,ele_ls, energies = parse_xtb_trj(trjwd, nat)
-        clean_coord_l,clean_ele_l, clean_energies = filter_outliers(coordinate_l,ele_ls, energies)
+        coordinate_l, ele_ls, energies = parse_xtb_trj(trjwd, nat)
+        clean_coord_l, clean_ele_l, clean_energies = filter_outliers(coordinate_l, ele_ls, energies)
         lowest_idx = np.argmin(clean_energies)
         coordinate_emin = clean_coord_l[lowest_idx]
         ele_l_emin = clean_ele_l[lowest_idx]
         emin = clean_energies[lowest_idx]
-        return coordinate_emin,ele_l_emin, emin
+        return coordinate_emin, ele_l_emin, emin
 
     def get_moldeninput(self):
         cmd = self.generate_cmd_string()
@@ -734,7 +733,7 @@ class CallMultiwfn:
 
 
 class CallMolBar:
-    def __init__(self, coordinate,ele_l):
+    def __init__(self, coordinate, ele_l):
         self.coordinate = coordinate
         self.ele_l = ele_l
 
@@ -749,14 +748,12 @@ class CallgXTB:
     def default_settings(cls, setting):
         # use gfn2 setting to obtain .charg and .uhf
         """Dynamically generates default settings based on the `setting` class."""
-        return {"method": setting.get_value("xtb_setting.method", "gfn2"),
-                "coordfn": "coord",
-                "optlevel": setting.get_value("xtb_setting.optlevel", ""),
-                "charge": 0,
-                "uhf": 0,
-                "alpb": setting.get_value("xtb_setting.alpb", "h2o"),
-                "etemp": setting.get_value("xtb_setting.struc_etemp", "300"),
-                }
+        return {
+            "coordfn": "coord",
+            "charge": 0,
+            "uhf": 0,
+            # "alpb": setting.get_value("xtb_setting.alpb", "h2o"),
+        }
 
     def __init__(self, wd, command_d=None, custom_settings=None):
         self.wd = wd
@@ -821,7 +818,7 @@ class CallgXTB:
         coordfn = self.cmd.get_value("coordfn")
         if coordfn is None:
             raise Exception(f"coord in {self.wd} can't find right coordfn name")
-        cmd_string += f"{coordfn}.xyz "
+        cmd_string += f"{coordfn}.xyz -molden"
         return cmd_string
 
     def sp(self, writeenergy=False):
