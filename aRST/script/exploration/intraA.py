@@ -10,11 +10,11 @@ from aRST.script.spr import SPR, SDP
 from aRST.script.geom import Coord
 from aRST.script.callsys import CallxTB
 import aRST.script.initialization as storage
-from aRST.script.head import print_simulation, print_react_l
+from aRST.script.head import  print_react_l
 import copy
 
 
-def get_intraA_react_l(reactants0, printall=True):
+def get_intraA_react_l(reactants0):
     react_l = SPR(reactants0,
                   storage.setting.get_value("searching_setting.general.spr_mode", 0)
                   ).intra(
@@ -27,12 +27,11 @@ def get_intraA_react_l(reactants0, printall=True):
         pairs = item["at_combi"][:cut]
         item["at_combi"] = pairs
 
-    if printall:
-        print_react_l(reactants0, react_l, rtype="intraA")
-        # write full react_l in file
-        with open(join(storage.setting.wd0, "react_l"), "w") as f:
-            for item in react_l:
-                f.write(json.dumps(item) + "\n")
+    print_react_l(reactants0, react_l)
+    # write full react_l in file
+    with open(join(storage.setting.wd0, "react_l"), "w") as f:
+        for item in react_l:
+            f.write(json.dumps(item) + "\n")
 
     atom_pairs = storage.setting.get_value("searching_setting.intra.atom_pair")
     if atom_pairs is not None:
@@ -88,8 +87,8 @@ def intraxtbscan(reactants0, entry, reactionpath, count=0):
     if storage.setting.get_value("searching_setting.inter.loose_bond", False) and len(ele_l) > 2:
         # searching weakest bond
         allbonds = SDP([struc],
-                       storage.setting.get_value("searching_setting.general.hydrogen", True),
-                       storage.setting.get_value("searching_setting.general.halogen", True),
+        exclude_elements=storage.setting.get_value("searching_setting.general.exclude_elements"),
+        exclude_pairs=storage.setting.get_value("searching_setting.general.exclude_pairs")
                        )
         allbonds = sorted(allbonds, key=lambda x: x["mbo"])
         item = allbonds[0]
@@ -103,6 +102,7 @@ def intraxtbscan(reactants0, entry, reactionpath, count=0):
     unreacted.remove(struc)
     unreacted = sorted(unreacted, key=int, reverse=True)
     for u in uhf_l:
+        print(f"Starting simulation of intraA path {reactionpath}_{count}...", end="")
         scan_wd = join(storage.setting.scanwd, f"{reactionpath}_{count}")
         create_folder(scan_wd)
         write_xyz(coordinate, ele_l, "coord")
@@ -143,16 +143,12 @@ def intraxtbscan(reactants0, entry, reactionpath, count=0):
                                                     "coordinate": endxyz,
                                                     "ele_l": ele_l_end,
                                                     "bo": bo,
-                                                    "atomic_connection": constrain_l}  # endxyz info
+                                                    "atomic_connection": constrain_l},  # endxyz info
+                                                   {"type": "intraA"}  # reaction info
                                                    ]
-            print_simulation(entry["struc"],
-                             at_l,
-                             [storage.allstruc.get_value(f"{struc}.struc_info.general.charge")
-                              for struc in entry["struc"]],
-                             [storage.allstruc.get_value(f"{struc}.struc_info.general.nel")
-                              for struc in entry["struc"]],
-                             reactionpath, count, nel, charge, u
-                             )
+            print(f"done.")
+        else:
+            print(f"failed.")
         count += 1
     return output_d, count
 
@@ -180,6 +176,7 @@ def intrarmbff(reactants0, entry, reactionpath, count=0):
     unreacted.remove(struc)
     unreacted = sorted(unreacted, key=int, reverse=True)
     for u in uhf_l:
+        print(f"Starting simulation of intraA path {reactionpath}_{count}...", end="")
         scan_wd = join(storage.setting.scanwd, f"{reactionpath}_{count}")
         create_folder(scan_wd)
 
@@ -252,15 +249,11 @@ def intrarmbff(reactants0, entry, reactionpath, count=0):
                                                     "coordinate": endxyz,
                                                     "ele_l": ele_l_end,
                                                     "bo": bo,
-                                                    "atomic_connection": constrain_l}  # endxyz info
+                                                    "atomic_connection": constrain_l},  # endxyz info
+                                                   {"type": "intraA"}  # reaction info
                                                    ]
-            print_simulation(entry["struc"],
-                             at_l,
-                             [storage.allstruc.get_value(f"{struc}.struc_info.general.charge")
-                              for struc in entry["struc"]],
-                             [storage.allstruc.get_value(f"{struc}.struc_info.general.nel")
-                              for struc in entry["struc"]],
-                             reactionpath, count, nel, charge, u
-                             )
+            print(f"done.")
+        else:
+            print(f"failed.")
         count += 1
     return output_d, count

@@ -10,11 +10,11 @@ from aRST.script.callsys import CallxTB
 from aRST.script.do_scan import build_push_l
 from aRST.script.do_scan import get_endxyz_from_mb
 import aRST.script.initialization as storage
-from aRST.script.head import print_simulation, print_react_l
+from aRST.script.head import print_react_l
 import copy
 
 
-def get_interA_react_l(reactants0, printall=True):
+def get_interA_react_l(reactants0):
     react_l = SPR(reactants0,storage.setting.get_value("searching_setting.general.spr_mode", 0)).inter(
         equivalent_afogap_tol=storage.setting.get_value("searching_setting.general.equivalent_afogap_tol", 0.01),
         exclude_elements=storage.setting.get_value("searching_setting.general.exclude_elements"),
@@ -25,13 +25,12 @@ def get_interA_react_l(reactants0, printall=True):
         pairs = item["at_combi"][:cut]
         item["at_combi"] = pairs
 
-    # print top 20 react_l
-    if printall:
-        print_react_l(reactants0, react_l, rtype="interA")
-        # write full react_l in file
-        with open(join(storage.setting.wd0, "react_l"), "w") as f:
-            for item in react_l:
-                f.write(json.dumps(item) + "\n")
+    # print top 10 react_l
+    print_react_l(reactants0, react_l)
+    # write full react_l in file
+    with open(join(storage.setting.wd0, "react_l"), "w") as f:
+        for item in react_l:
+            f.write(json.dumps(item) + "\n")
 
     atom_pairs = storage.setting.get_value("searching_setting.inter.atom_pair")
     if atom_pairs is not None:
@@ -112,8 +111,8 @@ def interxtbscan(reactants0, entry, reactionpath, count=0):
     if storage.setting.get_value("searching_setting.inter.loose_bond", False):
         # searching weakest bond
         allbonds = SDP([struc1, struc2],
-                       storage.setting.get_value("searching_setting.general.hydrogen", True),
-                       storage.setting.get_value("searching_setting.general.halogen", True),
+                       exclude_elements=storage.setting.get_value("searching_setting.general.exclude_elements"),
+                       exclude_pairs=storage.setting.get_value("searching_setting.general.exclude_pairs")
                        ).allbonds
         allbonds = sorted(allbonds, key=lambda x: x["mbo"])
         item = allbonds[0]
@@ -132,6 +131,7 @@ def interxtbscan(reactants0, entry, reactionpath, count=0):
     unreacted.remove(struc2)
     unreacted = sorted(unreacted, key=int, reverse=True)
     for u in uhf_l:
+        print(f"Starting simulation of interA path {reactionpath}_{count}...", end="")
         scan_wd = join(storage.setting.scanwd, f"{reactionpath}_{count}")
         create_folder(scan_wd)
         write_xyz(coordinate_merge, ele_merged, f"coord")
@@ -161,7 +161,7 @@ def interxtbscan(reactants0, entry, reactionpath, count=0):
                     constrain_l = get_topo(endxyz, ele_l_end, bo)
                     atcharge = read_atcharge(join(optwd, "charges"))
             # md optional
-            if storage.setting.get_value("searching_setting.general.MD", False):
+            if storage.setting.get_value("searching_setting.general.md", False):
                 mdwd = join(scan_wd, "md")
                 bo, constrain_l, atcharge, endxyz, ele_l_end = _short_md_for_product_struc_guess(mdwd, endxyz,
                                                                                                  ele_l_end, push_l,
@@ -177,16 +177,12 @@ def interxtbscan(reactants0, entry, reactionpath, count=0):
                                                     "coordinate": endxyz,
                                                     "ele_l": ele_l_end,
                                                     "bo": bo,
-                                                    "atomic_connection": constrain_l}  # endxyz info
+                                                    "atomic_connection": constrain_l},  # endxyz info
+                                                   {"type": "interA"}  # reaction info
                                                    ]
-            print_simulation(entry["struc_combi"],
-                             at_l,
-                             [storage.allstruc.get_value(f"{struc}.struc_info.general.charge")
-                              for struc in entry["struc_combi"]],
-                             [storage.allstruc.get_value(f"{struc}.struc_info.general.nel")
-                              for struc in entry["struc_combi"]],
-                             reactionpath, count, totnel, charge, u, nat_1=nat_coord1
-                             )
+            print(f"done.")
+        else:
+            print(f"failed.")
         count += 1
     return output_d, count
 
@@ -217,6 +213,7 @@ def intermbff(reactants0, entry, reactionpath, count=0):
     unreacted.remove(struc1)
     unreacted.remove(struc2)
     for u in uhf_l:
+        print(f"Starting simulation of interA path {reactionpath}_{count}...", end="")
         scan_wd = join(storage.setting.scanwd, f"{reactionpath}_{count}")
         create_folder(scan_wd)
         write_xyz(coordinate_merge, ele_merged, f"coord")
@@ -259,7 +256,7 @@ def intermbff(reactants0, entry, reactionpath, count=0):
                     bo = read_bo(join(optwd, "wbo"))
                     constrain_l = get_topo(endxyz, ele_l_end, bo)
                     atcharge = read_atcharge(join(optwd, "charges"))
-            if storage.setting.get_value("searching_setting.general.MD", False):
+            if storage.setting.get_value("searching_setting.general.md", False):
                 mdwd = join(scan_wd, "md")
                 bo, constrain_l, atcharge, endxyz, ele_l_end = _short_md_for_product_struc_guess(mdwd, endxyz,
                                                                                                  ele_l_end, push_l,
@@ -276,16 +273,12 @@ def intermbff(reactants0, entry, reactionpath, count=0):
                                                     "coordinate": endxyz,
                                                     "ele_l": ele_l_end,
                                                     "bo": bo,
-                                                    "atomic_connection": constrain_l}  # endxyz info
+                                                    "atomic_connection": constrain_l},  # endxyz info
+                                                   {"type":"interA"} # reaction info
                                                    ]
-            print_simulation(entry["struc_combi"],
-                             at_l,
-                             [storage.allstruc.get_value(f"{struc}.struc_info.general.charge")
-                              for struc in entry["struc_combi"]],
-                             [storage.allstruc.get_value(f"{struc}.struc_info.general.nel")
-                              for struc in entry["struc_combi"]],
-                             reactionpath, count, totnel, charge, u, nat_1=nat_coord1
-                             )
+            print(f"done.")
+        else:
+            print(f"failed.")
         count += 1
     return output_d, count
 

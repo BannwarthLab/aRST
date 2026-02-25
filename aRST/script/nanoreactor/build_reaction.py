@@ -117,8 +117,8 @@ def adjust_number_of_struc_in_reactor(newadded_node_l, layer, p_l):
     for rxnnode in newadded_node_l:
         info = rxnnetwork.get_reaction_info(rxnnode)
         # check if this reaction accepted
-        bond_changed = info["bond_changed"]
-        if bond_changed:
+        bond_change = info["bond_change"]
+        if bond_change:
             therdy_allow = info["therdy_allow"]
             if therdy_allow:
                 reactants = info["reactants"]

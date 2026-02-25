@@ -108,7 +108,7 @@ class SingleCycleSearch:
         output_interA, output_D, output_intraA = {}, {}, {}
 
         ## interA
-        if len(self.reactants) > 1 and(storage.setting.get_value("searching_setting.inter.number", 0)>0 or storage.setting.get_value("searching_setting.inter.at1")):
+        if len(self.reactants) > 1 and(storage.setting.get_value("searching_setting.inter.number", 0)>0 or storage.setting.get_value("searching_setting.inter.atom_pair")):
             print()
             print_jobhead("Bimolecular Association")
             react_l = get_interA_react_l(self.reactants)
@@ -116,6 +116,7 @@ class SingleCycleSearch:
             ninter = storage.setting.get_value("searching_setting.inter.number", 1)
             if ninter == "all":
                 ninter = len(react_l)
+            print(f"Paths for Ranking 0-{ninter-1} will be simulated: ")
             if scanmode == 0:
                 # call xtb scan
                 for entry in react_l[:ninter]:
@@ -131,7 +132,7 @@ class SingleCycleSearch:
 
         ## intraA
         if storage.setting.get_value("searching_setting.intra.number", 0) > 0 or \
-            storage.setting.get_value("searching_setting.intra.at1"):
+            storage.setting.get_value("searching_setting.intra.atom_pair"):
             print()
             print_jobhead("Intramolecular Association")
             # Testing if depotonation is energetically favorable
@@ -150,6 +151,7 @@ class SingleCycleSearch:
             nintra = storage.setting.get_value("searching_setting.intra.number", 1)
             if nintra == "all":
                 nintra = len(react_l)
+            print(f"Paths for Ranking 0-{nintra - 1} will be simulated: ")
             if scanmode == 0:
                 # call xtb scan
                 for entry in react_l[:nintra]:
@@ -165,7 +167,7 @@ class SingleCycleSearch:
 
         ## intraD
         if storage.setting.get_value("searching_setting.disso.number", 0) > 0 or \
-                storage.setting.get_value("searching_setting.disso.at1"):
+                storage.setting.get_value("searching_setting.disso.atom_pair"):
             print()
             print_jobhead("Dissociation")
             # Testing if depotonation is energetically favorable
@@ -184,6 +186,7 @@ class SingleCycleSearch:
             ndisso = storage.setting.get_value("searching_setting.disso.number", 1)
             if ndisso == "all":
                 ndisso = len(react_l)
+            print(f"Paths for Ranking 0-{ndisso - 1} will be simulated: ")
             if scanmode == 0:
                 # call xtb scan
                 for entry in react_l[:ndisso]:
@@ -203,13 +206,14 @@ class SingleCycleSearch:
             if outd:
                 out.update(outd)
         out = [{key: value} for key, value in sorted(out.items(), key=lambda x: int(x[0].split('_')[-1]))]
+        print()
         return out
 
     @staticmethod
     def follow_up_treatment_gfn(key, tmp_path_l):
 
         # doing sep opt for inter_fragments
-        # output_d[count] = [{reactants info},{endxyz info}]
+        # output_d[count] = [{reactants info},{endxyz info},{reaction info}]
         reactants = tmp_path_l[0]["reactants"]
         cut = 5 if storage.setting.get_value("searching_setting.general.mb_level") == "loose" else 7
         reactants_mbl = [" | ".join(storage.allstruc.get_value(f"{i}.struc_info.general.mb").split(" | ")[:cut]) for i
@@ -309,20 +313,23 @@ class SingleCycleSearch:
             raise ValueError(f"Fragmentation in supra molecule in path {key} failed, check!")
 
         # now evaluate if reaction simulation fall back to starting geom
-        products_mbl = [CallMolBar(i["coordinate"],i["ele_l"]).get_mb() for i in endxyz_info_new]
-        tmp_path_l.append(products_mbl)
-        products_mbl = [" | ".join(item.split(" | ")[:cut]) for item in products_mbl]
-        bond_changed = True  # default as true
+        products_mbl = []
+
+        for item in endxyz_info_new:
+            mb = CallMolBar(item["coordinate"], item["ele_l"]).get_mb()
+            mb_trimmed = " | ".join(mb.split(" | ")[:cut])
+            item["mb"] = mb
+            products_mbl.append(mb_trimmed)
+        bond_change = True  # default as true
         if not "unknow" in products_mbl and not "unknow" in reactants_mbl:
             if Counter(products_mbl) == Counter(reactants_mbl):
-                bond_changed = False
+                bond_change = False
             else:
-                bond_changed = True
+                bond_change = True
 
         tmp_path_l[1] = endxyz_info_new
-        tmp_path_l.append(bond_changed)
-
-        # now output_d[count] = [{reactants info},[{P1}, {P2}],products_mbl, bond_changed_stuats]
+        tmp_path_l[2]["bond_change"] = bond_change
+        # now output_d[count] = [{reactants info},[{P1}, {P2}],{reaction info}]
         return tmp_path_l
 
     @staticmethod
@@ -424,8 +431,8 @@ class SingleCycleSearch:
                          in reactants]
         unreact_mbl = [" | ".join(storage.allstruc.get_value(f"{i}.struc_info.general.mb").split(" | ")[:cut]) for i
                        in unreactants]
-        products_mbl = tmp_path_l[2]
-        products_mbl = [" | ".join(item.split(" | ")[:cut]) for item in products_mbl]
+
+        products_mbl = [" | ".join(item["mb"].split(" | ")[:cut]) for item in tmp_path_l[1]]
 
         info_temp = {"reactants": reactants,
                      "unreacted": unreactants,
@@ -434,18 +441,19 @@ class SingleCycleSearch:
                      "products": [],
                      "scanwd": key,
                      # "E_rxn": E_rxn,
-                     # "bond_changed": bondchange,
+                     # "bond_change": bond_change,
                      # "therdy_allow": therdy_allow,
                      "layer": layer,  # of which cycle step
+                     "type":tmp_path_l[2]["type"]
                      }
         ###### determine the missing rxn info ######
 
-        bondchange = tmp_path_l[3]
-        if not bondchange:
+        bond_change = tmp_path_l[2]["bond_change"]
+        if not bond_change:
             # reactants = products; adding new node with label bond not change
             products = reactants
             info_temp["products"] = products
-            info_temp["bond_changed"] = False
+            info_temp["bond_change"] = False
             info_temp["E_rxn"] = 0
             info_temp["therdy_allow"] = True
 
@@ -453,11 +461,10 @@ class SingleCycleSearch:
             lastnode = rxnnetwork.get_lastnode_from_scanwd(key)
             edge_l = [lastnode]
             rxnnetwork.add_newnode(info=info_temp, edge_l=edge_l, linkoldnode=linkoldnode)
-            if printdetail:
-                print_simulation_details(status=1, key=key, atl=atl, sim_uhf=simuhf)
+            info_temp["reaction_exist"] = 0 # not a new rxn
 
         else:
-            info_temp["bond_changed"] = True
+            info_temp["bond_change"] = True
             # reactants != products; check if path guess thermodynamic assessable
             if "Esp_dft" in tmp_path_l[1][0].keys():
                 E_p = [i["Esp_dft"] for i in tmp_path_l[1]]
@@ -482,11 +489,9 @@ class SingleCycleSearch:
                 products = ["unknow"]
                 info_temp["products"] = products  #
                 # Erxn too large, add new node without determining products mb
-
                 rxnid = rxnnetwork.add_newnode(info=info_temp, linkoldnode=linkoldnode)
-                if printdetail:
-                    print_simulation_details(status=4, key=key, atl=atl,
-                                             sim_uhf=simuhf, otherkey=rxnid, E_sp=E_rxn_kcal)
+                info_temp["rxnid"] = rxnid
+                info_temp["reaction_exist"]=2 # new reaction
 
             else:
                 info_temp["therdy_allow"] = True
@@ -523,17 +528,14 @@ class SingleCycleSearch:
                             if Counter(unreact_mbl) == Counter(ref_umbl):
                                 # test unreactants too
                                 refnode_index = rxnnetwork.get_node_index_form_nodeid(node)
-                                if printdetail:
-                                    print_simulation_details(status=2, key=key, atl=atl,
-                                                             sim_uhf=simuhf, otherkey=refnode_index)
+                                info_temp["reaction_exist"]=0 # rxn exist
                             else:
                                 refnode_index = rxnnetwork.get_node_index_form_nodeid(node)
-                                if printdetail:
-                                    print_simulation_details(status=3, key=key, atl=atl, sim_uhf=simuhf,
-                                                             otherkey=refnode_index)
+                                info_temp["reaction_exist"] = 1  # rxn exist but there is new unreactants
                             rxnexist = True
                             break
                     if not rxnexist:
+                        info_temp["reaction_exist"] = 2  # new reaction
                         # add new struct
                         products = []
                         for i, pmb in enumerate(products_mbl):
@@ -553,12 +555,12 @@ class SingleCycleSearch:
                                 products.append(newstrucid)
                         info_temp["products"] = products
                         newnode_index = rxnnetwork.add_newnode(info=info_temp, linkoldnode=linkoldnode)
-                        if printdetail:
-                            print_simulation_details(status=4, key=key, atl=atl, sim_uhf=simuhf, otherkey=newnode_index,
-                                                     E_sp=E_rxn_kcal)
+                        info_temp["rxnid"] = newnode_index
+
                     else:
                         info_temp["products"] = products_ref
                         newnode_index = rxnnetwork.add_newnode(info=info_temp, linkoldnode=linkoldnode)
+                        info_temp["rxnid"] = newnode_index
 
                 else:
                     # can't identify, add as new node anyhow
@@ -578,9 +580,10 @@ class SingleCycleSearch:
                             products.append(newstrucid)
                     info_temp["products"] = products
                     newnode_index = rxnnetwork.add_newnode(info=info_temp, linkoldnode=linkoldnode)
-                    if printdetail:
-                        print_simulation_details(status=6, key=key, atl=atl, sim_uhf=simuhf, otherkey=newnode_index,
-                                                 E_sp=E_rxn_kcal)
+                    info_temp["rxnid"] = newnode_index
+                    info_temp["reaction_exist"] = 3  # unknow product mb
+
+        return info_temp
 
     @staticmethod
     def add_newstruc(strucinfo_d):
@@ -632,7 +635,7 @@ def ReactionSearch(step=0):
 
             singlecycle = SingleCycleSearch(reactants_l)
             explore_dl = singlecycle.explore()
-            print_simulation_details(status=0)
+            print_info = []
             for itemd in explore_dl:
                 for count, info_l in itemd.items():
                     # get_value products geom
@@ -640,8 +643,9 @@ def ReactionSearch(step=0):
                     # refine products info
                     info_l = singlecycle.follow_up_treatment_energy(info_l)
                     # now evaluate this reaction path
-                    singlecycle.evalueate_path(count, info_l, layer=step + 1)
-            print_simulation_details(status=5)
+                    print_item = singlecycle.evalueate_path(count, info_l, layer=step + 1)
+                    print_info.append(print_item)
+            print_simulation_details(print_info,"0")
             # update reaction nexwork
             step += 1
         else:
@@ -658,7 +662,7 @@ def ReactionSearch(step=0):
                 prefix_rpid = rxninfo["scanwd"]
                 singlecycle = SingleCycleSearch(reactants_l)
                 explore_dl = singlecycle.explore(prefix_rpid)
-                print_simulation_details(status=0)
+                print_info=[]
                 for itemd in explore_dl:
                     for count, info_l in itemd.items():
                         # get_value products geom
@@ -667,8 +671,8 @@ def ReactionSearch(step=0):
                         info_l = singlecycle.follow_up_treatment_energy(info_l)
                         # now evaluate this reaction path
                         # reaction_id = prefix_rpid +"_" + str(count.split("_")[-1])
-                        singlecycle.evalueate_path(count, info_l, layer=step + 1)
-                print_simulation_details(status=5)
+                        print_item = singlecycle.evalueate_path(count, info_l, layer=step + 1)
+                print_simulation_details(print_info,nodewd)
             step += 1
     # clean up buffer_struc
     if exists(storage.setting.bufferwd) and not (

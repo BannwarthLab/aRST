@@ -4,7 +4,8 @@ import os
 from os.path import join, exists
 from aRST.script.toolbox import create_folder, mydict, read_coord, get_strucinfo_from_path, write_xyz, get_all_keys
 from aRST.script.callsys import CallxTB, CallORCA,CallgXTB
-from aRST.script.check_input import checking_parameter, checking_env
+from aRST.script import input_class
+from pydantic import ValidationError
 
 
 class Setting:
@@ -22,17 +23,22 @@ class Setting:
         with open(infile, "r") as f:
             self.config = toml.load(f)
         self.config = mydict(self.config)
-        # changing all str parameter to lower cases
-        all_keys = get_all_keys(self.config)
-        for key in all_keys:
-            val = self.get_value(key)
-            if isinstance(val, str) and not "geom" in key:
-                self.set_value(key, val.lower())
 
-        # checking up parameter format
+        # checking config
+        print("Checking input TOML...", end="")
+        try:
+            self.model = input_class.InputModel.model_validate(self.config)
+        except ValidationError as e:
+            print("Input file validation failed:")
+            print(e)
+            raise SystemExit(1)
+        print("done.\n")
 
-        self.config = checking_parameter(self.config)
-        checking_env(self.config)
+        # checking env
+        print("Checking envirment:")
+        self.check_environment()
+        print("done.\n")
+
 
         self.wd0 = self.get_value("searching_setting.general.wd", os.path.abspath(os.path.dirname(infile)))
         self.scanwd = join(self.wd0, "scan")
@@ -42,6 +48,63 @@ class Setting:
         if exists(self.bufferwd):
             import shutil
             shutil.rmtree(self.bufferwd)
+
+    def check_environment(self):
+        # xtb is necessary
+        xtb_bin = os.environ.get("XTB_BIN")
+        if not xtb_bin:
+            raise RuntimeError("XTB_BIN is not set.")
+        print(f"XTB_BIN checked, PATH={xtb_bin}")
+
+        # stda is necessary
+        stda_bin = os.environ.get("STDA_BIN")
+        if not stda_bin:
+            raise RuntimeError("STDA_BIN is not set.")
+        print(f"stda_bin checked, PATH={stda_bin}")
+
+        # gxtb
+        if self.model.searching_setting.general.sp_method=="gxtb":
+            gxtb_bin = os.environ.get("GXTB_BIN")
+            if not gxtb_bin:
+                raise RuntimeError("sp_method is 'gxtb' but GXTB_BIN is not set.")
+            print(f"GXTB_BIN checked, PATH={gxtb_bin}")
+
+        reactivity = self.model.searching_setting.reactivity
+        # orca
+        if reactivity.MO_method == input_class.MOMethod.orca:
+            orca_bin = os.environ.get("ORCA_BIN")
+            if not orca_bin:
+                raise RuntimeError(
+                    "MO_method is 'orca' but environment variable ORCA_BIN is not set."
+                )
+            print(f"ORCA_BIN checked, PATH={orca_bin}")
+            mwfn_bin=os.environ.get("MWFN_BIN")
+            if not mwfn_bin:
+                raise RuntimeError(
+                    "MO_method with 'orca' needs Multiwfn for converting basis functions but MWFN_BIN is not set."
+                )
+            print(f"MWFN_BIN checked (!! make sure you have set iloadasCart= 1 !!), PATH={mwfn_bin}")
+        # terachem
+        elif reactivity.MO_method == input_class.MOMethod.terachem:
+            tc_bin = os.environ.get("TC_BIN")
+            if not tc_bin:
+                raise RuntimeError(
+                    "MO_method is 'terachem' but environment variable TC_BIN is not set."
+                )
+            print(f"TC_BIN checked, PATH={tc_bin}")
+
+         # crest
+        disso = self.model.searching_setting.disso
+        if disso is not None and (
+                disso.depotonation is not None
+                or disso.potonation is not None
+        ):
+            crest_bin = os.environ.get("CREST_BIN")
+            if not crest_bin:
+                raise RuntimeError(
+                    "(de)potonation set but environment variable CREST_BIN is not set."
+                )
+            print(f"CREST_BIN checked, PATH={crest_bin}")
 
     def get_value(self, target_key, default_value=None):
         value = mydict(self.config).get_value(target_key, default_value)

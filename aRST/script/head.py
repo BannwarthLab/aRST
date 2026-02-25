@@ -2,10 +2,10 @@ import datetime
 
 
 def print_head():
-    program_name = "automated Reaction Search Tool (aRST) V2.0"
+    program_name = "automated Reaction Search Tool (aRST) V2.2.0"
     timestamp = datetime.datetime.now().strftime("%d-%m-%Y %H:%M:%S")
-    tot_width = 80
-    border_width = 60
+    tot_width = 100
+    border_width = 80
     side_padding = (tot_width - border_width) // 2
     side = " " * side_padding
     border = "=" * border_width
@@ -18,11 +18,11 @@ def print_head():
     print(side + f"|{' ' * (border_width - 2)}|")
     print(side + border)
 
-    print(side+"# Author:             Y. Chen, C. Bannwarth")
-    print(side+"# Institute:          Institute of Physical Chemistry")
-    print(side+"#                     RWTH Aachen University")
-    print(side+"# Version date:       03.2025")
-    print(side+f"# Job running at:     {timestamp}")
+    print(side + "# Author:             Y. Chen, C. Bannwarth")
+    print(side + "# Institute:          Institute of Physical Chemistry")
+    print(side + "#                     RWTH Aachen University")
+    print(side + "# Version date:       03.2026")
+    print(side + f"# Job running at:     {timestamp}")
     print(side + border)
     print()
 
@@ -30,12 +30,17 @@ def print_head():
 def print_args(args):
     string = " "
     if args.explore:
-        string = "Job type: reaction exploartion"
+        string = "* Job type: Reaction Exploartion *"
     elif args.afo_features:
-        string = "Job type: reactivity assesment"
+        string = "* Job type: Reactivity Assesment *"
     elif args.align:
-        string = "Job type: reactants alignment"
-    print(string.center(80))
+        string = "* Job type: Reactants Alignment *"
+    border_width = 80
+    border = "=" * border_width
+    print(border.center(100))
+    print(string.center(100))
+    print(border.center(100))
+    print()
 
 
 def print_parser(data):
@@ -65,142 +70,137 @@ def print_parser(data):
     print()
 
 
-def print_simulation(reactants, at_l, charge_l, nel_l, reactionpath, count, totnel, totcharge, u, nat_1=None):
-    totw = 80
-    border_width = 60
-    col1 = 15
-    col2 = 15
-    col3 = 15
-    col4 = 15
+def print_simulation_details(info_l,node_name):
+    totw = 100
+    border_width = 90
+    col1 = 18
+    col2 = 10
+    col3 = 12
+    col4 = 18
+    col5 = 10
+    col6 = 32
     side_padding = (totw - border_width) // 2
     side = " " * side_padding
 
-    print(side + "=" * border_width)
-    title = f"Path Guess Scan {reactionpath}_{count}"
-    print(title.center(totw))
-    print(side + "-" * border_width)
-    print(side + f"{'struc'.center(col1)}{'charge'.center(col2)}{'nel'.center(col3)}{'react atom'.center(col4)}")
-    print(side + "-" * border_width)
+    # print head
+    text_line = f"* Summary for the node {node_name} *"
+    border = "*" * len(text_line)
 
-    if len(at_l) > 1:
-        for reactant, at1, at2, charge, nel in zip(reactants, at_l[0], at_l[1], charge_l, nel_l):
-            atoms = f"({at1},{at2})"
-            print(side + f"{str(reactant).center(col1)}"
-                         f"{str(charge).center(col2)}"
-                         f"{str(nel).center(col3)}"
-                         f"{str(atoms).center(col4)}")
-
-    else:
-        for reactant, at, charge, nel in zip(reactants, at_l[0], charge_l, nel_l):
-            print(side + f"{str(reactant).center(col1)}"
-                         f"{str(charge).center(col2)}"
-                         f"{str(nel).center(col3)}"
-                         f"{str(at).center(col4)}")
-
-    print(side + "-" * border_width)
-    at1 = int(at_l[0][0])
-    at2 = int(at_l[0][1])
-    if nat_1:
-        at2 += nat_1
-    if len(at_l) > 1:
-        at3 = int(at_l[1][0])
-        at4 = int(at_l[1][1])
-        if nat_1:
-            at4 += nat_1
-        string = f"({at1, at2},{at3, at4}"
-    else:
-        string = f"{at1, at2}"
-    print(side + f"{f'P(uhf={u})'.center(col1)}"
-                 f"{str(totcharge).center(col2)}"
-                 f"{str(totnel).center(col3)}"
-                 f"{str(string).center(col4)}")
-    print(side + "=" * border_width)
+    print(border.center(100))
+    print(text_line.center(100))
+    print(border.center(100))
     print()
 
-
-def print_simulation_details(status,key=None, atl=None, sim_uhf=None, otherkey=None, E_sp=None):
-    totw = 80
-    border_width = 60
-    col1 = 10
-    col2 = 15
-    col3 = 5
-    col4 = 30
-    side_padding = (totw - border_width) // 2
-    side = " " * side_padding
-    comments = None
-
-    if status == 0:  # print head
-        print(side + "=" * border_width)
-        title = f"Reaction Simulation Summary"
-        print(title.center(totw))
-        print(side + "-" * border_width)
-        print(side + f"{'scan':^{col1}} {'atl':^{col2}} {'uhf_sim':^{col3}} {'status':^{col4}}")
-        print(side + "-" * border_width)
-        return
-    elif status == 5:  # print tail
-        print(side + "=" * border_width)
-        return
-    elif status == 1:
-        # reactants = products
-        comments = "R=P"
-    elif status == 2:
-        # rxn exist
-        comments = f"rxn exist in {otherkey}"
-
-    elif status == 3:
-        # rxn exist but different unreact
-        comments = f" semi-new rxn: {otherkey}"
-    elif status == 4:
-        # new reaction
-        comments = f" new rxn: {otherkey}, ΔE_sp ={E_sp:.2f}"
-    elif status==6:
-        # unknow in rmb or pmb
-        comments = f" UMBnew rxn: {otherkey}, ΔE_sp ={E_sp:.2f}"
-    print(side + f"{str(key).center(col1)}"
-                 f"{str(atl).center(col2)}"
-                 f"{str(sim_uhf).center(col3)}"
-                 f"{str(comments).center(col4)}")
-
+    print(side + f"{'Path':^{col1}} {'Type':^{col2}} {'Reactant':^{col3}} {'Atom pair':^{col4}} "
+                 f"{'UHF_sim':^{col5}} {'Status':^{col6}}")
+    print(side + "-" * border_width)
+    # info_temp = {"reactants": reactants,
+    #                      "unreacted": unreactants,
+    #                      "at_l": atl,
+    #                      "sim_uhf": simuhf,
+    #                      "products": [],
+    #                      "scanwd": key,
+    #                      # "E_rxn": E_rxn,
+    #                      # "bond_change": bond_change,
+    #                      # "therdy_allow": therdy_allow,
+    #                      "layer": layer,  # of which cycle step
+    #                      "type":tmp_path_l[2]["type"]
+    #                      }
+    for item in info_l:
+        path= item["scanwd"]
+        reactants=item["reactants"]
+        formatted_reactants = ", ".join(f"[{','.join(map(str, inner))}]" for inner in item["reactants"])
+        type=item["type"]
+        formatted_atl = ", ".join(f"[{','.join(map(str, inner))}]" for inner in item["at_l"])
+        uhf_sim = item["sim_uhf"]
+        bond_change = item["bond_change"]
+        therm_allow = item["therdy_allow"]
+        E_sp = item["E_rxn"]
+        reaction_exist_code = item["reaction_exist"]
+        # 0: rxn exist; # 1: rxn exist but there is new unreactants
+        # 2:new reaction; 3:unknow mb
+        comments = ""
+        if not bond_change:
+            # reactants = products
+            comments = "R=P"
+        elif not therm_allow:
+            # Erxn too large, add new node without determining products mb
+            rxnid = item["rxnid"]
+            comments = f"Unfavorable new rxn: {rxnid}, ΔE_sp ={E_sp:.2f} kcal/mol"
+        else:
+            rxnid = item["rxnid"]
+            if reaction_exist_code==0:
+                comments = f"rxn exist in {rxnid}"
+            elif reaction_exist_code==1:
+                comments = f"rxn exist in {rxnid}, but has different unreacted structures"
+            elif reaction_exist_code == 2:
+                comments = f"New rxn: {rxnid}, ΔE_sp ={E_sp:.2f}"
+            elif reaction_exist_code == 3:
+                comments = f"Unknown MB in product detected: {rxnid}, ΔE_sp ={E_sp:.2f}"
+        print(side + f"{str(path).center(col1)}"
+                     f"{str(type).center(col2)}"
+                     f"{str(formatted_reactants).center(col3)}"
+                     f"{str(formatted_atl).center(col4)}"
+                     f"{str(uhf_sim).center(col5)}"
+                     f"{str(comments).center(col6)}"
+              )
+    print(side + "-" * border_width)
 
 def print_jobhead(jobhead):
-    string = "****"
-    stringout = string + " " + jobhead + " " + string
-    print(stringout.center(80))
+    text_line = f"* {jobhead} *"
+    border = "*" * len(text_line)
+
+    print(border.center(100))
+    print(text_line.center(100))
+    print(border.center(100))
+    print()
 
 
-def print_react_l(reactants,react_l,rtype="interA"):
-    totw = 80
-    border_width = 60
-    col1 = 15
-    col2 = 15
-    col3 = 35
+def print_react_l(reactants, react_l):
+    totw = 100
+    border_width = 80
+    col1 = 10   # Ranking
+    col2 = 15   # Struc combi
+    col3 = 35   # Atom pair
+    col4 = 15   # AFO gap / MBO / eMBO
+
     side_padding = (totw - border_width) // 2
     side = " " * side_padding
-    print(side + "*" * border_width)
-    title = f"{rtype} Reactivity Assessment"
-    print(title.center(totw))
-    print()
-    print(side + f"Reactants: {reactants}")
-    print(side + f"tot.atom pairs: {len(react_l)}")
+
+    title = "Reactivity Assessment"
     print(side + "-" * border_width)
-    if "gap" in react_l[0].keys():
-        gapkey = "gap"
-        print(side + f"{'struc pair':^{col1}} {'atom pair':^{col2}} {'AFO gap':^{col3}}")
-    elif "mbo" in react_l[0].keys():
-        gapkey="mbo"
-        print(side + f"{'struc pair':^{col1}} {'atom pair':^{col2}} {'MBO':^{col3}}")
-    else:
-        gapkey = "embo"
-        print(side + f"{'struc pair':^{col1}} {'atom pair':^{col2}} {'eMBO':^{col3}}")
+    print(title.center(totw))
+    print(side + f"Reactants: {reactants}, tot.atom pairs: {len(react_l)}")
+    # print theo lvl
+
+    print(side + "Top 10 reactivity predictions:")
     print(side + "-" * border_width)
 
-    for entry in react_l[:20]:
-        struc_l = entry["struc_combi"] \
-            if "struc_combi" in entry.keys() else entry["struc"]
+    if "gap" in react_l[0]:
+        gapkey, gaplabel = "gap", "AFO gap"
+    elif "mbo" in react_l[0]:
+        gapkey, gaplabel = "mbo", "MBO"
+    else:
+        gapkey, gaplabel = "embo", "eMBO"
+
+    print(side + f"{'Ranking':^{col1}}{'Struc combi':^{col2}}{'Atom pair':^{col3}}{gaplabel:^{col4}}")
+    print(side + "-" * border_width)
+
+    for i, entry in enumerate(react_l[:10]):
+        struc_l = entry.get("struc_combi", entry.get("struc", ""))
         at_l = entry["at_combi"]
-        gap = entry[gapkey]
-        strgap = f"{gap:.2f}" if isinstance(gap, float) else "np.inf"
-        print(side + f"{str(struc_l).center(col1)}"
-                     f"{str(at_l).center(col2)}"
-                     f"{strgap.center(col3)}")
-    print(side + "*" * border_width)
+
+        # at_l like [['5','0'],['2','4']] -> "[5,0], [2,4]"
+        formatted_atl = ", ".join(f"[{','.join(map(str, inner))}]" for inner in at_l)
+
+        gap = entry.get(gapkey)
+        strgap = f"{gap:.2f}" if isinstance(gap, (int, float)) and gap != float("inf") else "np.inf"
+
+        print(side +
+              f"{i:^{col1}}"
+              f"{str(struc_l):^{col2}}"
+              f"{formatted_atl:^{col3}}"
+              f"{strgap:^{col4}}")
+    print(side + "-" * border_width)
+    print(side +"The full AFO gap list is written to the file react_l.")
+    print()
