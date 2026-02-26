@@ -149,7 +149,7 @@ def dissoxtbscan(reactants0, entry, reactionpath, count=0):
     unreacted.remove(struc)
     unreacted = sorted(unreacted, key=int, reverse=True)
     for u in uhf_l:
-        print(f"Starting simulation of disso path {reactionpath}_{count}...", end="")
+        print(f"Simulating disso path {reactionpath}_{count}: R={reactants0}, atl={at_l}, uhf_sim={u} ...", end="")
         scan_wd = join(scanwd, f"{reactionpath}_{count}")
         create_folder(scan_wd)
 
