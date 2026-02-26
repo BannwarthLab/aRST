@@ -1,101 +1,103 @@
 import os
 from aRST.script.toolbox import create_folder, write_xyz
-from os.path import join, exists,dirname
-from aRST.script.callsys import CallxTB, CallORCA, CallTerachem, CallsTDA, CallMultiwfn
+from os.path import join, exists, dirname
+from aRST.script.callsys import CallxTB, CallORCA, CallTerachem, CallsTDA, CallMultiwfn,CallgXTB
 import aRST.script.initialization as storage
 import shutil
 
 
 class getAFO:
-    def __init__(self, strucid=0, setting=None, coordinate=None,ele_l=None
-        ,c=None, m=None):
+    def __init__(self, strucid=0, coordinate=None, ele_l=None
+                 , c=None, m=None):
         if coordinate is None:
-            self.coordinate = storage.allstruc.get_value(f"{strucid}.struc_info.general.coordinate")
-            self.ele_l = storage.allstruc.get_value(f"{strucid}.struc_info.general.ele_l")
-            self.c = storage.allstruc.get_value(f"{strucid}.struc_info.general.charge")
-            self.m = storage.allstruc.get_value(f"{strucid}.struc_info.general.multiplicity")
-            self.setting = storage.setting
-
+            s = storage.allstruc.get(strucid)
+            self.coordinate = s.struc_info.general.coordinate
+            self.ele_l = s.struc_info.general.ele_l
+            self.c = s.struc_info.general.charge
+            self.m = s.struc_info.general.multiplicity
         else:
             self.coordinate = coordinate
-            self.ele_l=ele_l
+            self.ele_l = ele_l
             self.c = c
             self.m = m
-            self.setting = setting
-        self.struc = strucid
+        self.struc = str(strucid)
+        self.strucwd=storage.setting.searching_setting.general.strucwd
 
-    def get_from_xtb(self,subfolder=None):
-        afowd = create_folder(join(self.setting.strucwd, self.struc, "xtb", "afo")) \
-            if not subfolder else create_folder(join(self.setting.strucwd, self.struc,subfolder, "xtb", "afo"))
+    def get_from_xtb(self, subfolder=None):
+        afowd = create_folder(join(self.strucwd, self.struc, "xtb", "afo")) \
+            if not subfolder else create_folder(join(self.strucwd, self.struc, subfolder, "xtb", "afo"))
         rc = 0
         if not exists(join(afowd, "ml_feature.csv")):
             if 'XTBML_BIN' in os.environ and os.environ['XTBML_BIN']:
                 # modified xtb exiest
-                write_xyz(self.coordinate,self.ele_l, "coord")
+                write_xyz(self.coordinate, self.ele_l, "coord")
                 rc = CallxTB(afowd, custom_settings={"charge": self.c, "uhf": self.m - 1}).afo()
             else:
                 # use normal xtb version to generate molden file
-                write_xyz(self.coordinate,self.ele_l, "coord")
+                write_xyz(self.coordinate, self.ele_l, "coord")
                 rc = CallxTB(afowd, custom_settings={"charge": self.c, "uhf": self.m - 1}).afo_molden()
-                if rc==0:
+                if rc == 0:
                     rc = CallsTDA(afowd, "molden.input").callml(0)
                 else:
-                    rc=1
-        return afowd, rc
+                    rc = 1
 
-    def get_from_gxtb(self,subfolder=None):
-        """
-        internal usage: molden-version of gxtb
-        """
-        afowd = create_folder(join(self.setting.strucwd, self.struc, "gxtb")) \
-            if not subfolder else create_folder(join(self.setting.strucwd, self.struc, subfolder, "gxtb", "afo"))
-        rc = 1
+        return afowd, rc
+    def get_from_gxtb_molden(self, subfolder=None):
+        afowd = create_folder(join(self.strucwd, self.struc, "xtb", "afo")) \
+            if not subfolder else create_folder(join(self.strucwd, self.struc, subfolder, "xtb", "afo"))
+        rc = 0
         if not exists(join(afowd, "ml_feature.csv")):
-            rc = CallsTDA(afowd, "molden.input").callml(0)
+            write_xyz(self.coordinate, self.ele_l, "coord")
+            rc = CallgXTB(afowd, custom_settings={"charge": self.c, "uhf": self.m - 1}).afo_molden()
+            if rc == 0:
+                rc = CallsTDA(afowd, "molden.input").callml(0)
+            else:
+                rc = 1
+
         return afowd, rc
 
 
-    def get_from_tc(self,subfolder=None):
-        afowd = join(self.setting.strucwd, self.struc, "stda") \
-            if not subfolder else create_folder(join(self.setting.strucwd, self.struc,subfolder, "stda"))
+
+    def get_from_tc(self, subfolder=None):
+        afowd = join(self.strucwd, self.struc, "stda") \
+            if not subfolder else create_folder(join(self.strucwd, self.struc, subfolder, "stda"))
 
         rc = 0
         if not exists(join(afowd, "ml_feature.csv")):
-            tcwd = create_folder(join(self.setting.strucwd, self.struc, "tc"))
-            write_xyz(self.coordinate,self.ele_l, "coord")
+            tcwd = create_folder(join(self.strucwd, self.struc, "tc"))
+            write_xyz(self.coordinate, self.ele_l, "coord")
             inputcmd_d = {"coordfn": "coord",
                           "c": self.c,
                           "m": self.m,
-                          "functional": self.setting.get_value("searching_setting.reactivity.afo_tc_functional"),
-                          "basis": self.setting.get_value("searching_setting.reactivity.afo_tc_basis"),
-                          "epsilon": self.setting.get_value("searching_setting.reactivity.afo_tc_epsilon"),
+                          "functional": storage.setting.searching_setting.reactivity.afo_tc_functional,
+                          "basis": storage.setting.searching_setting.reactivity.afo_tc_basis,
+                          "epsilon": storage.setting.searching_setting.reactivity.afo_tc_epsilon,
                           }
 
             rc = CallTerachem(wd=tcwd, command_d=inputcmd_d).run()
 
             if rc == 0:
-                afowd = create_folder(join(self.setting.strucwd,self.struc, "stda")) \
-                    if not subfolder else create_folder(join(self.setting.strucwd, self.struc,subfolder, "stda"))
+                afowd = create_folder(join(self.strucwd, self.struc, "stda")) \
+                    if not subfolder else create_folder(join(self.strucwd, self.struc, subfolder, "stda"))
                 shutil.copyfile(join(tcwd, "scr.coord", "coord.molden"),
                                 join(afowd, "coord.molden"))
                 rc = CallsTDA(afowd, "coord.molden").callml(3)
         return afowd, rc
 
-    def get_from_orca(self,subfolder=None):
-        afowd = create_folder(join(self.setting.strucwd, self.struc, "stda")) \
-            if not subfolder else create_folder(join(self.setting.strucwd, self.struc,subfolder, "stda"))
+    def get_from_orca(self, subfolder=None):
+        afowd = create_folder(join(self.strucwd, self.struc, "stda")) \
+            if not subfolder else create_folder(join(self.strucwd, self.struc, subfolder, "stda"))
         rc = 0
         if not exists(join(afowd, "ml_feature.csv")):
-            orcawd = create_folder(join(self.setting.strucwd, self.struc, "orcaml")) if not subfolder else create_folder(join(self.setting.strucwd, self.struc,subfolder, "orcaml"))
-            write_xyz(self.coordinate,self.ele_l, "coord")
+            orcawd = create_folder(
+                join(self.strucwd, self.struc, "orcaml")) if not subfolder else create_folder(
+                join(self.strucwd, self.struc, subfolder, "orcaml"))
+            write_xyz(self.coordinate, self.ele_l, "coord")
             staus = CallORCA(orcawd,
                              custom_settings={"charge": self.c, "m": self.m,
-                                              "functional": self.setting.get_value(
-                                                  "searching_setting.reactivity.afo_orca_functional"),
-                                              "basis": self.setting.get_value(
-                                                  "searching_setting.reactivity.afo_orca_basis"),
-                                              "solmode": self.setting.get_value(
-                                                  "searching_setting.reactivity.afo_orca_cpcm", ""), }).call(
+                                              "functional": storage.setting.searching_setting.reactivity.afo_orca_functional,
+                                              "basis": storage.setting.searching_setting.reactivity.afo_orca_basis,
+                                              "solmode": storage.setting.searching_setting.reactivity.afo_orca_cpcm, }).call(
                 removegbw=False)
 
             import subprocess
@@ -117,6 +119,6 @@ class getAFO:
                 os.chdir(afowd)
                 rc = CallsTDA(afowd, "coord.molden").callml(1)
 
-                if rc ==0 and not storage.setting.get_value("searching_setting.general.keepmolden", False):
+                if rc == 0:
                     os.remove(join(afowd, "coord.molden"))
         return afowd, rc

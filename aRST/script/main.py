@@ -6,7 +6,6 @@ import sys
 import traceback
 from aRST.script.head import *
 from argparse import ArgumentParser
-from aRST.script.exploration.plot import plot_rxnnetwork
 import aRST.script.initialization as init
 from aRST.script.initialization import Setting
 
@@ -61,14 +60,17 @@ def main():
     setting = Setting(args.in_file)
     init.initialize(setting)
 
-    print_parser(setting.config)
-    print_args(args)
+    # print_parser(setting.config)
+    # print_args(args)
 
     if args.explore:
         from aRST.script.exploration.assign_reaction import ReactionSearch
         from datetime import datetime
+        print_theo_setting()
         start_time = datetime.now()
         try:
+            # checking the input parameter
+
             ReactionSearch()
             from aRST.script.toolbox import write_rxnout,write_strucout
             write_rxnout()

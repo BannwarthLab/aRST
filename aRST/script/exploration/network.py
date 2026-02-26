@@ -26,14 +26,14 @@ class ReactionNetwork:
                 "products": products,
                 "scanwd": key,
                 "E_rxn": E_rxn,
-                "bond_changed": bondchange,
+                "bond_change": bond_change,
                 "therdy_allow": therdy_allow,
                 "layer":layer, # of which cycle step
                 }"""
-        nodeid = (str(uuid.uuid4()))
+        nodeid = (str(uuid.uuid4().hex[:8]))
         self.graph.add_node(nodeid, info=info)
-        if "bond_changed" in info.keys() and "therdy_allow" in info.keys():
-            if info["bond_changed"] and info["therdy_allow"]:
+        if "bond_change" in info.keys() and "therdy_allow" in info.keys():
+            if info["bond_change"] and info["therdy_allow"]:
                 self.nrxn_allowed+=1
 
         # link to last node
@@ -97,7 +97,7 @@ class ReactionNetwork:
             if info["layer"] != layer:
                 continue
             # check bond changed in last reaction
-            if not info["bond_changed"]:
+            if not info["bond_change"]:
                 continue
             # check thermodynamic allowed
             if not info["therdy_allow"]:

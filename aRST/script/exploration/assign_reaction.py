@@ -18,14 +18,15 @@ class SingleCycleSearch:
     @staticmethod
     def check_featrues(struc):
         # check if coord, nel, afo, mbo exist
-        coordinate = storage.allstruc.get_value(f"{struc}.struc_info.general.coordinate")
-        nel = storage.allstruc.get_value(f"{struc}.struc_info.general.nel")
-        c = storage.allstruc.get_value(f"{struc}.struc_info.general.charge")
+        s = storage.allstruc.get(struc)
+        coordinate = s.struc_info.general.coordinate
+        nel = s.struc_info.general.nel
+        c = s.struc_info.general.charge
         if not all(v is not None for v in [coordinate, nel, c]):
             print(
                 f"Warning: {struc} doesn't have enough coord, nel, c, this struc will be neglet in the reaction searching")
 
-        afo = storage.allstruc.get_value(f"{struc}.struc_info.reactivity.afo")
+        afo = s.struc_info.reactivity.afo
         if afo is None:
             return False
         else:
@@ -34,10 +35,11 @@ class SingleCycleSearch:
     def prepare_AFO(self, afosubwd=None):
         for struc in self.reactants:
             if not self.check_featrues(struc):
-                coordinate = storage.allstruc.get_value(f"{struc}.struc_info.general.coordinate")
-                ele_l = storage.allstruc.get_value(f"{struc}.struc_info.general.ele_l")
-                nel = storage.allstruc.get_value(f"{struc}.struc_info.general.nel")
-                c = storage.allstruc.get_value(f"{struc}.struc_info.general.charge")
+                s = storage.allstruc.get(struc)
+                coordinate = s.struc_info.general.coordinate
+                ele_l = s.struc_info.general.ele_l
+                nel = s.struc_info.general.nel
+                c = s.struc_info.general.charge
                 if len(ele_l) == 1 and ele_l[0] == "H":
                     mbo = None
                     afo = pd.DataFrame(
@@ -52,16 +54,14 @@ class SingleCycleSearch:
                     else:
                         # H radical
                         afo.loc[0, :] = [0, np.inf, -np.inf, np.inf, -np.inf, 1]
-                    storage.allstruc.set_value(f"{struc}.struc_info.reactivity.afo", afo)
-                    storage.allstruc.set_value(f"{struc}.struc_info.reactivity.bo", mbo)
+                    s.struc_info.reactivity.afo=afo
+                    s.struc_info.reactivity.bo= mbo
 
 
                 else:
-                    if str.lower(storage.setting.get_value("searching_setting.reactivity.afo_method")) == "gfn2":
+                    if str.lower(storage.setting.searching_setting.reactivity.afo_method) == "gfn2":
                         afowd, status = getAFO(strucid=struc).get_from_xtb(afosubwd)
-                    elif str.lower(storage.setting.get_value("searching_setting.reactivity.afo_method")) == "gxtb":
-                        afowd, status = getAFO(strucid=struc).get_from_gxtb(afosubwd)
-                    elif str.lower(storage.setting.get_value("searching_setting.reactivity.afo_method")) == "terachem":
+                    elif str.lower(storage.setting.searching_setting.reactivity.afo_method) == "terachem":
                         afowd, status = getAFO(strucid=struc).get_from_tc(afosubwd)
                     else:
                         # defalut as orca sp
@@ -75,7 +75,7 @@ class SingleCycleSearch:
                     #     afo.loc[:, "HOAO_b (eV)"] = -np.inf
                     #     afo.loc[:, "LUAO_b (eV)"] = np.inf
 
-                    storage.allstruc.set_value(f"{struc}.struc_info.reactivity.afo", afo)
+                    s.struc_info.reactivity.afo=afo
 
                     # set bo
                     mbo = None
@@ -83,7 +83,7 @@ class SingleCycleSearch:
                         mbo = read_bo(file)
                         if mbo is not None:
                             break
-                    storage.allstruc.set_value(f"{struc}.struc_info.reactivity.bo", mbo)
+                    s.struc_info.reactivity.bo = mbo
 
     @staticmethod
     def rxn_guess_exist(entry, rxntype="interA"):
@@ -110,17 +110,15 @@ class SingleCycleSearch:
         output_interA, output_D, output_intraA = {}, {}, {}
 
         ## interA
-        ninter = storage.setting.get_value("searching_setting.inter.number", 0)
-        atom_pairs = storage.setting.get_value("searching_setting.inter.atom_pair")
-        if len(self.reactants) > 1 and (ninter!=0 or atom_pairs is not None):
-            if atom_pairs:
-                ninter = len(atom_pairs)
+        if len(self.reactants) > 1 and(storage.setting.searching_setting.inter.number>0 or storage.setting.searching_setting.inter.atom_pair):
             print()
             print_jobhead("Bimolecular Association")
             react_l = get_interA_react_l(self.reactants)
-            scanmode = storage.setting.get_value("searching_setting.general.scan_mode", 0)
+            scanmode = storage.setting.searching_setting.general.scan_mode
+            ninter = storage.setting.searching_setting.inter.number
             if ninter == "all":
                 ninter = len(react_l)
+            print(f"Paths for Ranking 0-{ninter-1} will be simulated: ")
             if scanmode == 0:
                 # call xtb scan
                 for entry in react_l[:ninter]:
@@ -135,28 +133,27 @@ class SingleCycleSearch:
                         output_interA.update(res)
 
         ## intraA
-        nintra = storage.setting.get_value("searching_setting.intra.number",0)
-        atom_pairs = storage.setting.get_value("searching_setting.intra.atom_pair")
-        if nintra != 0 or atom_pairs is not None:
-            if atom_pairs:
-                nintra=len(atom_pairs)
+        if storage.setting.searching_setting.intra.number > 0 or \
+            storage.setting.searching_setting.intra.atom_pair:
             print()
             print_jobhead("Intramolecular Association")
             # Testing if depotonation is energetically favorable
-            if storage.setting.get_value("searching_setting.intra.depotonation", False):
+            if storage.setting.searching_setting.intra.depotonation:
                 # Testing if depotonation is energetically favorable
                 from aRST.script.exploration.depotonation import updating_reacntans
                 updating_reacntans(self.reactants)
                 self.prepare_AFO(afosubwd="depotonation")
-            elif storage.setting.get_value("searching_setting.intra.potonation", False):
+            elif storage.setting.searching_setting.intra.potonation:
                 # Testing if depotonation is energetically favorable
                 from aRST.script.exploration.depotonation import updating_reacntans
                 updating_reacntans(self.reactants, job="potonation")
                 self.prepare_AFO(afosubwd="potonation")
             react_l = get_intraA_react_l(self.reactants)
-            scanmode = storage.setting.get_value("searching_setting.general.scan_mode", 0)
+            scanmode = storage.setting.searching_setting.general.scan_mode
+            nintra = storage.setting.searching_setting.intra.number
             if nintra == "all":
                 nintra = len(react_l)
+            print(f"Paths for Ranking 0-{nintra - 1} will be simulated: ")
             if scanmode == 0:
                 # call xtb scan
                 for entry in react_l[:nintra]:
@@ -171,28 +168,27 @@ class SingleCycleSearch:
                         output_intraA.update(res)
 
         ## intraD
-        ndisso = storage.setting.get_value("searching_setting.disso.number", 0)
-        atom_pairs = storage.setting.get_value("searching_setting.disso.atom_pair")
-        if ndisso != 0 or atom_pairs is not None:
-            if atom_pairs:
-                ndisso=len(atom_pairs)
+        if storage.setting.searching_setting.disso.number > 0 or \
+                storage.setting.searching_setting.disso.atom_pair:
             print()
             print_jobhead("Dissociation")
             # Testing if depotonation is energetically favorable
-            if storage.setting.get_value("searching_setting.disso.depotonation", False):
+            if storage.setting.searching_setting.disso.depotonation:
                 # Testing if depotonation is energetically favorable
                 from aRST.script.exploration.depotonation import updating_reacntans
                 updating_reacntans(self.reactants)
                 self.prepare_AFO(afosubwd="depotonation")
-            elif storage.setting.get_value("searching_setting.disso.potonation", False):
+            elif storage.setting.searching_setting.disso.potonation:
                 # Testing if depotonation is energetically favorable
                 from aRST.script.exploration.depotonation import updating_reacntans
                 updating_reacntans(self.reactants, job="potonation")
                 self.prepare_AFO(afosubwd="potonation")
             react_l = get_intraD_react_l(self.reactants)
-            scanmode = storage.setting.get_value("searching_setting.general.scan_mode", 0)
+            scanmode = storage.setting.searching_setting.general.scan_mode
+            ndisso = storage.setting.searching_setting.disso.number
             if ndisso == "all":
                 ndisso = len(react_l)
+            print(f"Paths for Ranking 0-{ndisso - 1} will be simulated: ")
             if scanmode == 0:
                 # call xtb scan
                 for entry in react_l[:ndisso]:
@@ -212,16 +208,19 @@ class SingleCycleSearch:
             if outd:
                 out.update(outd)
         out = [{key: value} for key, value in sorted(out.items(), key=lambda x: int(x[0].split('_')[-1]))]
+        print()
         return out
 
     @staticmethod
     def follow_up_treatment_gfn(key, tmp_path_l):
+        bufferwd = storage.setting.searching_setting.general.bufferwd
 
         # doing sep opt for inter_fragments
-        # output_d[count] = [{reactants info},{endxyz info}]
+        # output_d[count] = [{reactants info},{endxyz info},{reaction info}]
         reactants = tmp_path_l[0]["reactants"]
-        cut = 5 if storage.setting.get_value("searching_setting.general.mb_level") == "loose" else 7
-        reactants_mbl = [" | ".join(storage.allstruc.get_value(f"{i}.struc_info.general.mb").split(" | ")[:cut]) for i
+        cut = 5 if storage.setting.searching_setting.general.mb_level == "loose" else 7
+
+        reactants_mbl = [" | ".join(storage.allstruc.get(i).struc_info.general.mb.split(" | ")[:cut]) for i
                          in reactants]
         endxyz_info = tmp_path_l[1]
 
@@ -250,7 +249,7 @@ class SingleCycleSearch:
 
         def _handle_single_at_geom(coordinate,ele_l, charge, nel, atcharge):
             random_name = get_random_folder_name()
-            spwd = join(storage.setting.bufferwd, key, random_name, "xtb")
+            spwd = join(bufferwd, key, random_name, "xtb")
             create_folder(spwd)
             write_xyz(coordinate,ele_l, "coord")
             uhf = 0 if nel % 2 == 0 else 1
@@ -271,7 +270,7 @@ class SingleCycleSearch:
         def _handle_multi_at_geom(coordinate,ele_l, charge, nel):
             # 1. fully relax
             random_name = get_random_folder_name()
-            optwd = join(storage.setting.bufferwd, key, random_name, "xtb")
+            optwd = join(bufferwd, key, random_name, "xtb")
             create_folder(optwd)
             write_xyz(coordinate,ele_l, "coord")
             uhf = 0 if nel % 2 == 0 else 1
@@ -318,27 +317,30 @@ class SingleCycleSearch:
             raise ValueError(f"Fragmentation in supra molecule in path {key} failed, check!")
 
         # now evaluate if reaction simulation fall back to starting geom
-        products_mbl = [CallMolBar(i["coordinate"],i["ele_l"]).get_mb() for i in endxyz_info_new]
-        tmp_path_l.append(products_mbl)
-        products_mbl = [" | ".join(item.split(" | ")[:cut]) for item in products_mbl]
-        bond_changed = True  # default as true
+        products_mbl = []
+
+        for item in endxyz_info_new:
+            mb = CallMolBar(item["coordinate"], item["ele_l"]).get_mb()
+            mb_trimmed = " | ".join(mb.split(" | ")[:cut])
+            item["mb"] = mb
+            products_mbl.append(mb_trimmed)
+        bond_change = True  # default as true
         if not "unknow" in products_mbl and not "unknow" in reactants_mbl:
             if Counter(products_mbl) == Counter(reactants_mbl):
-                bond_changed = False
+                bond_change = False
             else:
-                bond_changed = True
+                bond_change = True
 
         tmp_path_l[1] = endxyz_info_new
-        tmp_path_l.append(bond_changed)
-
-        # now output_d[count] = [{reactants info},[{P1}, {P2}],products_mbl, bond_changed_stuats]
+        tmp_path_l[2]["bond_change"] = bond_change
+        # now output_d[count] = [{reactants info},[{P1}, {P2}],{reaction info}]
         return tmp_path_l
 
     @staticmethod
     def follow_up_treatment_energy(tmp_path_l):
+        bufferwd = storage.setting.searching_setting.general.bufferwd
         ######## DFT OPT/SP ########
-        dftopt = storage.setting.get_value("orca_setting.dftopt", False)
-
+        dftopt = storage.setting.orca_setting.dftopt
         for frag in tmp_path_l[1]:
             coordinate = frag["coordinate"]
             ele_l = frag["ele_l"]
@@ -346,11 +348,11 @@ class SingleCycleSearch:
             nel = frag["nel"]
             caltyp = "SP OPT" if len(ele_l) > 1 and dftopt else "SP"
             m_l = [1, 3] if nel % 2 == 0 else [2]
-            if storage.setting.get_value("searching_setting.singlepoint.method") == "dft":
+            if storage.setting.searching_setting.general.sp_method == "dft":
                 sp_dft, m_fin, coordinate_fin = np.inf, m_l[0], coordinate  # initial setting in case DFT sp failed
                 for m in m_l:
                     wd = create_folder(
-                        join(storage.setting.bufferwd, frag['strucwd'], "orca", str(m)))
+                        join(bufferwd, frag['strucwd'], "orca", str(m)))
                     write_xyz(coordinate,ele_l, "coord")
                     orcaprocess = CallORCA(wd,
                                            custom_settings={"charge": charge,
@@ -365,14 +367,14 @@ class SingleCycleSearch:
                             m_fin = m
                             coordinate_fin,ele_l = read_coord(join(wd, "orca.xyz")) if exists(join(wd, "orca.xyz")) else coordinate
 
-                frag["Esp_dft"] = sp_dft
+                frag["Esp"] = sp_dft
                 frag["m"] = m_fin
                 frag["coordinate"] = coordinate_fin
             else:
                 sp_gxtb, m_fin, coordinate_fin = np.inf, m_l[0], coordinate  # initial setting in case DFT sp failed
                 for m in m_l:
                     wd = create_folder(
-                        join(storage.setting.bufferwd, frag['strucwd'], "gxtb", str(m)))
+                        join(bufferwd, frag['strucwd'], "gxtb", str(m)))
                     write_xyz(coordinate,ele_l, "coord")
                     gxtbprocess = CallgXTB(wd, custom_settings={"charge": charge, "uhf": m - 1})
                     with open(".CHRG", "w") as file:
@@ -388,7 +390,7 @@ class SingleCycleSearch:
                             m_fin = m
                             coordinate_fin = coordinate
 
-                frag["Esp_gxtb"] = sp_gxtb
+                frag["Esp"] = sp_gxtb
                 frag["m"] = m_fin
                 frag["coordinate"] = coordinate_fin
 
@@ -428,13 +430,13 @@ class SingleCycleSearch:
         unreactants = tmp_path_l[0]["unreacted"]
         simuhf = tmp_path_l[0]["simuhf"]
 
-        cut = 5 if storage.setting.get_value("searching_setting.general.mb_level") == "loose" else 7
-        reactants_mbl = [" | ".join(storage.allstruc.get_value(f"{i}.struc_info.general.mb").split(" | ")[:cut]) for i
+        cut = 5 if storage.setting.searching_setting.general.mb_level == "loose" else 7
+        reactants_mbl = [" | ".join(storage.allstruc.get(i).struc_info.general.mb.split(" | ")[:cut]) for i
                          in reactants]
-        unreact_mbl = [" | ".join(storage.allstruc.get_value(f"{i}.struc_info.general.mb").split(" | ")[:cut]) for i
+        unreact_mbl = [" | ".join(storage.allstruc.get(i).struc_info.general.mb.split(" | ")[:cut]) for i
                        in unreactants]
-        products_mbl = tmp_path_l[2]
-        products_mbl = [" | ".join(item.split(" | ")[:cut]) for item in products_mbl]
+
+        products_mbl = [" | ".join(item["mb"].split(" | ")[:cut]) for item in tmp_path_l[1]]
 
         info_temp = {"reactants": reactants,
                      "unreacted": unreactants,
@@ -443,18 +445,20 @@ class SingleCycleSearch:
                      "products": [],
                      "scanwd": key,
                      # "E_rxn": E_rxn,
-                     # "bond_changed": bondchange,
+                     # "bond_change": bond_change,
                      # "therdy_allow": therdy_allow,
                      "layer": layer,  # of which cycle step
+                     "type":tmp_path_l[2]["type"]
+                     # "rxnid" =
                      }
         ###### determine the missing rxn info ######
 
-        bondchange = tmp_path_l[3]
-        if not bondchange:
+        bond_change = tmp_path_l[2]["bond_change"]
+        if not bond_change:
             # reactants = products; adding new node with label bond not change
             products = reactants
             info_temp["products"] = products
-            info_temp["bond_changed"] = False
+            info_temp["bond_change"] = False
             info_temp["E_rxn"] = 0
             info_temp["therdy_allow"] = True
 
@@ -462,40 +466,30 @@ class SingleCycleSearch:
             lastnode = rxnnetwork.get_lastnode_from_scanwd(key)
             edge_l = [lastnode]
             rxnnetwork.add_newnode(info=info_temp, edge_l=edge_l, linkoldnode=linkoldnode)
-            if printdetail:
-                print_simulation_details(status=1, key=key, atl=atl, sim_uhf=simuhf)
+            info_temp["reaction_exist"] = 0 # not a new rxn
 
         else:
-            info_temp["bond_changed"] = True
+            info_temp["bond_change"] = True
             # reactants != products; check if path guess thermodynamic assessable
-            if "Esp_dft" in tmp_path_l[1][0].keys():
-                E_p = [i["Esp_dft"] for i in tmp_path_l[1]]
-                E_r = [storage.allstruc.get_value(f"{i}.struc_info.energy.sp_dft") for i in reactants]
-            else:
-                E_p = [i["Esp_gxtb"] for i in tmp_path_l[1]]
-                E_r = [storage.allstruc.get_value(f"{i}.struc_info.energy.sp_gxtb") for i in reactants]
-            if not any([_ is None for _ in E_r]) and not any([_ is None for _ in E_r]):
-                E_rxn = sum(E_p) - sum(E_r)
-            else:
+            E_p = [i["Esp"] for i in tmp_path_l[1]]
+            E_r = [storage.allstruc.get(i).struc_info.energy.sp for i in reactants]
+            all_energies = E_p + E_r
+            if any(e is None or not np.isfinite(e) for e in all_energies):
                 E_rxn = np.inf
-                # print(f"Warning: DFT energy calculation for scan {key} failed, change to gfn sp!")
-                # E_r = [storage.allstruc.get_value(f"{i}.struc_info.energy.sp_gfn") for i in reactants]
-                # E_p = [i["Esp_gfn"] for i in tmp_path_l[1]]
-                # E_rxn = sum(E_p) - sum(E_r)
+            else:
+                E_rxn = sum(E_p) - sum(E_r)
 
             E_rxn_kcal = E_rxn * 627.503 if not np.isinf(E_rxn) else np.inf
             # print(key,E_rxn_kcal)
-            if E_rxn_kcal > storage.setting.get_value("searching_setting.general.elim", 300):
+            if E_rxn_kcal > storage.setting.searching_setting.general.elim:
                 info_temp["therdy_allow"] = False
                 info_temp["E_rxn"] = E_rxn_kcal
                 products = ["unknow"]
                 info_temp["products"] = products  #
                 # Erxn too large, add new node without determining products mb
-
                 rxnid = rxnnetwork.add_newnode(info=info_temp, linkoldnode=linkoldnode)
-                if printdetail:
-                    print_simulation_details(status=4, key=key, atl=atl,
-                                             sim_uhf=simuhf, otherkey=rxnid, E_sp=E_rxn_kcal)
+                info_temp["rxnid"] = rxnid
+                info_temp["reaction_exist"]=2 # new reaction
 
             else:
                 info_temp["therdy_allow"] = True
@@ -516,14 +510,14 @@ class SingleCycleSearch:
                             continue  # that is products of Erxn > Elim
                         unreact_ref = info["unreacted"]
                         ref_rmbl = [
-                            " | ".join(storage.allstruc.get_value(f"{i}.struc_info.general.mb").split(" | ")[:cut]) for
+                            " | ".join(storage.allstruc.get(i).struc_info.general.mb.split(" | ")[:cut]) for
                             i in reactants_ref]
 
                         ref_pmbl = [
-                            " | ".join(storage.allstruc.get_value(f"{i}.struc_info.general.mb").split(" | ")[:cut])
+                            " | ".join(storage.allstruc.get(i).struc_info.general.mb.split(" | ")[:cut])
                             for i in products_ref]
                         ref_umbl = [
-                            " | ".join(storage.allstruc.get_value(f"{i}.struc_info.general.mb").split(" | ")[:cut])
+                            " | ".join(storage.allstruc.get(i).struc_info.general.mb.split(" | ")[:cut])
                             for i in unreact_ref]
 
                         if Counter(products_mbl) == Counter(ref_pmbl) and \
@@ -532,17 +526,16 @@ class SingleCycleSearch:
                             if Counter(unreact_mbl) == Counter(ref_umbl):
                                 # test unreactants too
                                 refnode_index = rxnnetwork.get_node_index_form_nodeid(node)
-                                if printdetail:
-                                    print_simulation_details(status=2, key=key, atl=atl,
-                                                             sim_uhf=simuhf, otherkey=refnode_index)
+                                info_temp["reaction_exist"]=0 # rxn exist
+                                info_temp["ref_id"] = refnode_index
                             else:
                                 refnode_index = rxnnetwork.get_node_index_form_nodeid(node)
-                                if printdetail:
-                                    print_simulation_details(status=3, key=key, atl=atl, sim_uhf=simuhf,
-                                                             otherkey=refnode_index)
+                                info_temp["reaction_exist"] = 1  # rxn exist but there is new unreactants
+                                info_temp["ref_id"] = refnode_index
                             rxnexist = True
                             break
                     if not rxnexist:
+                        info_temp["reaction_exist"] = 2  # new reaction
                         # add new struct
                         products = []
                         for i, pmb in enumerate(products_mbl):
@@ -551,23 +544,23 @@ class SingleCycleSearch:
                                 for struc in storage.allstruc.data.keys():
 
                                     refmb = " | ".join(
-                                        storage.allstruc.get_value(f"{struc}.struc_info.general.mb").split(" | ")[:cut])
+                                        storage.allstruc.get(struc).struc_info.general.mb.split(" | ")[:cut])
 
                                     if refmb == pmb:
                                         add = False
                                         products.append(struc)
                                         break
                             if add:
-                                newstrucid = self.add_newstruc(tmp_path_l[1][i])
+                                newstrucid = self.add_newstruc(tmp_path_l[1][i],pmb)
                                 products.append(newstrucid)
                         info_temp["products"] = products
                         newnode_index = rxnnetwork.add_newnode(info=info_temp, linkoldnode=linkoldnode)
-                        if printdetail:
-                            print_simulation_details(status=4, key=key, atl=atl, sim_uhf=simuhf, otherkey=newnode_index,
-                                                     E_sp=E_rxn_kcal)
+                        info_temp["rxnid"] = newnode_index
+
                     else:
                         info_temp["products"] = products_ref
                         newnode_index = rxnnetwork.add_newnode(info=info_temp, linkoldnode=linkoldnode)
+                        info_temp["rxnid"] = newnode_index
 
                 else:
                     # can't identify, add as new node anyhow
@@ -577,53 +570,52 @@ class SingleCycleSearch:
                         if pmb != "unknow":
                             for struc in storage.allstruc.data.keys():
                                 refmb = " | ".join(
-                                    storage.allstruc.get_value(f"{struc}.struc_info.general.mb").split(" | ")[:cut])
+                                    storage.allstruc.get(struc).struc_info.general.mb.split(" | ")[:cut])
                                 if refmb == pmb:
                                     add = False
                                     products.append(struc)
                                     break
                         if add:
-                            newstrucid = self.add_newstruc(tmp_path_l[1][i])
+                            newstrucid = self.add_newstruc(tmp_path_l[1][i],pmb)
                             products.append(newstrucid)
                     info_temp["products"] = products
                     newnode_index = rxnnetwork.add_newnode(info=info_temp, linkoldnode=linkoldnode)
-                    if printdetail:
-                        print_simulation_details(status=6, key=key, atl=atl, sim_uhf=simuhf, otherkey=newnode_index,
-                                                 E_sp=E_rxn_kcal)
+                    info_temp["rxnid"] = newnode_index
+                    info_temp["reaction_exist"] = 3  # unknow product mb
+
+        return info_temp
 
     @staticmethod
-    def add_newstruc(strucinfo_d):
-        newid = str(len(storage.allstruc.data.keys()))
+    def add_newstruc(strucinfo_d,mb):
 
-        storage.allstruc.set_value(f"{newid}.struc_info.general.coordinate", strucinfo_d["coordinate"])
-        storage.allstruc.set_value(f"{newid}.struc_info.general.ele_l", strucinfo_d["ele_l"])
-        storage.allstruc.set_value(f"{newid}.struc_info.general.charge", strucinfo_d["charge"])
-        storage.allstruc.set_value(f"{newid}.struc_info.general.multiplicity", strucinfo_d["m"])
-        storage.allstruc.set_value(f"{newid}.struc_info.general.nel", strucinfo_d["nel"])
-        storage.allstruc.set_value(f"{newid}.struc_info.general.mb", CallMolBar(strucinfo_d["coordinate"],strucinfo_d["ele_l"]).get_mb())
-        storage.allstruc.set_value(f"{newid}.struc_info.general.atcharge", strucinfo_d["atomic_charge"])
-        storage.allstruc.set_value(f"{newid}.struc_info.general.atomic_connection", strucinfo_d["atomic_connection"])
-        if "Esp_dft" in strucinfo_d.keys():
-            storage.allstruc.set_value(f"{newid}.struc_info.energy.sp_dft", strucinfo_d["Esp_dft"])
-        else:
-            storage.allstruc.set_value(f"{newid}.struc_info.energy.sp_gxtb", strucinfo_d["Esp_gxtb"])
+        sid,s = storage.allstruc.create_new_structure()
+        s.struc_info.general.coordinate = strucinfo_d["coordinate"]
+        s.struc_info.general.ele_l = strucinfo_d["ele_l"]
+        s.struc_info.general.charge = strucinfo_d["charge"]
+        s.struc_info.general.multiplicity = strucinfo_d["m"]
+        s.struc_info.general.nel = strucinfo_d["nel"]
+        s.struc_info.general.mb = mb
+        s.struc_info.general.atcharge = strucinfo_d["atomic_charge"]
+        s.struc_info.general.atomic_connection = strucinfo_d["atomic_connection"]
+        s.struc_info.energy.sp = strucinfo_d["Esp"]
+
         # storage.allstruc.set_value(f"{newid}.struc_info.energy.trv", strucinfo_d["Etrv_gfn"])
         # storage.allstruc.set_value(f"{newid}.struc_info.energy.solv", strucinfo_d["Esolv_gfn"])
 
         # move folder
-        tmpwd = join(storage.setting.bufferwd, strucinfo_d["strucwd"])
-        tarwd = join(storage.setting.strucwd, newid)
+        tmpwd = join(storage.setting.searching_setting.general.bufferwd, strucinfo_d["strucwd"])
+        tarwd = join(storage.setting.searching_setting.general.strucwd, str(sid))
         if exists(tarwd):
             shutil.rmtree(tarwd)
         shutil.move(tmpwd, tarwd)
-        return newid
+        return sid
 
 
 def ReactionSearch(step=0):
     reactants_ini = storage.allstruc.reactants_ini
-    refproducts_ini = storage.allstruc.refproducts
+    # refproducts_ini = storage.allstruc.refproducts
     print(f"Start doing reaction exploartions with given structues: ", reactants_ini)
-    ncycle = storage.setting.get_value("searching_setting.general.cycle", 1)
+    ncycle = storage.setting.searching_setting.general.cycle
 
     while step < ncycle:
         # find reaction pathes to be explored in this cycle
@@ -641,7 +633,7 @@ def ReactionSearch(step=0):
 
             singlecycle = SingleCycleSearch(reactants_l)
             explore_dl = singlecycle.explore()
-            print_simulation_details(status=0)
+            print_info = []
             for itemd in explore_dl:
                 for count, info_l in itemd.items():
                     # get_value products geom
@@ -649,8 +641,9 @@ def ReactionSearch(step=0):
                     # refine products info
                     info_l = singlecycle.follow_up_treatment_energy(info_l)
                     # now evaluate this reaction path
-                    singlecycle.evalueate_path(count, info_l, layer=step + 1)
-            print_simulation_details(status=5)
+                    print_item = singlecycle.evalueate_path(count, info_l, layer=step + 1)
+                    print_info.append(print_item)
+            print_simulation_details(print_info,"0")
             # update reaction nexwork
             step += 1
         else:
@@ -667,7 +660,7 @@ def ReactionSearch(step=0):
                 prefix_rpid = rxninfo["scanwd"]
                 singlecycle = SingleCycleSearch(reactants_l)
                 explore_dl = singlecycle.explore(prefix_rpid)
-                print_simulation_details(status=0)
+                print_info=[]
                 for itemd in explore_dl:
                     for count, info_l in itemd.items():
                         # get_value products geom
@@ -676,11 +669,10 @@ def ReactionSearch(step=0):
                         info_l = singlecycle.follow_up_treatment_energy(info_l)
                         # now evaluate this reaction path
                         # reaction_id = prefix_rpid +"_" + str(count.split("_")[-1])
-                        singlecycle.evalueate_path(count, info_l, layer=step + 1)
-                print_simulation_details(status=5)
+                        print_item = singlecycle.evalueate_path(count, info_l, layer=step + 1)
+                print_simulation_details(print_info,nodewd)
             step += 1
     # clean up buffer_struc
-    if exists(storage.setting.bufferwd) and not (
-            storage.setting.get_value("searching_setting.general.keepbuffstruc", False)):
+    if exists(storage.setting.searching_setting.general.bufferwd):
         import shutil
-        shutil.rmtree(storage.setting.bufferwd, ignore_errors=True)
+        shutil.rmtree(storage.setting.searching_setting.general.bufferwd, ignore_errors=True)

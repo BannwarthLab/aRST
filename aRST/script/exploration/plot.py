@@ -81,4 +81,4 @@ def plot_rxnnetwork(file=None):
 
 
     plt.tight_layout()
-    plt.savefig(join(storage.setting.wd0,"rxnnetwork"))
+    plt.savefig(join(storage.setting.searching_setting.general.wd,"rxnnetwork"))
