@@ -66,6 +66,7 @@ def main():
     if args.explore:
         from aRST.script.exploration.assign_reaction import ReactionSearch
         from datetime import datetime
+        print_theo_setting()
         start_time = datetime.now()
         try:
             # checking the input parameter

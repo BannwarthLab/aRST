@@ -54,7 +54,7 @@ def print_selected_react_l(final_react_l):
 def select_react_l_interA(all_strucs_l, npair=10, gaplim=1, etemp=1000):
     reactants_l = list(set(all_strucs_l))
     # get full set of react_l
-    react_l = get_interA_react_l(reactants_l,printall=False)
+    react_l = get_interA_react_l(reactants_l)
     # keep only item that afo gap < 1 eV
     screen_react_l = [item for item in react_l if item["gap"] < gaplim]
     if len(screen_react_l) <= npair:
@@ -102,7 +102,7 @@ def _get_path_possibility(newadded_node_l):
     # use bolzmann distribution for path possibility
     E_rxn_l = [rxnnetwork.get_reaction_info(rxnnode).get("E_rxn", 0) for rxnnode in newadded_node_l]
     k = 1.9872041 * 10 - 3  # kcal/mol
-    etemp = storage.setting.get_value("xtb_setting.scan_etemp", 4000)
+    etemp = storage.setting.xtb_setting.scan_etemp
     p_l = np.array([np.exp(-(E / (k * etemp))) for E in E_rxn_l])
     print("!!")
     print(E_rxn_l)
@@ -172,10 +172,10 @@ def adjust_number_of_struc_in_reactor(newadded_node_l, layer, p_l):
 def pseudo_nanoreactor_inter(step=0):
     print("Start doing pseudo nanoreactor reaction explorations")
     all_strucs_l = storage.allstruc.reactants_ini
-    ncycle = storage.setting.get_value("searching_setting.general.cycle", 1)
-    ninter = storage.setting.get_value("searching_setting.inter.number", 1)
-    react_etemp = storage.setting.get_value("xtb_setting.scan_etemp", 4000)
-    scanmode = storage.setting.get_value("searching_setting.general.scan_mode", 0)
+    ncycle = storage.setting.searching_setting.general.cycle
+    ninter = storage.setting.searching_setting.inter.number
+    react_etemp = storage.setting.xtb_setting.scan_etemp
+    scanmode = storage.setting.searching_setting.general.scan_mode
     while step < ncycle:
         print(f"begin cycle {step}:")
         print()
@@ -228,7 +228,6 @@ def pseudo_nanoreactor_inter(step=0):
         print_simulation_details(status=5)
         step += 1
 
-    if exists(storage.setting.bufferwd) and not (
-    storage.setting.get_value("searching_setting.general.keepbuffstruc", False)):
+    if exists(storage.setting.searching_setting.general.bufferwd):
         import shutil
-        shutil.rmtree(storage.setting.bufferwd, ignore_errors=True)
+        shutil.rmtree(storage.setting.searching_setting.general.bufferwd, ignore_errors=True)

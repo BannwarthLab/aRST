@@ -1,163 +1,304 @@
 import datetime
+from typing import Any, Dict, List
 
 
-def print_head():
-    program_name = "automated Reaction Search Tool (aRST) V2.2.0"
-    timestamp = datetime.datetime.now().strftime("%d-%m-%Y %H:%M:%S")
-    tot_width = 100
-    border_width = 80
-    side_padding = (tot_width - border_width) // 2
+TOTAL_WIDTH = 100
+DEFAULT_BORDER_WIDTH = 90
+
+
+def _centered_banner(char: str, text: str, width: int = TOTAL_WIDTH) -> None:
+    border = char * len(text)
+    print(border.center(width))
+    print(text.center(width))
+    print(border.center(width))
+    print()
+
+
+def _framed_header(lines: List[str],
+                   border_width: int = DEFAULT_BORDER_WIDTH,
+                   width: int = TOTAL_WIDTH) -> None:
+    side_padding = (width - border_width) // 2
     side = " " * side_padding
     border = "=" * border_width
 
     print(side + border)
-    print(side + f"|{' ' * (border_width - 2)}|")
-    print(side + f"|{' ' * (border_width - 2)}|")
-    print(side + f"|{program_name.center(border_width - 2)}|")
-    print(side + f"|{' ' * (border_width - 2)}|")
-    print(side + f"|{' ' * (border_width - 2)}|")
+    print(side + "|{:<{w}}|".format("", w=border_width - 2))
+    print(side + "|{:<{w}}|".format("", w=border_width - 2))
+
+    for line in lines:
+        print(side + "|{:<{w}}|".format(line.center(border_width - 2), w=border_width - 2))
+
+    print(side + "|{:<{w}}|".format("", w=border_width - 2))
+    print(side + "|{:<{w}}|".format("", w=border_width - 2))
     print(side + border)
+
+
+def print_head() -> None:
+    program_name = "automated Reaction Search Tool (aRST) V2.2.0"
+    timestamp = datetime.datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+
+    _framed_header(
+        lines=[program_name],
+        border_width=DEFAULT_BORDER_WIDTH,
+        width=TOTAL_WIDTH,
+    )
+
+    side_padding = (TOTAL_WIDTH - DEFAULT_BORDER_WIDTH) // 2
+    side = " " * side_padding
+    border = "=" * DEFAULT_BORDER_WIDTH
 
     print(side + "# Author:             Y. Chen, C. Bannwarth")
     print(side + "# Institute:          Institute of Physical Chemistry")
     print(side + "#                     RWTH Aachen University")
     print(side + "# Version date:       03.2026")
-    print(side + f"# Job running at:     {timestamp}")
+    print(side + "# Job running at:     {}".format(timestamp))
     print(side + border)
     print()
 
 
-def print_args(args):
-    string = " "
-    if args.explore:
-        string = "* Job type: Reaction Exploartion *"
-    elif args.afo_features:
-        string = "* Job type: Reactivity Assesment *"
-    elif args.align:
-        string = "* Job type: Reactants Alignment *"
+def print_args(args: Any) -> None:
+    job_type = ""
+    if getattr(args, "explore", False):
+        job_type = "* Job type: Reaction Exploration *"
+    elif getattr(args, "afo_features", False):
+        job_type = "* Job type: Reactivity Assessment *"
+    elif getattr(args, "align", False):
+        job_type = "* Job type: Reactants Alignment *"
+
     border_width = 80
     border = "=" * border_width
-    print(border.center(100))
-    print(string.center(100))
-    print(border.center(100))
+    print(border.center(TOTAL_WIDTH))
+    if job_type:
+        print(job_type.center(TOTAL_WIDTH))
+    print(border.center(TOTAL_WIDTH))
     print()
 
 
-def print_parser(data):
+def print_parser(data: Dict[str, Dict[str, Any]]) -> None:
     print("*read input:")
     for section, subkeys in data.items():
-        # Start with section header
-        line = f"[{section}]:"
-        indent = " " * 4  # 4-space indent for continuation lines
-        first_item_in_line = True  # Track if we're at the start of a new line
+        line = "[{}]:".format(section)
+        indent = " " * 4
+        first_in_line = True
 
-        # Add key-value pairs one by one, checking line length
-        for k, v in subkeys.items():
-            # Add comma only if it's not the first item in the line
-            item = f", {k}={v}" if not first_item_in_line else f" {k}={v}"
+        for key, value in subkeys.items():
+            item = ", {}={}".format(key, value) if not first_in_line else " {}={}".format(key, value)
 
-            # If adding this item would exceed 60 chars, start a new line
             if len(line) + len(item) > 60:
                 print(line)
-                line = indent + f"{k}={v}"  # Start new line with indent (no comma)
-                first_item_in_line = True  # Next item is the first in this line
+                line = indent + "{}={}".format(key, value)
+                first_in_line = True
             else:
                 line += item
-                first_item_in_line = False  # Next item is not the first
+                first_in_line = False
 
-        print(line)  # Print the final line for the section
+        print(line)
+
     print()
     print()
 
 
-def print_simulation_details(info_l,node_name):
-    totw = 100
-    border_width = 90
-    col1 = 18
-    col2 = 10
-    col3 = 12
-    col4 = 18
-    col5 = 10
-    col6 = 32
-    side_padding = (totw - border_width) // 2
+def print_theo_setting() -> None:
+    import aRST.script.initialization as storage
+
+    setting = storage.setting
+
+    width = 64   # inner box width (without outer centering)
+    side_padding = (TOTAL_WIDTH - width) // 2
     side = " " * side_padding
 
-    # print head
-    text_line = f"* Summary for the node {node_name} *"
-    border = "*" * len(text_line)
+    def box_line(text=""):
+        print(side + "│ " + text.ljust(width - 4) + " │")
 
-    print(border.center(100))
-    print(text_line.center(100))
-    print(border.center(100))
+    def box_sep():
+        print(side + "├" + "─" * (width - 2) + "┤")
+
+    def box_top():
+        print(side + "┌" + "─" * (width - 2) + "┐")
+
+    def box_bottom():
+        print(side + "└" + "─" * (width - 2) + "┘")
+
+    def section(title):
+        box_sep()
+        box_line(title.center(width - 4))
+        box_sep()
+
+    def kv(key, value, key_width=18):
+        box_line(f"{key:<{key_width}}: {value}")
+
+    # Bind settings locally (cleaner)
+    xtb = setting.xtb_setting
+    orca = setting.orca_setting
+    search = setting.searching_setting
+    read = setting.read
+    reactivity = search.reactivity
+
+    # Prepare derived values
+    dftmethod = ""
+    dftsolvent = ""
+
+    if search.general.sp_method == "dft":
+        dftmethod = f"{orca.functional} {orca.basis}"
+        dftsolvent = orca.cpcm
+
+    scanmethod = "harmonic FF" if search.general.scan_mode == 1 else "xTB scan"
+
+    # =============================
+    # Start Box
+    # =============================
+    box_top()
+    box_line("Theory Level Setting".center(width - 4))
+    box_sep()
+
+    # ---------------- Geometry ----------------
+    section("Geometry Optimization")
+
+    if not orca.dftopt:
+        kv("Method", xtb.method)
+        kv("Opt Level", xtb.optlevel or "normal")
+        kv("Solvation", f"ALPB({xtb.alpb})" if xtb.alpb else "None")
+        kv("Etemp", f"{xtb.struc_etemp} K")
+    else:
+        kv("Method", dftmethod)
+        kv("Solvation", f"CPCM({dftsolvent})" if dftsolvent else "None")
+
+    if read.general.jumprefine:
+        kv("Re-opt input", "False")
+    elif read.general.dftopt:
+        kv("Re-opt input", dftmethod)
+    elif read.general.gfn2opt:
+        kv("Re-opt input", xtb.method)
+    else:
+        kv("Re-opt input", "False")
+
+    # ---------------- Reactivity ----------------
+    section("Reactivity Features")
+
+    if reactivity.afo_method == "gfn2":
+        kv("Method", "gfn2")
+        kv("Solvation", f"ALPB({xtb.alpb})" if xtb.alpb else "None")
+
+    elif reactivity.afo_method == "gxtb":
+        kv("Method", "gxtb")
+
+    elif reactivity.MO_method == "orca":
+        afomethod = f"{reactivity.afo_orca_functional} {reactivity.afo_orca_basis}"
+        kv("Method", afomethod)
+        kv("Solvation", f"CPCM({reactivity.afo_orca_cpcm})"
+           if reactivity.afo_orca_cpcm else "None")
+
+    elif reactivity.MO_method == "terachem":
+        afomethod = f"{reactivity.afo_tc_functional} {reactivity.afo_tc_basis}"
+        kv("Method", afomethod)
+        kv("Solvation", f"eps={reactivity.afo_tc_epsilon}"
+           if reactivity.afo_tc_epsilon else "None")
+
+    kv("AFO Gap tolerance", f"{search.general.equivalent_afogap_tol} eV")
+
+    if search.general.exclude_elements:
+        kv("Exclude elements", search.general.exclude_elements)
+
+    if search.general.exclude_pairs:
+        kv("Exclude pairs", search.general.exclude_pairs)
+
+    # ---------------- Simulation ----------------
+    section("Reaction Simulation")
+
+    kv("Method", scanmethod)
+    kv("Etemp", f"{xtb.scan_etemp} K")
+
+    # ---------------- SP ----------------
+    section("Single-Point Energy")
+
+    kv("Method", search.general.sp_method)
+
+    if search.general.sp_method == "dft":
+        kv("Solvation", f"CPCM({dftsolvent})" if dftsolvent else "None")
+
+    box_bottom()
     print()
 
-    print(side + f"{'Path':^{col1}} {'Type':^{col2}} {'Reactant':^{col3}} {'Atom pair':^{col4}} "
-                 f"{'UHF_sim':^{col5}} {'Status':^{col6}}")
-    print(side + "-" * border_width)
-    # info_temp = {"reactants": reactants,
-    #                      "unreacted": unreactants,
-    #                      "at_l": atl,
-    #                      "sim_uhf": simuhf,
-    #                      "products": [],
-    #                      "scanwd": key,
-    #                      # "E_rxn": E_rxn,
-    #                      # "bond_change": bond_change,
-    #                      # "therdy_allow": therdy_allow,
-    #                      "layer": layer,  # of which cycle step
-    #                      "type":tmp_path_l[2]["type"]
-    #                      }
-    for item in info_l:
-        path= item["scanwd"]
-        reactants=item["reactants"]
-        formatted_reactants = ", ".join(f"[{','.join(map(str, inner))}]" for inner in item["reactants"])
-        type=item["type"]
-        formatted_atl = ", ".join(f"[{','.join(map(str, inner))}]" for inner in item["at_l"])
-        uhf_sim = item["sim_uhf"]
-        bond_change = item["bond_change"]
-        therm_allow = item["therdy_allow"]
-        E_sp = item["E_rxn"]
-        reaction_exist_code = item["reaction_exist"]
-        # 0: rxn exist; # 1: rxn exist but there is new unreactants
-        # 2:new reaction; 3:unknow mb
-        comments = ""
+
+
+
+
+
+
+
+def print_jobhead(jobhead: str) -> None:
+    _centered_banner("*", "* {} *".format(jobhead), width=TOTAL_WIDTH)
+
+
+def print_simulation_details(info_l: List[Dict[str, Any]], node_name: str) -> None:
+    side_padding = (TOTAL_WIDTH - DEFAULT_BORDER_WIDTH) // 2
+    side = " " * side_padding
+
+    _centered_banner("*", "* Exploration Summary of Node {} *".format(node_name), width=TOTAL_WIDTH)
+
+    col_i = 5
+    col_rxn = 6
+    col_sw = 10
+    col_r = 8
+    col_ap = 14
+    col_p = 8
+    col_e = 14
+    col_note = 18
+
+    header = (
+        side
+        + "{:^{w1}} {:^{w2}} {:^{w3}} {:^{w4}} {:^{w5}} {:^{w6}} {:^{w7}} {:^{w8}}".format(
+            "#", "RXNID", "Scan_wd", "R", "Atom Pair", "P", "ΔE (kcal/mol)", "Note",
+            w1=col_i, w2=col_rxn, w3=col_sw, w4=col_r, w5=col_ap, w6=col_p, w7=col_e, w8=col_note
+        )
+    )
+
+    print(side + "-" * DEFAULT_BORDER_WIDTH)
+    print(header)
+    print(side + "-" * DEFAULT_BORDER_WIDTH)
+
+    for i, item in enumerate(info_l):
+        reactants = item.get("reactants")
+        products = item.get("products")
+        scanwd = item.get("scanwd")
+        atom_pairs = item.get("at_l")
+        bond_change = bool(item.get("bond_change"))
+        therm_allow = bool(item.get("therdy_allow"))
+        e_rxn = item.get("E_rxn", 0.0)
+        exist_code = item.get("reaction_exist")
+        rxnid = item.get("rxnid") if bond_change else "-"
+
+        comment = ""
         if not bond_change:
-            # reactants = products
-            comments = "R=P"
+            comment = "R=P"
         elif not therm_allow:
-            # Erxn too large, add new node without determining products mb
-            rxnid = item["rxnid"]
-            comments = f"Unfavorable new rxn: {rxnid}, ΔE_sp ={E_sp:.2f} kcal/mol"
+            comment = "energetic unfavorable"
         else:
-            rxnid = item["rxnid"]
-            if reaction_exist_code==0:
-                comments = f"rxn exist in {rxnid}"
-            elif reaction_exist_code==1:
-                comments = f"rxn exist in {rxnid}, but has different unreacted structures"
-            elif reaction_exist_code == 2:
-                comments = f"New rxn: {rxnid}, ΔE_sp ={E_sp:.2f}"
-            elif reaction_exist_code == 3:
-                comments = f"Unknown MB in product detected: {rxnid}, ΔE_sp ={E_sp:.2f}"
-        print(side + f"{str(path).center(col1)}"
-                     f"{str(type).center(col2)}"
-                     f"{str(formatted_reactants).center(col3)}"
-                     f"{str(formatted_atl).center(col4)}"
-                     f"{str(uhf_sim).center(col5)}"
-                     f"{str(comments).center(col6)}"
-              )
-    print(side + "-" * border_width)
+            ref_id = item.get("ref_id")
+            if exist_code == 0:
+                comment = "RXN same to {}".format(ref_id)
+            elif exist_code == 1:
+                comment = "RXN same to {}, but has different un".format(ref_id)
+            elif exist_code == 2:
+                comment = "New RXN"
+            elif exist_code == 3:
+                comment = "Unknown MB in product detected: {}".format(rxnid)
 
-def print_jobhead(jobhead):
-    text_line = f"* {jobhead} *"
-    border = "*" * len(text_line)
+        line = (
+            "{:^{w1}} {:^{w2}} {:^{w3}} {:^{w4}} {:^{w5}} {:^{w6}} {:^{w7}.2f} {:<{w8}}".format(
+                i, str(rxnid), str(scanwd), str(reactants), str(atom_pairs),
+                str(products), float(e_rxn),
+                str(comment),
+                w1=col_i, w2=col_rxn, w3=col_sw, w4=col_r, w5=col_ap, w6=col_p, w7=col_e, w8=col_note
+            )
+        )
+        print(side + line + side)
 
-    print(border.center(100))
-    print(text_line.center(100))
-    print(border.center(100))
-    print()
+    print(side + "-" * DEFAULT_BORDER_WIDTH)
 
 
-def print_react_l(reactants, react_l):
-    totw = 100
+def print_react_l(reactants: Any, react_l: List[Dict[str, Any]]) -> None:
+    totw = TOTAL_WIDTH
     border_width = 80
     col1 = 10   # Ranking
     col2 = 15   # Struc combi
@@ -170,37 +311,43 @@ def print_react_l(reactants, react_l):
     title = "Reactivity Assessment"
     print(side + "-" * border_width)
     print(title.center(totw))
-    print(side + f"Reactants: {reactants}, tot.atom pairs: {len(react_l)}")
-    # print theo lvl
-
+    print(side + "Reactants: {}, tot.atom pairs: {}".format(reactants, len(react_l)))
     print(side + "Top 10 reactivity predictions:")
     print(side + "-" * border_width)
 
-    if "gap" in react_l[0]:
-        gapkey, gaplabel = "gap", "AFO gap"
-    elif "mbo" in react_l[0]:
-        gapkey, gaplabel = "mbo", "MBO"
-    else:
-        gapkey, gaplabel = "embo", "eMBO"
+    gapkey = "embo"
+    gaplabel = "eMBO"
+    if react_l:
+        if "gap" in react_l[0]:
+            gapkey, gaplabel = "gap", "AFO gap"
+        elif "mbo" in react_l[0]:
+            gapkey, gaplabel = "mbo", "MBO"
 
-    print(side + f"{'Ranking':^{col1}}{'Struc combi':^{col2}}{'Atom pair':^{col3}}{gaplabel:^{col4}}")
+    print(side + "{:^{c1}}{:^{c2}}{:^{c3}}{:^{c4}}".format(
+        "Ranking", "Struc combi", "Atom pair", gaplabel,
+        c1=col1, c2=col2, c3=col3, c4=col4
+    ))
     print(side + "-" * border_width)
 
     for i, entry in enumerate(react_l[:10]):
         struc_l = entry.get("struc_combi", entry.get("struc", ""))
-        at_l = entry["at_combi"]
+        at_l = entry.get("at_combi", [])
 
-        # at_l like [['5','0'],['2','4']] -> "[5,0], [2,4]"
-        formatted_atl = ", ".join(f"[{','.join(map(str, inner))}]" for inner in at_l)
+        formatted_atl = ", ".join(
+            "[{}]".format(",".join(map(str, inner))) for inner in at_l
+        )
 
         gap = entry.get(gapkey)
-        strgap = f"{gap:.2f}" if isinstance(gap, (int, float)) and gap != float("inf") else "np.inf"
+        if isinstance(gap, (int, float)) and gap != float("inf"):
+            strgap = "{:.2f}".format(gap)
+        else:
+            strgap = "np.inf"
 
-        print(side +
-              f"{i:^{col1}}"
-              f"{str(struc_l):^{col2}}"
-              f"{formatted_atl:^{col3}}"
-              f"{strgap:^{col4}}")
+        print(side + "{:^{c1}}{:^{c2}}{:^{c3}}{:^{c4}}".format(
+            i, str(struc_l), formatted_atl, strgap,
+            c1=col1, c2=col2, c3=col3, c4=col4
+        ))
+
     print(side + "-" * border_width)
-    print(side +"The full AFO gap list is written to the file react_l.")
+    print(side + "The full AFO gap list is written to the file react_l.")
     print()

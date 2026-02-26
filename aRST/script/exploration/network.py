@@ -30,7 +30,7 @@ class ReactionNetwork:
                 "therdy_allow": therdy_allow,
                 "layer":layer, # of which cycle step
                 }"""
-        nodeid = (str(uuid.uuid4()))
+        nodeid = (str(uuid.uuid4().hex[:8]))
         self.graph.add_node(nodeid, info=info)
         if "bond_change" in info.keys() and "therdy_allow" in info.keys():
             if info["bond_change"] and info["therdy_allow"]:

@@ -21,15 +21,15 @@ class CallORCA:
     def default_settings(cls, setting):
         """Dynamically generates default settings based on the `setting` class."""
         return {
-            "functional": setting.get_value("orca_setting.functional", "r2scan-3c"),
-            "basis": setting.get_value("orca_setting.basis", " "),
+            "functional": setting.orca_setting.functional,
+            "basis": setting.orca_setting.basis,
             "charge": 0,
             "m": 1,
             "fn": "coord",
             "caltyp": "SP",
             "caltyp2": "RKS",  # This can be updated dynamically if needed
-            "solmode": setting.get_value("orca_setting.solmode", ""),
-            "ncpu": setting.get_value("orca_setting.ncpu", 1),
+            "solmode": setting.orca_setting.solmode,
+            "ncpu": setting.orca_setting.ncpu,
         }
 
     def __init__(self, wd, command_d=None, custom_settings=None):
@@ -141,13 +141,13 @@ class CallCrest:
     @classmethod
     def default_settings(cls, setting):
         """Dynamically generates default settings based on the `setting` class."""
-        return {"method": setting.get_value("xtb_setting.method", "gfn2"),
+        return {"method": setting.xtb_setting.method,
                 "coordfn": "coord",
-                "optlevel": setting.get_value("xtb_setting.optlevel", ""),
+                "optlevel": setting.xtb_setting.optlevel,
                 "charge": 0,
                 "uhf": 0,
-                "alpb": setting.get_value("xtb_setting.alpb", "h2o"),
-                "etemp": setting.get_value("xtb_setting.struc_etemp", "300"),
+                "alpb": setting.xtb_setting.alpb,
+                "etemp": setting.xtb_setting.struc_etemp,
                 }
 
     def __init__(self, wd, command_d=None, custom_settings=None):
@@ -260,13 +260,13 @@ class CallxTB:
     @classmethod
     def default_settings(cls, setting):
         """Dynamically generates default settings based on the `setting` class."""
-        return {"method": setting.get_value("xtb_setting.method", "gfn2"),
+        return {"method": setting.xtb_setting.method,
                 "coordfn": "coord",
-                "optlevel": setting.get_value("xtb_setting.optlevel", ""),
+                "optlevel": setting.xtb_setting.optlevel,
                 "charge": 0,
                 "uhf": 0,
-                "alpb": setting.get_value("xtb_setting.alpb", "h2o"),
-                "etemp": setting.get_value("xtb_setting.struc_etemp", "300"),
+                "alpb": setting.xtb_setting.alpb,
+                "etemp": setting.xtb_setting.struc_etemp,
                 }
 
     def __init__(self, wd, command_d=None, custom_settings=None):
@@ -749,13 +749,13 @@ class CallgXTB:
     def default_settings(cls, setting):
         # use gfn2 setting to obtain .charg and .uhf
         """Dynamically generates default settings based on the `setting` class."""
-        return {"method": setting.get_value("xtb_setting.method", "gfn2"),
+        return {"method": setting.xtb_setting.method,
                 "coordfn": "coord",
-                "optlevel": setting.get_value("xtb_setting.optlevel", ""),
+                "optlevel": setting.xtb_setting.optlevel,
                 "charge": 0,
                 "uhf": 0,
-                "alpb": setting.get_value("xtb_setting.alpb", "h2o"),
-                "etemp": setting.get_value("xtb_setting.struc_etemp", "300"),
+                "alpb": setting.xtb_setting.alpb,
+                "etemp": setting.xtb_setting.struc_etemp,
                 }
 
     def __init__(self, wd, command_d=None, custom_settings=None):
@@ -835,6 +835,19 @@ class CallgXTB:
 
         # run gxtb sp
         cmd_string2 = self.generate_gXTBcmd_string()
+        rc = self.gxtbsubprocess(cmd_string2)
+        return rc
+
+    def afo_molden(self):
+        if self.cmd.get_value('charge') != 0:
+            with open(join(self.wd, ".CHRG"), 'w') as file:
+                file.write(str(self.cmd.get_value('charge')))
+        if self.cmd.get_value('uhf') != 0:
+            with open(join(self.wd, ".UHF"), 'w') as file:
+                file.write(str(self.cmd.get_value('uhf')))
+
+        # run gxtb sp
+        cmd_string2 = self.generate_gXTBcmd_string()+ " -molden "
         rc = self.gxtbsubprocess(cmd_string2)
         return rc
 

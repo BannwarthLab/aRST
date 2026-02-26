@@ -4,6 +4,7 @@ import pandas as pd
 from os.path import join, exists
 import networkx as nx
 from aRST.script.element import element
+import aRST.script.initialization as storage
 
 
 class mydict(dict):
@@ -121,13 +122,18 @@ def read_afo_csv(afopath):
 
 def read_atcharge(atchargepath):
     atcharge = pd.read_table(atchargepath, header=None, sep='\s+') if exists(atchargepath) else None
+    if atcharge is not None:
+        atcharge = atcharge.to_numpy().ravel()
     return atcharge
 
 
 def get_strucinfo_from_path(strucid_path):
     from aRST.script.callsys import CallxTB, CallORCA, CallMolBar, CallgXTB
-    import aRST.script.initialization as storage
-    # determine coord
+    from aRST.script import input_class
+
+    coordinate, ele_l,nel,m,charge,atcharge,Esp,constrain_l,mb = (None,) * 9
+
+    # determine coord and ele_l
     # dft opt geom > gfn2 opt geom > input geom
     if exists(join(strucid_path, "orca", "orca.xyz")):
         coordinate, ele_l = read_coord(join(strucid_path, "orca", "orca.xyz"))
@@ -138,13 +144,11 @@ def get_strucinfo_from_path(strucid_path):
         coordinate, ele_l = read_coord(join(strucid_path, "orca", "coord.xyz"))
     elif exists(join(strucid_path, "gxtb", "coord.xyz")):  # gxtb sp
         coordinate, ele_l = read_coord(join(strucid_path, "gxtb", "coord.xyz"))
-    else:
-        raise ValueError(f"{strucid_path} strucinfo doesn't exist!")
 
     xtb = CallxTB(join(strucid_path, "xtb"))
     charge = xtb.get_charge_from_out()
     nel = int(sum([element[_] for _ in ele_l])) - charge
-    atcharge = read_atcharge(join(strucid_path, "charges"))
+    atcharge = read_atcharge(join(strucid_path,"xtb", "charges"))
     Esp_gfn = xtb.get_Esp_from_out()
     # Etrv_gfn = CallxTB(join(strucid_path, "xtb", "trv")).get_Etrv()
     # Esolv_gfn = CallxTB(join(strucid_path, "xtb", "solv")).get_Esolv()
@@ -152,23 +156,22 @@ def get_strucinfo_from_path(strucid_path):
     constrain_l = get_topo(coordinate, ele_l, bo)
     mb = CallMolBar(coordinate, ele_l).get_mb()
 
-    if storage.setting.get_value("searching_setting.singlepoint.method") == "dft":
-        Esp_dft = CallORCA(join(strucid_path, "orca")).get_energy()
+    if storage.setting.searching_setting.general.sp_method== "dft":
+        Esp = CallORCA(join(strucid_path, "orca")).get_energy()
         m = CallORCA(join(strucid_path, "orca")).get_m()
-        return {"coordinate": coordinate, "ele_l": ele_l, "nel": nel, "m": m, "c": charge, "atcharge": atcharge,
-                "Esp_gfn": Esp_gfn,
-                # "Etrv_gfn": Etrv_gfn,
-                # "Esolv_gfn": Esolv_gfn,
-                "constrain_l": constrain_l, "Esp_dft": Esp_dft, "mb": mb}
     else:
-        Esp_gxtb = CallgXTB(join(strucid_path, "gxtb")).get_Esp_from_out()
+        # can only be gxtb
+        Esp=CallgXTB(join(strucid_path, "gxtb")).get_Esp_from_out()
         m = 1 if nel % 2 == 0 else 2
+
+    if any(v is None for v in [coordinate, ele_l, nel, m, charge, atcharge, Esp, constrain_l, mb]):
+        return {},False
+    else:
         return {"coordinate": coordinate, "ele_l": ele_l, "nel": nel, "m": m, "c": charge, "atcharge": atcharge,
                 "Esp_gfn": Esp_gfn,
                 # "Etrv_gfn": Etrv_gfn,
                 # "Esolv_gfn": Esolv_gfn,
-                "constrain_l": constrain_l, "Esp_gxtb": Esp_gxtb, "mb": mb}
-
+                "constrain_l": constrain_l, "Esp": Esp, "mb": mb}, True
 
 def create_folder(wd):
     wd = os.path.abspath(wd)
@@ -208,7 +211,7 @@ class FragmentAnalyzer:
         self.Snat = len(ele_l)
         self.Sbo = bo
         self.Satcharge = atcharge
-        self.Scharge = np.round(atcharge.iloc[:, 0].sum())
+        self.Scharge = np.round(np.sum(atcharge))
         self.Scoordinate = coordinate
         self.Sele_l = ele_l
         self.Snel = int(sum([element[_] for _ in self.Sele_l])) - self.Scharge
@@ -258,8 +261,8 @@ class FragmentAnalyzer:
         charge_l_flo = []
         fragment_data = []
         for fragment in self.fragments:
-            atcharge = self.Satcharge.iloc[list(fragment)]
-            charge_flo = atcharge.sum()
+            atcharge = self.Satcharge[list(fragment)]
+            charge_flo = np.sum(atcharge)
             charge_l_flo.append(float(charge_flo))
             fragment_data.append({
                 "charge_flo": charge_flo, "atcharge": atcharge})
@@ -373,26 +376,33 @@ class GraphAnalyzer:
 
 
 def convert_for_json(d, exclude_keys=None):
-    """
-    Recursively convert a deep nested dict to be JSON serializable.
-    - Exclude specific keys.
-    - Convert float values to 4 decimal places.
-    - Convert DataFrame to a JSON string.
-    """
+    from pydantic import BaseModel
     if exclude_keys is None:
         exclude_keys = set()
 
+    if isinstance(d, BaseModel):
+        return convert_for_json(d.model_dump(), exclude_keys)
+
     if isinstance(d, np.ndarray):
         return d.tolist()
+
     if isinstance(d, pd.DataFrame):
-        return {"__dataframe__": d.to_json()}  # Store as JSON string
+        return {"__dataframe__": d.to_json()}
+
     elif isinstance(d, list):
         return [convert_for_json(v, exclude_keys) for v in d]
+
     elif isinstance(d, dict):
-        return {k: convert_for_json(v, exclude_keys) for k, v in d.items() if k not in exclude_keys}
+        return {
+            k: convert_for_json(v, exclude_keys)
+            for k, v in d.items()
+            if k not in exclude_keys
+        }
+
     elif isinstance(d, float):
-        return round(d, 8)  # Round float values to 8 decimal places
-    return d  # int, str, etc., remain unchanged
+        return round(d, 8)
+
+    return d
 
 
 import json
@@ -419,15 +429,19 @@ def write_rxnout():
         ],
         "edges": list(rxnnetwork.graph.edges)
     }
-    with open(f'{storage.setting.wd0}/reaction.json', "w") as file:
+    with open(f'{storage.setting.searching_setting.general.wd}/reaction.json', "w") as file:
         file.write(json.dumps(data, indent=2, cls=CompactJSONEncoder))
         file.write('\n')
 
 
 def write_strucout():
-    import aRST.script.initialization as storage
     import json
-    with open(f'{storage.setting.wd0}/struc.json', "w") as file:
-        exclude_keys = ["atomic_connection"]
-        file.write(json.dumps(convert_for_json(storage.allstruc.data, exclude_keys), indent=2))
-        file.write('\n')
+    path = f"{storage.setting.searching_setting.general.wd}/struc.json"
+
+    with open(path, "w") as file:
+        json.dump(
+            convert_for_json(storage.allstruc.data, {"atomic_connection"}),
+            file,
+            indent=2
+        )
+        file.write("\n")

@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from aRST.script.element import r0, element, scaled_r0
+from aRST.script.element import r0, element
 import warnings
 import math
 

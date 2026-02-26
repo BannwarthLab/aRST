@@ -8,22 +8,25 @@ from aRST.script.callsys import CallCrest
 
 def updating_reacntans(reactants,job="depotonation"):
     # borrow gfn2 opt option for forcing gfn opt in refine_struc_info
-    oldsetting = storage.setting.get_value("read.general.gfn2opt", False)
-    storage.setting.set_value("read.general.gfn2opt", True)
+    oldsetting = storage.setting.read.general.gfn2opt
+    storage.setting.read.general.gfn2opt=True
 
     for struc in reactants:
-        c = storage.allstruc.get_value(f"{struc}.struc_info.general.charge")
-        constrain_l = storage.allstruc.get_value(f"{struc}.struc_info.general.atomic_connection")
+        s = storage.allstruc.get(struc)
+        c = s.struc_info.general.charge
+        constrain_l = s.struc_info.general.atomic_connection
+        ele_l = s.struc_info.general.ele_l
         if job=="depotonation":
-            if not "H" in ele:
+            if not "H" in ele_l:
                 continue
 
-        E0 = storage.allstruc.get_value(f"{struc}.struc_info.energy.sp_dft")
-        coordinate = storage.allstruc.get_value(f"{struc}.struc_info.general.coordinate")
-        ele_l = storage.allstruc.get_value(f"{struc}.struc_info.general.ele_l")
-        m = int(storage.allstruc.get_value(f"{struc}.struc_info.general.multiplicity"))
+        s = storage.allstruc.get(struc)
+        E0 = s.struc_info.energy.sp
+        coordinate = s.struc_info.general.coordinate
+        ele_l = s.struc_info.general.ele_l
+        m = s.struc_info.general.multiplicity
 
-        tmpfolder = create_folder(join(storage.setting.bufferwd, get_random_folder_name(),job))
+        tmpfolder = create_folder(join(storage.setting.searching_setting.general.bufferwd, get_random_folder_name(),job))
         # call depotonation
         write_xyz(coordinate,ele_l, "coord")
         crest_parse = CallCrest(tmpfolder,
@@ -40,8 +43,9 @@ def updating_reacntans(reactants,job="depotonation"):
 
             if updated_coordinate is not None:
                 # reset AFO features
-                storage.allstruc.set_value(f"{struc}.struc_info.reactivity.afo",None)
-                storage.allstruc.set_value(f"{struc}.struc_info.reactivity.bo", None)
+                s = storage.allstruc.get(struc)
+                s.struc_info.reactivity.afo = None
+                s.struc_info.reactivity.bo = None
                 if job == "depotonation":
                     print(
                         f"The deprotonated form of the reactant {struc} is more energetically favorable->\n"
@@ -56,7 +60,7 @@ def updating_reacntans(reactants,job="depotonation"):
                 storage.allstruc.refine_struc_info(updated_coordinate,updated_ele_l, c, m, storage.setting,strucid=struc,wd0=tmpfolder)
                 struc_info = get_strucinfo_from_path(tmpfolder)
                 storage.allstruc.set_value_from_struc_info(struc, struc_info)
-                tarwd = join(storage.setting.strucwd, struc,job)
+                tarwd = join(storage.setting.searching_setting.general.strucwd, struc,job)
                 if exists(tarwd):
                     shutil.rmtree(tarwd)
                 shutil.move(tmpfolder,tarwd)
@@ -65,4 +69,4 @@ def updating_reacntans(reactants,job="depotonation"):
                       f"  keep the original reactant structure.")
 
     # reset gfn2 opt option
-    storage.setting.set_value("read.general.gfn2opt", oldsetting)
+    storage.setting.read.general.gfn2opt=oldsetting

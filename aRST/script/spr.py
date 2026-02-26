@@ -1,4 +1,3 @@
-import sys
 from itertools import product
 import numpy as np
 import pandas as pd
@@ -14,7 +13,7 @@ def find_identical_at_from_afo(HOAO_a, HOAO_b, LUAO_a, LUAO_b, tol=0.01):
 
     # Process each structure that exists in HOAO_a
     for struc in HOAO_a.columns.unique():
-        out[str(struc)] = []
+        out[int(struc)] = []
         used_indices = set()
 
         for idx in HOAO_a.index:
@@ -57,124 +56,125 @@ def find_identical_at_from_afo(HOAO_a, HOAO_b, LUAO_a, LUAO_b, tol=0.01):
                     degenerate.append(i)
                     used_indices.add(i)
 
-            out[str(struc)].append({"atom": degenerate})
-
+            out[int(struc)].append({"atom": degenerate})
     return out
 
 
 def refine_react_l(react_l, identical_atom_d, intra=False):
-    # merge identical pais and keep the lowest gap
-    # in the degenearted pairs, at can appear only once
-    out_react_l = []
-    used_combi = []
-    if not intra:
-        for item in react_l:
-            struc1, struc2 = item["struc_combi"]  # istruc1 > istruc2
-            at1, at2 = item["at_combi"]
-            if tuple((int(struc1), int(struc2), int(at1), int(at2))) not in used_combi:
-                # find all degenerated pair
-                degenerate_at1 = [at1]
-                degenerate_at2 = [at2]
-                for tmp in identical_atom_d[struc1]:
-                    if int(at1) in tmp["atom"]:
-                        degenerate_at1 = tmp["atom"]
-                        break
-                for tmp in identical_atom_d[struc2]:
-                    if int(at2) in tmp["atom"]:
-                        degenerate_at2 = tmp["atom"]
-                        break
+    """
+    Expand degenerate/identical atoms to generate allowed atom pairs,
+    enforce uniqueness of atom usage per expansion group,
+    and de-duplicate by keeping the smallest gap for each final pair.
 
-                all_combi = list(product(degenerate_at1, degenerate_at2))
-                if int(struc1) == int(struc2):
-                    all_combi2 = list(product(degenerate_at2, degenerate_at1))
-                    all_combi.extend(all_combi2)
-                used_l1 = []
-                used_l2 = []
-                pairs = []
-                for combi in all_combi:
-                    tat1, tat2 = combi
-                    used_combi.append(tuple((int(struc1), int(struc2), int(tat1), int(tat2))))
-                    if tat1 not in used_l1 and tat2 not in used_l2:
-                        pairs.append([tat1, tat2])
-                        used_l1.append(tat1)
-                        used_l2.append(tat2)
-                        # gap_value = next((tmpitem["gap"] for tmpitem in react_l if
-                        #                   tmpitem["struc_combi"] == [str(struc1), str(struc2)]
-                        #                   and tmpitem["at_combi"] == [str(tat1),str(tat2)]),None)
+    Output format:
+      - intra=False: {"struc_combi": [s1, s2], "at_combi": [[a1, a2]], ...}
+      - intra=True : {"struc": s, "at_combi": [[a1, a2]], ...}
 
-                item["at_combi"] = pairs
+    Notes:
+      - For intra=True, (a,b) is normalized so a >= b.
+      - For intra=False and s1==s2, (a,b) also normalized so a >= b.
+    """
 
-                if item not in out_react_l:
-                    out_react_l.append(item)
+    def _degenerate_group(struc, atom):
+        """Return the full degenerate group list containing atom, else [atom]."""
+        for grp in identical_atom_d.get(struc, []):
+            atoms = grp.get("atom", [])
+            if atom in atoms:
+                return list(atoms)
+        return [atom]
+
+    def _select_unique_pairs(all_pairs, same_structure):
+        """
+        Greedy selection: keep pairs such that atoms aren't reused.
+        If same_structure=True, neither side may reuse any atom (single used set).
+        """
+        selected = []
+        if same_structure:
+            used = set()
+            for a, b in all_pairs:
+                if a not in used and b not in used:
+                    selected.append((a, b))
+                    used.add(a)
+                    used.add(b)
+        else:
+            used_a = set()
+            used_b = set()
+            for a, b in all_pairs:
+                if a not in used_a and b not in used_b:
+                    selected.append((a, b))
+                    used_a.add(a)
+                    used_b.add(b)
+        return selected
+
+    # best[key] = dict of best record for that key (lowest gap)
+    best = {}
+
+    for item in react_l:
+        # ---------- determine structures + seed atoms ----------
+        if intra:
+            # accepts either legacy {"struc_combi":[s]} or newer {"struc":s}
+            if "struc" in item:
+                s = item["struc"]
             else:
-                # change gap
-                for searchitem in out_react_l:
-                    search_struc1, search_struc2 = searchitem["struc_combi"]
-                    if int(search_struc1) == int(struc1) and int(search_struc2) == int(struc2):
-                        search_allcombi = searchitem["at_combi"]
-                        triger = next((True for tmpitem in search_allcombi
-                                       if int(tmpitem[0]) == int(at1) and int(tmpitem[1]) == int(at2)), False)
-                        if triger:
-                            currentgap = item["gap"]
-                            oldgap = searchitem["gap"]
-                            if currentgap < oldgap:
-                                searchitem["gap"] = currentgap
-                                searchitem["HOAO"] = item["HOAO"]
-                                searchitem["LUAO"] = item["LUAO"]
-                                break
-    else:
-        for item in react_l:
-            struc = item["struc_combi"][0]
-            at1, at2 = item["at_combi"]
-            if tuple((int(struc), int(at1), int(at2))) not in used_combi:
-                # find all degenerated pair
-                degenerate_at1 = [at1]
-                degenerate_at2 = [at2]
-                for tmp in identical_atom_d[struc]:
-                    if at1 in tmp["atom"]:
-                        degenerate_at1 = tmp["atom"]
-                        break
-                for tmp in identical_atom_d[struc]:
-                    if at2 in tmp["atom"]:
-                        degenerate_at2 = tmp["atom"]
-                        break
-                all_combi = list(product(degenerate_at1, degenerate_at2))
-                for combi in all_combi:
-                    tat1, tat2 = combi
-                    used_combi.append(tuple((int(struc), int(tat1), int(tat2))))
-                used_l = []
-                pairs = []
-                for pair in all_combi:
-                    at1, at2 = pair
-                    if at1 not in used_l and at2 not in used_l:
-                        pairs.append([at1, at2])
-                        used_l.append(at1)
-                        used_l.append(at2)
-                item["at_combi"] = pairs
-                if item not in out_react_l:
-                    out_react_l.append(item)
-            else:
-                # change gap
-                for searchitem in out_react_l:
-                    search_struc = searchitem["struc_combi"][0]
-                    if search_struc == struc:
-                        search_allcombi = searchitem["at_combi"]
-                        if tuple([at1, at2]) in search_allcombi:
-                            currentgap = item["gap"]
-                            oldgap = searchitem["gap"]
-                            if currentgap < oldgap:
-                                searchitem["gap"] = currentgap
-                                searchitem["HOAO"] = item["HOAO"]
-                                searchitem["LUAO"] = item["LUAO"]
-                                break
-        # change key name struc_combi to struc
-        for item in out_react_l:
-            item["struc"] = item["struc_combi"][0]
-            del item["struc_combi"]
-            # make sure iat1>iat2
-            pairs = [[max(at1, at2), min(at1, at2)] for at1, at2 in item["at_combi"]]
-            item["at_combi"] = pairs
-    return out_react_l
+                s = item["struc_combi"][0]
+
+            a0, b0 = item["at_combi"]
+            deg_a = _degenerate_group(s, a0)
+            deg_b = _degenerate_group(s, b0)
+
+            all_pairs = list(product(deg_a, deg_b))
+            # enforce uniqueness across both positions because same structure
+            pairs = _select_unique_pairs(all_pairs, same_structure=True)
+
+            # ---------- emit best per normalized (s, a, b) ----------
+            for a, b in pairs:
+                a, b = (a, b) if a >= b else (b, a)
+                key = ("intra", s, a, b)
+
+                if key not in best or item["gap"] < best[key]["gap"]:
+                    rec = {
+                        "struc": s,
+                        "at_combi": [[a, b]],
+                        "gap": item["gap"],
+                        "HOAO": item.get("HOAO"),
+                        "LUAO": item.get("LUAO"),
+                    }
+                    best[key] = rec
+
+        else:
+            s1, s2 = item["struc_combi"]
+            a0, b0 = item["at_combi"]
+
+            deg_a = _degenerate_group(s1, a0)
+            deg_b = _degenerate_group(s2, b0)
+
+            all_pairs = list(product(deg_a, deg_b))
+
+            same_structure = (s1 == s2)
+            if same_structure:
+                # include swapped direction too (as your original did)
+                all_pairs += list(product(deg_b, deg_a))
+
+            pairs = _select_unique_pairs(all_pairs, same_structure=same_structure)
+
+            for a, b in pairs:
+                # for same structure, normalize atom order so (5,0) == (0,5)
+                if same_structure:
+                    a, b = (a, b) if a >= b else (b, a)
+
+                key = ("inter", s1, s2, a, b)
+
+                if key not in best or item["gap"] < best[key]["gap"]:
+                    rec = {
+                        "struc_combi": [s1, s2],
+                        "at_combi": [[a, b]],
+                        "gap": item["gap"],
+                        "HOAO": item.get("HOAO"),
+                        "LUAO": item.get("LUAO"),
+                    }
+                    best[key] = rec
+
+    return list(best.values())
 
 
 class SPR:
@@ -184,7 +184,7 @@ class SPR:
         # self.elculde_elements = [] if elculde_elements is None else elculde_elements
 
         if afo_l is None:
-            maxnat = max(storage.allstruc.get_value(f'{i}.struc_info.reactivity.afo').shape[0] for i in self.reactants)
+            maxnat = max(storage.allstruc.get(i).struc_info.reactivity.afo.shape[0] for i in self.reactants)
         else:
             maxnat = max(i.shape[0] for i in afo_l)
 
@@ -203,7 +203,7 @@ class SPR:
         for istruc in range(len(self.reactants)):
             strucid = self.reactants[istruc]
             if afo_l is None:
-                mldf_original = storage.allstruc.get_value(f'{strucid}.struc_info.reactivity.afo').copy()
+                mldf_original = storage.allstruc.get(strucid).struc_info.reactivity.afo.copy()
             else:
                 mldf_original = afo_l[istruc].copy()
 
@@ -310,18 +310,18 @@ class SPR:
                 s_h = struc_ids[ih]
 
                 if s_l <= s_h:
-                    struc1, struc2 = str(s_h), str(s_l)
+                    struc1, struc2 = int(s_h), int(s_l)
                     at1 = i_h
                     at2 = i_l
                 else:
-                    struc1, struc2 = str(s_l), str(s_h)
+                    struc1, struc2 = int(s_l), int(s_h)
                     at1 = i_l
                     at2 = i_h
 
                 for k in range(len(gaps)):
                     react_l.append({
                         "struc_combi": [struc1, struc2],
-                        "at_combi": [str(int(at1[k])), str(int(at2[k]))],
+                        "at_combi": [int(at1[k]), int(at2[k])],
                         "HOAO": float(hoao_vals[k]),
                         "LUAO": float(luao_vals[k]),
                         "gap": round(float(gaps[k]), decimals),
@@ -403,8 +403,8 @@ class SDP:
             self.dfs = bo_l
             self.ele_ls = ele_ls
         else:
-            self.dfs = [storage.allstruc.get_value(f"{_}.struc_info.reactivity.bo") for _ in self.reactants]
-            self.ele_ls = [storage.allstruc.get_value(f"{_}.struc_info.general.ele_l") for _ in self.reactants]
+            self.dfs = [storage.allstruc.get(_).struc_info.reactivity.bo for _ in self.reactants]
+            self.ele_ls = [storage.allstruc.get(_).struc_info.general.ele_l for _ in self.reactants]
         exclude_elements = [] if exclude_elements is None else exclude_elements
         exclude_pairs = [] if exclude_pairs is None else exclude_pairs
         from aRST.script.element import element
@@ -435,7 +435,7 @@ class SDP:
             ele_l = self.ele_ls[i]
             z_l = np.array([element[x] for x in ele_l], dtype=np.int16)
 
-            topolist = storage.allstruc.get_value(f"{struc}.struc_info.general.atomic_connection")
+            topolist = storage.allstruc.get(struc).struc_info.general.atomic_connection
             bodf = self.dfs[i]
 
             if topolist is not None:
@@ -449,7 +449,7 @@ class SDP:
                         continue
                     at1, at2, mbo = out
 
-                    allbonds.append({"struc": struc, "at_combi": [str(at1), str(at2)], "mbo": mbo})
+                    allbonds.append({"struc": struc, "at_combi": [at1, at2], "mbo": mbo})
 
             else:
                 if bodf is None:
@@ -463,7 +463,7 @@ class SDP:
                     if out is None:
                         continue
                     at1, at2, mbo = out
-                    allbonds.append({"struc": struc, "at_combi": [str(at1), str(at2)], "mbo": mbo})
+                    allbonds.append({"struc": struc, "at_combi": [at1, at2], "mbo": mbo})
         self.allbonds = sorted(allbonds, key=lambda x: x["mbo"])
 
     def build_react_l(self, tol=0.01):
