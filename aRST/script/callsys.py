@@ -1,3 +1,4 @@
+import traceback
 from os.path import join, exists
 import os
 import shutil
@@ -854,6 +855,9 @@ class CallgXTB:
     def get_Esp_from_out(self, out="gxtb.out"):
         # unit in eh
         Esp = None
+        if exists(join(self.wd, "NOT_CONVERGED")):
+            return Esp
+
         if exists(join(self.wd, "energy")):
             with open(join(self.wd, "energy"), 'r') as file:
                 Esp = float(file.readlines()[1].split()[1])

@@ -144,6 +144,8 @@ def get_strucinfo_from_path(strucid_path):
         coordinate, ele_l = read_coord(join(strucid_path, "orca", "coord.xyz"))
     elif exists(join(strucid_path, "gxtb", "coord.xyz")):  # gxtb sp
         coordinate, ele_l = read_coord(join(strucid_path, "gxtb", "coord.xyz"))
+    else:
+        return {}, False
 
     xtb = CallxTB(join(strucid_path, "xtb"))
     charge = xtb.get_charge_from_out()
