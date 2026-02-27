@@ -39,7 +39,6 @@ nav:
       - Intermolecular Reaction Search: examples/interA.md
       - Inramolecular Association Search: examples/intraA.md
       - Dissociation Search: examples/disso.md
-      - Reaction prediction: examples/afo.md
 
 markdown_extensions:
   - admonition

@@ -174,8 +174,8 @@ In the following, a run searching dissociation step is demonstrated using a diss
               2            0                     [34,13]                   0.94      
               3            0                     [16,15]                   0.94      
               4            0                     [40,21]                   0.94      
-              5            0                     [10,9]                    0.95      
-              6            0                     [18,17]                   0.95      
+              5            0                     [18,17]                   0.95      
+              6            0                     [10,9]                    0.95      
               7            0                     [27,3]                    0.95      
               8            0                     [41,21]                   0.96      
               9            0                     [22,0]                    0.96      
@@ -224,5 +224,144 @@ Using the harmonic force field (FF) reaction simulation scheme, aRST excludes th
 The simulation process is demonstrated below.
 
 ![mechano_defalut](mechano_defalut.gif){width="97%" .center-img}
+<span class="caption-center">Reaction simulation of **path 0** by pulling Atom 0 and 3.</span>
 
 ## Step search by pulling arbitary atom pair
+
+Alterniative, aRST allows stretching a molecule by pulling an arbitrary pair of atoms.
+
+
+=== "input.toml (FF algorithm)"
+    
+    ```toml
+    [geom.reactant1]
+    name="coord.xyz"
+    charge=0
+    multiplicity=1
+    
+    
+    [read.general]
+    gfn2opt=true
+    
+    [searching_setting.general]
+    sp_method="gxtb"
+    scan_mode=1
+    
+    [searching_setting.reactivity]
+    afo_method="gfn2" 
+    
+    [searching_setting.disso]
+    number=1
+    atom_pair=[[13,21]] # terminal atoms
+    pulling_distance_add=10 # if use FF schema, make sure not pulling too hard
+    
+    [xtb_setting]
+    method="gfn2"
+    alpb="h2o"
+    scan_etemp=1000
+    k=5 # important: set this value to a sufficiently high number
+    ```
+=== "output (FF)"
+    ```
+
+         ==========================================================================================
+         |                                                                                        |
+         |                                                                                        |
+         |                      automated Reaction Search Tool (aRST) V2.2.0                      |
+         |                                                                                        |
+         |                                                                                        |
+         ==========================================================================================
+         # Author:             Y. Chen, C. Bannwarth
+         # Institute:          Institute of Physical Chemistry
+         #                     RWTH Aachen University
+         # Version date:       03.2026
+         # Job running at:     27-02-2026 22:53:32
+         ==========================================================================================
+
+    Checking input TOML...done.
+    
+    Checking envirment:...done.
+    
+    Reading structure information of input [0] from folder struc/ ...
+    done.
+
+                  ┌──────────────────────────────────────────────────────────────┐
+                  │                     Theory Level Setting                     │
+                  ├──────────────────────────────────────────────────────────────┤
+                  ├──────────────────────────────────────────────────────────────┤
+                  │                    Geometry Optimization                     │
+                  ├──────────────────────────────────────────────────────────────┤
+                  │ Method            : gfn2                                     │
+                  │ Opt Level         : normal                                   │
+                  │ Solvation         : ALPB(h2o)                                │
+                  │ Etemp             : 300 K                                    │
+                  │ Re-opt input      : False                                    │
+                  ├──────────────────────────────────────────────────────────────┤
+                  │                     Reactivity Features                      │
+                  ├──────────────────────────────────────────────────────────────┤
+                  │ Method            : gfn2                                     │
+                  │ Solvation         : ALPB(h2o)                                │
+                  │ AFO Gap tolerance : 0.01 eV                                  │
+                  ├──────────────────────────────────────────────────────────────┤
+                  │                     Reaction Simulation                      │
+                  ├──────────────────────────────────────────────────────────────┤
+                  │ Method            : harmonic FF                              │
+                  │ Etemp             : 1000 K                                   │
+                  ├──────────────────────────────────────────────────────────────┤
+                  │                     Single-Point Energy                      │
+                  ├──────────────────────────────────────────────────────────────┤
+                  │ Method            : gxtb                                     │
+                  └──────────────────────────────────────────────────────────────┘
+
+    Start doing reaction exploartions with given structues:  [0]
+    begin cycle 0:
+
+
+                                          ****************                                          
+                                          * Dissociation *                                          
+                                          ****************                                          
+
+          --------------------------------------------------------------------------------
+                                       Reactivity Assessment                                        
+          Reactants: [0], tot.atom pairs: 42
+          Top 10 reactivity predictions:
+          --------------------------------------------------------------------------------
+           Ranking    Struc combi               Atom pair                   MBO      
+          --------------------------------------------------------------------------------
+              0            0                      [3,0]                    0.92      
+              1            0                      [8,7]                    0.93      
+              2            0                     [34,13]                   0.94      
+              3            0                     [16,15]                   0.94      
+              4            0                     [40,21]                   0.94      
+              5            0                     [18,17]                   0.95      
+              6            0                     [10,9]                    0.95      
+              7            0                     [27,3]                    0.95      
+              8            0                     [41,21]                   0.96      
+              9            0                     [22,0]                    0.96      
+          --------------------------------------------------------------------------------
+          The full AFO gap list is written to the file react_l.
+
+    Paths for Ranking 0-0 will be simulated:
+    Simulating disso path 0_0: R=[0], atl=[[13, 21]], uhf_sim=0 ...done.
+    Simulating disso path 0_1: R=[0], atl=[[13, 21]], uhf_sim=2 ...done.
+
+                                 *********************************                                  
+                                 * Exploration Summary of Node 0 *                                  
+                                 *********************************                                  
+
+     ------------------------------------------------------------------------------------------
+       #   RXNID   Scan_wd      R       Atom Pair       P     ΔE (kcal/mol)         Note       
+     ------------------------------------------------------------------------------------------
+       0     1       0_0       [0]      [[13, 21]]    [1, 1]      23.74      New RXN                
+       1     2       0_1       [0]      [[13, 21]]   [2, 3, 3, 4, 4]     80.89      New RXN                
+     ------------------------------------------------------------------------------------------
+
+    ***** Job finished in 0 hour 0 mins 14.49 sec *****
+
+
+    ```
+
+In the given example, pulling the terminal atoms to an appropriate distance can also result in the dissociation of both target bonds.
+
+![mechano_arbitary](mechano_arbitary.gif){width="97%" .center-img}
+<span class="caption-center">Reaction simulation of **path 0** by pulling terminal carbon atoms.</span>
