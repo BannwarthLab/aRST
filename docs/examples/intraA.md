@@ -6,12 +6,13 @@ Search for intramolecular association using the given reactant structure with *a
 [TOC]
 
 ---
-## Standard step search
-
 In the following, a run searching intramolecular association step is demonstrated using a typical Claisen rearrangement as an example.
 
 ![Claisen rearrangement](intra_index.png){width="50%" .center-img}
-<span class="caption-center">Input structure.</span>
+<span class="caption-center">Input structure</span>
+
+## Standard step search
+
 
 === "command"
 
@@ -34,7 +35,6 @@ In the following, a run searching intramolecular association step is demonstrate
     
     [read.general]
     gfn2opt=true
-    jumprefine=true
     
     [searching_setting.general]
     sp_method="gxtb"
@@ -52,7 +52,7 @@ In the following, a run searching intramolecular association step is demonstrate
     scan_etemp=1000
     ```
 
-=== "coord1.xyz"
+=== "coord.xyz"
 
     ```
     14
