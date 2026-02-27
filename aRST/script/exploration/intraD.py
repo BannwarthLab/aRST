@@ -17,7 +17,7 @@ def get_intraD_react_l(reactants0, gaplim=5):
     react_l = SDP(reactants0,
                   exclude_elements=storage.setting.searching_setting.general.exclude_elements,
                   exclude_pairs=storage.setting.searching_setting.general.exclude_pairs
-                  ).build_react_l(tol=0.01)
+                  ).build_react_l(tol=1e-5)
     cut = 2 if storage.setting.searching_setting.disso.concerted_pair else 1
     for item in react_l:
         pairs = item["at_combi"][:cut]
@@ -33,7 +33,7 @@ def get_intraD_react_l(reactants0, gaplim=5):
         # overwrite react_l with user's input
         # predifined reaction, used in one cycle
         at1, at2 = atom_pairs[0]
-        react_l = [{"struc_combi": [reactants0[0], reactants0[1]],
+        react_l = [{"struc": reactants0[0],
                     "at_combi": [[at1, at2]],
                     "gap": 0,
                     "force_combination": True}]
