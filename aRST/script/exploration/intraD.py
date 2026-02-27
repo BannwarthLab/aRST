@@ -1,4 +1,5 @@
 # Reaction simulation for intramolecular association
+import os
 from os.path import join
 import shutil
 import json
@@ -125,7 +126,6 @@ def dissoxtbscan(reactants0, entry, reactionpath, count=0):
     s = storage.allstruc.get(struc)
     coordinate = s.struc_info.general.coordinate
     ele_l = s.struc_info.general.ele_l
-    write_xyz(coordinate, ele_l, "coord")
     at_l = entry["at_combi"]
 
     # prepare scan
@@ -152,6 +152,7 @@ def dissoxtbscan(reactants0, entry, reactionpath, count=0):
         print(f"Simulating disso path {reactionpath}_{count}: R={reactants0}, atl={at_l}, uhf_sim={u} ...", end="")
         scan_wd = join(scanwd, f"{reactionpath}_{count}")
         create_folder(scan_wd)
+        write_xyz(coordinate, ele_l, "coord")
 
         status = CallxTB(scan_wd,
                          custom_settings={"charge": charge, "uhf": u,
@@ -204,7 +205,6 @@ def dissombff(reactants0, entry, reactionpath, count=0):
     s = storage.allstruc.get(struc)
     coordinate = s.struc_info.general.coordinate
     ele_l = s.struc_info.general.ele_l
-    write_xyz(coordinate, ele_l, "coord")
     at_l = entry["at_combi"]
 
     # prepare scan
@@ -228,6 +228,7 @@ def dissombff(reactants0, entry, reactionpath, count=0):
         print(f"Simulating disso path {reactionpath}_{count}: R={reactants0}, atl={at_l}, uhf_sim={u} ...",end="")
         scan_wd = join(scanwd, f"{reactionpath}_{count}")
         create_folder(scan_wd)
+        write_xyz(coordinate, ele_l, "coord")
         with open(join(scan_wd, "atl"), "w") as f:
             f.write(json.dumps(entry))
 
