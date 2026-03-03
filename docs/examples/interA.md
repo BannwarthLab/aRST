@@ -46,7 +46,7 @@ In the following, standard runs are demonstrated using the $\mathrm{OH^- + CH_3B
     afo_method="gfn2"
     
     [searching_setting.inter]
-    number="all" # search all atom pairs; alternatively, specify an integer to define the search range
+    number=100 # search all atom pairs; alternatively, specify an integer to define the search range
 
     [xtb_setting]
     method="gfn2"
@@ -79,7 +79,7 @@ In the following, standard runs are demonstrated using the $\mathrm{OH^- + CH_3B
     afo_method="gfn2"
     
     [searching_setting.inter]
-    number="all" # search all atom pairs; alternatively, specify an integer to define the search range
+    number=100 # search all atom pairs; alternatively, specify an integer to define the search range
 
     [xtb_setting]
     method="gfn2"
@@ -395,7 +395,7 @@ Users may prescreen the AFO gap ranking list by defining prescreening rules. The
     afo_method="gfn2"
     
     [searching_setting.inter]
-    number="all"
+    number=100 # search all atom pairs; alternatively, specify an integer to define the search range
     exclude_pairs=[[1,35]]
 
     [xtb_setting]
@@ -430,7 +430,7 @@ Users may prescreen the AFO gap ranking list by defining prescreening rules. The
     afo_method="gfn2"
     
     [searching_setting.inter]
-    number="all"
+    number=100 # search all atom pairs; alternatively, specify an integer to define the search range
 
     [xtb_setting]
     method="gfn2"
@@ -522,7 +522,7 @@ Hence, if the reaction center is known in advance or certain atom pairs are irre
     afo_method="gfn2"
     
     [searching_setting.inter]
-    number="all"
+    number=100 # search all atom pairs; alternatively, specify an integer to define the search range
     concerted_pair=true
     maxovlap=false # default alignment style
     # maxovlap=true # altenative alignment style

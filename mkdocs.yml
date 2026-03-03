@@ -5,7 +5,7 @@ repo_name: bannwarthlab/aRST
 
 theme:
   name: material
-#  logo: assets/logo.png
+  favicon: stylesheets/logo_favicon.png
   features:
 #    - navigation.instant
     - navigation.tracking
