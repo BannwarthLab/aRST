@@ -9,5 +9,4 @@ aRST can be invoked via a command line, including the name of input file `<INPUT
 aRST <INPUTFILE> [OPTION]
 ```
 
-# todo
-For more information and some input examples see the XX section
+For more information and some input examples see the [input file documentation](inputfile.md) and [examples](../examples/index.md) sections.
