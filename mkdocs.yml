@@ -24,7 +24,7 @@ theme:
 # This defines the left sidebar structure.
 nav:
   - Home: index.md
-  - Overview: overview.md
+#  - Overview: overview.md
   - Installation: installation.md
   - Documentation:
       - documentation/index.md
