@@ -29,7 +29,7 @@ class CallORCA:
             "fn": "coord",
             "caltyp": "SP",
             "caltyp2": "RKS",  # This can be updated dynamically if needed
-            "solmode": setting.orca_setting.solmode,
+            "solmode": setting.orca_setting.cpcm,
             "ncpu": setting.orca_setting.ncpu,
         }
 
