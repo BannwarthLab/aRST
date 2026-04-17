@@ -13,7 +13,15 @@ from aRST.script.exploration.network import rxnnetwork
 class SingleCycleSearch:
     def __init__(self, reactants):
         self.reactants = reactants
+        # add time
+        from datetime import datetime
+        start_time = datetime.now()
         self.prepare_AFO()
+        end_time = datetime.now()
+        running_time = end_time - start_time
+        total_seconds = running_time.total_seconds()
+        print(f"prepare AFO features takes {int(total_seconds // 3600)} hour "
+              f"{int((total_seconds % 3600) // 60)} mins {total_seconds % 60:.2f} sec", flush=True)
 
     @staticmethod
     def check_featrues(struc):
@@ -113,7 +121,14 @@ class SingleCycleSearch:
         if len(self.reactants) > 1 and(storage.setting.searching_setting.inter.number>0 or storage.setting.searching_setting.inter.atom_pair):
             print()
             print_jobhead("Bimolecular Association")
+            from datetime import datetime
+            start_time = datetime.now()
             react_l = get_interA_react_l(self.reactants)
+            end_time = datetime.now()
+            running_time = end_time - start_time
+            total_seconds = running_time.total_seconds()
+            print(f"prepare AFO gap ranking takes {int(total_seconds // 3600)} hour "
+                  f"{int((total_seconds % 3600) // 60)} mins {total_seconds % 60:.2f} sec", flush=True)
             scanmode = storage.setting.searching_setting.general.scan_mode
             ninter = storage.setting.searching_setting.inter.number
             if ninter == "all":
@@ -282,7 +297,8 @@ class SingleCycleSearch:
                 status = xtbparse.sp()  # switch to sp
             Esp_gfn = xtbparse.get_Esp_from_out()
             # receive opt res
-            coordinate,ele_l= read_coord(join(optwd, "xtbopt.xyz")) if exists(join(optwd, "xtbopt.xyz")) else coordinate
+            if exists(join(optwd, "xtbopt.xyz")):
+                coordinate,ele_l= read_coord(join(optwd, "xtbopt.xyz"))
             bo = read_bo(join(optwd, "wbo"))
             constrain_l=get_topo(coordinate,ele_l,bo)
             atcharge = read_atcharge(join(optwd, "charges"))
