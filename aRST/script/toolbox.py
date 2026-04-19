@@ -469,8 +469,8 @@ def are_same_mb_list(mb_l1, mb_l2, cut=True):
 def are_same_struc_list(items1, items2, cut=True):
     if cut:
         mbcut_length = 5 if storage.setting.searching_setting.general.mb_level == "loose" else 7
-        items1 = [(" | ".join(a.split(" | ")[:cut]), b, c) for (a, b, c) in items1]
-        items2 = [(" | ".join(a.split(" | ")[:cut]), b, c) for (a, b, c) in items2]
+        items1 = [(" | ".join(a.split(" | ")[:mbcut_length]), b, c) for (a, b, c) in items1]
+        items2 = [(" | ".join(a.split(" | ")[:mbcut_length]), b, c) for (a, b, c) in items2]
 
     if Counter(items1) == Counter(items2):
         return True
