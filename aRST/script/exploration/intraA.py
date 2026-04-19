@@ -155,7 +155,7 @@ def intraxtbscan(reactants0, entry, reactionpath, count=0):
     return output_d, count
 
 
-def intrarmbff(reactants0, entry, reactionpath, count=0):
+def intrambff(reactants0, entry, reactionpath, count=0):
     scanwd = storage.setting.searching_setting.general.scanwd
     output_d = {}
     uhf_l = check_scan_uhf_intraA(entry)

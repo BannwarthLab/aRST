@@ -121,6 +121,7 @@ class GeneralSearchingSetting(MyBaseModel):
     md: bool = False
     md_setting: Optional[MDSetting] = None
     mb_level: Literal[0, 1] = 0
+    mbcut_length:Optional[int] = None
 
     # optional inputs
     exclude_elements: List[int] = Field(default_factory=list)
@@ -150,6 +151,12 @@ class GeneralSearchingSetting(MyBaseModel):
             self.bufferwd = os.path.join(self.wd, "buffer")
         return self
 
+    @model_validator(mode="after")
+    def set_mbcut_length(self):
+        # for compare new struc
+        if self.mbcut_length is None:
+            self.mbcut_length = 5 if self.mb_level == "loose" else 7
+        return self
 
 class InterSearchingSetting(MyBaseModel):
     model_config = ConfigDict(extra="forbid")

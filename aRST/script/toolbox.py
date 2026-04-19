@@ -2,6 +2,7 @@ import os
 import numpy as np
 import pandas as pd
 from os.path import join, exists
+from collections import Counter
 import networkx as nx
 from aRST.script.element import element
 import aRST.script.initialization as storage
@@ -82,7 +83,7 @@ def read_coord(coordpath):
 
 def get_topo(coordinate, ele_l, bo):
     # check if single atom:
-    if len(ele_l) ==1:
+    if len(ele_l) == 1:
         return []
     from aRST.script.geom import Coord
     # index starts from 1
@@ -134,7 +135,7 @@ def get_strucinfo_from_path(strucid_path):
     from aRST.script.callsys import CallxTB, CallORCA, CallMolBar, CallgXTB
     from aRST.script import input_class
 
-    coordinate, ele_l,nel,m,charge,atcharge,Esp,constrain_l,mb = (None,) * 9
+    coordinate, ele_l, nel, m, charge, atcharge, Esp, constrain_l, mb = (None,) * 9
 
     # determine coord and ele_l
     # dft opt geom > gfn2 opt geom > input geom
@@ -153,7 +154,7 @@ def get_strucinfo_from_path(strucid_path):
     xtb = CallxTB(join(strucid_path, "xtb"))
     charge = xtb.get_charge_from_out()
     nel = int(sum([element[_] for _ in ele_l])) - charge
-    atcharge = read_atcharge(join(strucid_path,"xtb", "charges"))
+    atcharge = read_atcharge(join(strucid_path, "xtb", "charges"))
     Esp_gfn = xtb.get_Esp_from_out()
     # Etrv_gfn = CallxTB(join(strucid_path, "xtb", "trv")).get_Etrv()
     # Esolv_gfn = CallxTB(join(strucid_path, "xtb", "solv")).get_Esolv()
@@ -161,22 +162,23 @@ def get_strucinfo_from_path(strucid_path):
     constrain_l = get_topo(coordinate, ele_l, bo)
     mb = CallMolBar(coordinate, ele_l).get_mb()
 
-    if storage.setting.searching_setting.general.sp_method== "dft":
+    if storage.setting.searching_setting.general.sp_method == "dft":
         Esp = CallORCA(join(strucid_path, "orca")).get_energy()
         m = CallORCA(join(strucid_path, "orca")).get_m()
     else:
         # can only be gxtb
-        Esp=CallgXTB(join(strucid_path, "gxtb")).get_Esp_from_out()
+        Esp = CallgXTB(join(strucid_path, "gxtb")).get_Esp_from_out()
         m = 1 if nel % 2 == 0 else 2
 
     if any(v is None for v in [coordinate, ele_l, nel, m, charge, atcharge, Esp, constrain_l, mb]):
-        return {},False
+        return {}, False
     else:
         return {"coordinate": coordinate, "ele_l": ele_l, "nel": nel, "m": m, "c": charge, "atcharge": atcharge,
                 "Esp_gfn": Esp_gfn,
                 # "Etrv_gfn": Etrv_gfn,
                 # "Esolv_gfn": Esolv_gfn,
                 "constrain_l": constrain_l, "Esp": Esp, "mb": mb}, True
+
 
 def create_folder(wd):
     wd = os.path.abspath(wd)
@@ -450,3 +452,27 @@ def write_strucout():
             indent=2
         )
         file.write("\n")
+
+
+def are_same_mb_list(mb_l1, mb_l2, cut=True):
+    if cut:
+        mbcut_length = 5 if storage.setting.searching_setting.general.mb_level == "loose" else 7
+        mb_l1 = [" | ".join(i.split(" | ")[:mbcut_length]) for i in mb_l1]
+        mb_l2 = [" | ".join(i.split(" | ")[:mbcut_length]) for i in mb_l2]
+
+    if Counter(mb_l1) == Counter(mb_l2):
+        return True
+    else:
+        return False
+
+
+def are_same_struc_list(items1, items2, cut=True):
+    if cut:
+        mbcut_length = 5 if storage.setting.searching_setting.general.mb_level == "loose" else 7
+        items1 = [(" | ".join(a.split(" | ")[:cut]), b, c) for (a, b, c) in items1]
+        items2 = [(" | ".join(a.split(" | ")[:cut]), b, c) for (a, b, c) in items2]
+
+    if Counter(items1) == Counter(items2):
+        return True
+    else:
+        return False

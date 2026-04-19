@@ -24,7 +24,7 @@ setup(
     install_requires=[
         "billiard~=4.2.1",
         "matplotlib~=3.7.5",
-        "molbar~=1.1.3",
+        "molbar~=1.2.0",
         "networkx~=3.1",
         "numpy~=1.24.4",
         "pandas~=2.0.3",

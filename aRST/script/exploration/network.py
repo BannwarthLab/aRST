@@ -15,6 +15,10 @@ class ReactionNetwork:
                     cls._instance.graph = nx.DiGraph()
                     cls._instance.nrxn_allowed = 0 # not counting layerv 0
 
+                    cls._instance.nodeid_to_index = {}
+                    cls._instance.index_to_nodeid = {}
+                    cls._instance._next_index = 0
+
         return cls._instance
 
     def add_newnode(self, info, edge_l=None,linkoldnode =True):
@@ -31,6 +35,10 @@ class ReactionNetwork:
                 "layer":layer, # of which cycle step
                 }"""
         nodeid = (str(uuid.uuid4().hex[:8]))
+        node_idx = self._next_index
+        self._next_index += 1
+        self.nodeid_to_index[nodeid] = node_idx
+        self.index_to_nodeid[node_idx] = nodeid
         self.graph.add_node(nodeid, info=info)
         if "bond_change" in info.keys() and "therdy_allow" in info.keys():
             if info["bond_change"] and info["therdy_allow"]:
@@ -51,7 +59,10 @@ class ReactionNetwork:
         self.graph.add_edge(node1, node2)
 
     def get_node_index_form_nodeid(self, nodeid):
-        return list(self.graph.nodes).index(nodeid)
+        return self.nodeid_to_index[nodeid]
+
+    def get_nodeid_from_node_index(self, node_idx):
+        return self.index_to_nodeid[node_idx]
 
     def get_layer_nodes(self, layer):
         nodes = [_ for _ in self.graph.nodes if self.get_reaction_info(_)["layer"] == int(layer)]
@@ -120,5 +131,24 @@ class ReactionNetwork:
             return self.graph.nodes[node].get("info", None)
         return None
 
+    def self_check(self,print_item_tobeupdated=None):
+        import aRST.script.initialization as storage
+        # update the info E_rxn since new pathway may find enenrgic lower p structure
+        for node in self.graph.nodes:
+            info = self.get_reaction_info(node)
+            reactants = info["reactants"]
+            E_r = [storage.allstruc.get(_).struc_info.energy.sp for _ in reactants]
+            products = info["products"]
+            E_p = [storage.allstruc.get(_).struc_info.energy.sp for _ in products]
+            E_rxn = sum(E_p) - sum(E_r)
+            E_rxn_kcal = E_rxn * 627.503
+            info["E_rxn"] = E_rxn_kcal
+        if print_item_tobeupdated:
+            data = [item for item in print_item_tobeupdated if "rxnid" in item]
+            for item in data:
+                rxnid = item["rxnid"]
+                nodeid = self.get_nodeid_from_node_index(rxnid)
+                item["E_rxn"] = self.get_reaction_info(nodeid)["E_rxn"]
+            return print_item_tobeupdated
 
 rxnnetwork = ReactionNetwork()

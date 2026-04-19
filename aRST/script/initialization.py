@@ -108,33 +108,27 @@ class Allstruc:
         self.reactants_ini = []  # record reactants for the input
         self._next_id = 0
         self._lock = threading.Lock()
-        self.mb_index: Dict[str, int] = {}  # <-- dedup index
+        self.unique_struc = {} # key = (mb_cut,c,m); val = sid
         self._initialize()
 
 
-    def create_new_structure(self):
+    def creat_new_sid(self):
         with self._lock:
             sid = self._next_id
             self._next_id += 1
-
         s = structure_class.Structure(id=sid)
         self.data[sid] = s
-        return sid,s
+        return sid, s
 
 
-    def get_or_create_new_structure(self, mb):
-        # return data, id, created
+    def _struc_exist(self,mb,c,m):
+        mb_cut = " | ".join(mb.split(" | ")[:self.model.searching_setting.general.mbcut_length])
         with self._lock:
-            sid = self.mb_index.get(mb)
-            if sid is not None:
-                return self.data[sid], sid, False  # existing
-
-            sid = self._next_id
-            self._next_id += 1
-            s = structure_class.Structure(id=sid)
-            self.data[sid] = s
-            self.mb_index[mb] = sid
-            return s, sid, True  # newly created
+            sid = self.unique_struc.get((mb_cut,c,m))
+            if sid:
+                return True, sid
+            else:
+                return False,None
 
     def _initialize(self):
         wd = self.model.searching_setting.general.wd
@@ -147,20 +141,25 @@ class Allstruc:
             c = reactant.charge
             m = reactant.multiplicity
             mb = CallMolBar(coordinate, ele_l).get_mb()
+            ns = self.model.geom[key].number # repeat adding time
 
-            # set up new id if needed
-            s, sid, created = self.get_or_create_new_structure(mb)
-            if created:
-                s.struc_info.general.coordinate = coordinate
-                s.struc_info.general.ele_l = ele_l
-                s.struc_info.general.charge = c
-                s.struc_info.general.multiplicity = m
-                s.struc_info.general.mb = mb
-            self.reactants_ini.append(sid)
-            ns = self.model.geom[key].number
-            s.struc_info.general.number = ns
-            for _ in range(ns-1):
-                self.reactants_ini.append(sid)
+            sid_exist, refsid = self._struc_exist(mb,c,m)
+            if not sid_exist:
+                sid, s = self.creat_new_sid()
+                mb_cut = " | ".join(mb.split(" | ")[:self.model.searching_setting.general.mbcut_length])
+                self.unique_struc[(mb_cut,c,m)] = sid
+                entry = s.struc_info.general
+                entry.coordinate = coordinate
+                entry.ele_l = ele_l
+                entry.charge = c
+                entry.multiplicity = m
+                entry.mb = mb
+                for _ in range(ns):
+                    self.reactants_ini.append(sid)
+            else:
+                for _ in range(ns):
+                    self.reactants_ini.append(refsid)
+
 
         if self.model.read.general.jumprefine:
             # collect struc refine info
@@ -174,33 +173,36 @@ class Allstruc:
                     self.set_value_from_struc_info(sid, struc_info)
                 else:
                     print(f"Info of structure {sid} is not complete, start to refine it")
-                    coordinate = self.data[sid].struc_info.general.coordinate
-                    ele_l = self.data[sid].struc_info.general.ele_l
-                    c = self.data[sid].struc_info.general.charge
-                    m = self.data[sid].struc_info.general.multiplicity
+                    entry = self.data[sid].struc_info.general
+                    coordinate = entry.coordinate
+                    ele_l = entry.ele_l
+                    c = entry.charge
+                    m = entry.multiplicity
                     struc_info = self.refine_struc_info(sid, coordinate, ele_l, c, m)
                     self.set_value_from_struc_info(sid, struc_info)
             print("done.\n")
         else:
             print(f"Refining structure information of input {list(set(self.reactants_ini))} ...")
             for sid in list(set(self.reactants_ini)):
-                coordinate = self.data[sid].struc_info.general.coordinate
-                ele_l = self.data[sid].struc_info.general.ele_l
-                c = self.data[sid].struc_info.general.charge
-                m = self.data[sid].struc_info.general.multiplicity
+                entry = self.data[sid].struc_info.general
+                coordinate = entry.coordinate
+                ele_l = entry.ele_l
+                c = entry.charge
+                m = entry.multiplicity
                 struc_info = self.refine_struc_info(sid, coordinate, ele_l, c, m)
                 self.set_value_from_struc_info(sid, struc_info)
             print("done.\n")
 
     def set_value_from_struc_info(self, sid, struc_info):
-        self.data[sid].struc_info.general.coordinate = struc_info["coordinate"]
-        self.data[sid].struc_info.general.ele_l = struc_info["ele_l"]
-        self.data[sid].struc_info.general.nel = struc_info["nel"]
-        self.data[sid].struc_info.general.multiplicity = struc_info["m"]
-        self.data[sid].struc_info.general.charge = struc_info["c"]
-        self.data[sid].struc_info.general.atcharge = struc_info["atcharge"]
-        self.data[sid].struc_info.general.mb = struc_info["mb"]
-        self.data[sid].struc_info.general.atomic_connection = struc_info["constrain_l"]
+        enrty = self.data[sid].struc_info.general
+        enrty.coordinate = struc_info["coordinate"]
+        enrty.ele_l = struc_info["ele_l"]
+        enrty.nel = struc_info["nel"]
+        enrty.multiplicity = struc_info["m"]
+        enrty.charge = struc_info["c"]
+        enrty.atcharge = struc_info["atcharge"]
+        enrty.mb = struc_info["mb"]
+        enrty.atomic_connection = struc_info["constrain_l"]
         self.data[sid].struc_info.energy.sp = struc_info["Esp"]
 
     def refine_struc_info(self, sid, coordinate, ele_l, charge, m):
@@ -282,41 +284,41 @@ class Allstruc:
         return self.data[sid]
 
 
-class Allrxn:
-    _instance = None
-    _lock = threading.Lock()
-
-    def __new__(cls):
-        if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    cls._instance = super().__new__(cls)
-                    cls._instance.data = mydict({})
-        return cls._instance
-
-    def get_value(self, target_key, default_value=None):
-        value = self.data.get_value(target_key, default_value)
-        return value
-
-    def set_value(self, target_key, new_value):
-        self.data.set_value(target_key, new_value)
-
-    def compare_value(self, key1, key2):
-        return self.data.compare_value(key1, key2)
-
-    def get_all_keys(self):
-        return list(self.data.keys())
-
-    def get_layer_keys(self, layer=0):
-        # cycle0: 0_0, 0_1, 0_2....
-        # cycle1: 0_0_0, 0_0_1,0_0_2......
-        allkeys = self.get_all_keys()
-        return [_ for _ in allkeys if len(_.split("_")) == layer + 1]
+# class Allrxn:
+#     _instance = None
+#     _lock = threading.Lock()
+#
+#     def __new__(cls):
+#         if cls._instance is None:
+#             with cls._lock:
+#                 if cls._instance is None:
+#                     cls._instance = super().__new__(cls)
+#                     cls._instance.data = mydict({})
+#         return cls._instance
+#
+#     def get_value(self, target_key, default_value=None):
+#         value = self.data.get_value(target_key, default_value)
+#         return value
+#
+#     def set_value(self, target_key, new_value):
+#         self.data.set_value(target_key, new_value)
+#
+#     def compare_value(self, key1, key2):
+#         return self.data.compare_value(key1, key2)
+#
+#     def get_all_keys(self):
+#         return list(self.data.keys())
+#
+#     def get_layer_keys(self, layer=0):
+#         # cycle0: 0_0, 0_1, 0_2....
+#         # cycle1: 0_0_0, 0_0_1,0_0_2......
+#         allkeys = self.get_all_keys()
+#         return [_ for _ in allkeys if len(_.split("_")) == layer + 1]
 
 
 setting = None
 allstruc = None
-allrxn = Allrxn()
+# allrxn = Allrxn()
 
 
 def initialize(setting_instance):
