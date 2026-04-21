@@ -12,44 +12,47 @@ from aRST.script.do_scan import get_endxyz_from_mb
 import aRST.script.initialization as storage
 from aRST.script.head import print_react_l
 import copy
+from molbar.barcode import get_molbar_from_coordinates
 
 
 def get_intraD_react_l(reactants0, gaplim=5):
+    general_setting = storage.setting.searching_setting.general
+    disso_setting = storage.setting.searching_setting.disso
     react_l = SDP(reactants0,
-                  exclude_elements=storage.setting.searching_setting.general.exclude_elements,
-                  exclude_pairs=storage.setting.searching_setting.general.exclude_pairs
+                  exclude_elements=general_setting.exclude_elements,
+                  exclude_pairs=general_setting.exclude_pairs
                   ).build_react_l(tol=1e-5)
-    cut = 2 if storage.setting.searching_setting.disso.concerted_pair else 1
+    cut = 2 if disso_setting.concerted_pair else 1
     for item in react_l:
-        pairs = item["at_combi"][:cut]
-        item["at_combi"] = pairs
+        pairs = item["atl"][:cut]
+        item["atl"] = pairs
 
     print_react_l(reactants0, react_l)
     # write full react_l in file
-    with open(join(storage.setting.searching_setting.general.wd, "react_l"), "w") as f:
+    with open(join(general_setting.wd, "react_l"), "w") as f:
         for item in react_l:
             f.write(json.dumps(item) + "\n")
-    atom_pairs = storage.setting.searching_setting.disso.atom_pair
+    atom_pairs = disso_setting.atom_pair
     if atom_pairs:
         # overwrite react_l with user's input
         # predifined reaction, used in one cycle
         at1, at2 = atom_pairs[0]
-        react_l = [{"struc": reactants0[0],
-                    "at_combi": [[at1, at2]],
+        react_l = [{"reactants": reactants0[0],
+                    "atl": [[at1, at2]],
                     "gap": 0,
                     "force_combination": True}]
         if len(atom_pairs) > 1:
-            storage.setting.searching_setting.disso.concerted_pair=True
+            disso_setting.concerted_pair=True
             for atom_pair in atom_pairs[1:]:
-                at_combi_list = react_l[0]["at_combi"]
+                at_combi_list = react_l[0]["atl"]
                 at3, at4 = atom_pair
                 at_combi_list.append([at3, at4])
     return react_l
 
 
 def check_scan_uhf_D(entry):
-    struc = entry["struc"]
-    nel = storage.allstruc.get(struc).struc_info.general.nel
+    struc = entry["reactants"]
+    nel = storage.allstruc.get(struc).general.nel
     if nel % 2 == 0:
         return [0, 2]
     elif nel % 2 != 0:
@@ -57,11 +60,12 @@ def check_scan_uhf_D(entry):
 
 
 def determine_pulling_distance(entry):
-    struc = entry["struc"]
-    s = storage.allstruc.get(struc)
-    coordinate = s.struc_info.general.coordinate
-    ele_l = s.struc_info.general.ele_l
-    at_l = entry["at_combi"]
+    disso_setting = storage.setting.searching_setting.disso
+    struc = entry["reactants"]
+    s_general = storage.allstruc.get(struc).general
+    coordinate = s_general.coordinate
+    ele_l = s_general.ele_l
+    at_l = entry["atl"]
 
     instance = Coord(coordinate, ele_l)
 
@@ -69,9 +73,9 @@ def determine_pulling_distance(entry):
     push_l = []
 
     # now determine the definition of pulling distance
-    if storage.setting.searching_setting.disso.pulling_distance_add:
+    if disso_setting.pulling_distance_add:
         ## A: Defined as an adding distance to the current distance
-        add_dis = storage.setting.searching_setting.disso.pulling_distance_add
+        add_dis = disso_setting.pulling_distance_add
         for pair in at_l[:2]:
             at1, at2 = map(int, pair)
             dis_current = np.round(instance.get_ats_distance(at1, at2), 3)
@@ -82,7 +86,7 @@ def determine_pulling_distance(entry):
 
     else:
         ## B: Defined as a multiple of the current distance
-        mul_dis = storage.setting.searching_setting.disso.pulling_distance
+        mul_dis = disso_setting.pulling_distance
         if mul_dis == "auto":
             ### Automatically set the pulling distance:
             # If there is only one bond needs to be pulled,
@@ -92,7 +96,7 @@ def determine_pulling_distance(entry):
             if len(at_l) == 1:
                 from aRST.script.toolbox import GraphAnalyzer
                 at1, at2 = map(int, at_l[0])
-                bo = storage.allstruc.get(struc).struc_info.reactivity.bo
+                bo = storage.allstruc.get(struc).reactivity.bo
                 dis_current = np.round(instance.get_ats_distance(at1, at2), 2)
                 terminals_length = GraphAnalyzer(coordinate, ele_l, bo).get_t2t_path(at1, at2)
                 at1_reindex = at1 + 1
@@ -122,32 +126,31 @@ def dissoxtbscan(reactants0, entry, reactionpath, count=0):
     output_d = {}
     uhf_l = check_scan_uhf_D(entry)
 
-    struc = entry["struc"]
-    s = storage.allstruc.get(struc)
-    coordinate = s.struc_info.general.coordinate
-    ele_l = s.struc_info.general.ele_l
-    at_l = entry["at_combi"]
+    struc = entry["reactants"]
+    s_general = storage.allstruc.get(struc).general
+    coordinate = s_general.coordinate
+    ele_l = s_general.ele_l
+    at_l = entry["atl"]
 
     # prepare scan
-    charge = s.struc_info.general.charge
-    nel = s.struc_info.general.nel
-    m = s.struc_info.general.multiplicity
+    charge = s_general.charge
+    nel = s_general.nel
+    m = s_general.multiplicity
 
     # preparing scan inp
     push_l = determine_pulling_distance(entry)
+    xtbsetting = storage.setting.xtb_setting
     constrain_setting = {
         "constrain": {
-            "force_constant": storage.setting.xtb_setting.k
+            "force_constant": xtbsetting.k
         },
         "scan": {
             "mode": "concerted" if len(at_l) == 2 else None,
             "distance": push_l if push_l else None,
-            "step": storage.setting.xtb_setting.step
+            "step": xtbsetting.step
         }
     }
-    unreacted = reactants0.copy()
-    unreacted.remove(struc)
-    unreacted = sorted(unreacted, key=int, reverse=True)
+    unreacted = sorted((x for x in reactants0 if x != struc), key=int, reverse=True)
     for u in uhf_l:
         print(f"Simulating disso path {reactionpath}_{count}: R={reactants0}, atl={at_l}, uhf_sim={u} ...", end="")
         scan_wd = join(scanwd, f"{reactionpath}_{count}")
@@ -156,7 +159,7 @@ def dissoxtbscan(reactants0, entry, reactionpath, count=0):
 
         status = CallxTB(scan_wd,
                          custom_settings={"charge": charge, "uhf": u,
-                                          "etemp": storage.setting.xtb_setting.scan_etemp}).scan(
+                                          "etemp": xtbsetting.scan_etemp}).scan(
             constrain_setting)
         if status == 0:
             endxyz, ele_l_end = read_coord(join(scan_wd, "xtbopt.xyz"))
@@ -176,9 +179,11 @@ def dissoxtbscan(reactants0, entry, reactionpath, count=0):
                     constrain_l = get_topo(endxyz, ele_l_end, bo)
                     atcharge = read_atcharge(join(optwd, "charges"))
 
+            endxyz_mb = get_molbar_from_coordinates(endxyz, ele_l_end)
             output_d[f"{reactionpath}_{count}"] = [{"reactants": [struc],
                                                     "unreacted": unreacted,
-                                                    "at_l": at_l, "simuhf": u},  # reactants info
+                                                    "at_l": at_l, "simuhf": u,
+                                                    "scanwd":f"{reactionpath}_{count}"},  # reactants info
                                                    {"atomic_charge": atcharge,
                                                     "charge": charge,
                                                     "nel": nel,
@@ -186,7 +191,8 @@ def dissoxtbscan(reactants0, entry, reactionpath, count=0):
                                                     "coordinate": endxyz,
                                                     "ele_l": ele_l_end,
                                                     "bo": bo,
-                                                    "atomic_connection": constrain_l},  # endxyz info
+                                                    "atomic_connection": constrain_l,
+                                                    "mb":endxyz_mb},  # endxyz info
                                                    {"type": "disso"}  # reaction info
                                                    ]
             print(f"done.")
@@ -201,29 +207,34 @@ def dissombff(reactants0, entry, reactionpath, count=0):
     scanwd = storage.setting.searching_setting.general.scanwd
     output_d = {}
     uhf_l = check_scan_uhf_D(entry)
-    struc = entry["struc"]
-    s = storage.allstruc.get(struc)
-    coordinate = s.struc_info.general.coordinate
-    ele_l = s.struc_info.general.ele_l
-    at_l = entry["at_combi"]
+
+    struc = entry["reactants"]
+    s_general = storage.allstruc.get(struc).general
+    coordinate = s_general.coordinate
+    ele_l = s_general.ele_l
+    at_l = entry["atl"]
 
     # prepare scan
-    charge = s.struc_info.general.charge
-    nel = s.struc_info.general.nel
-    m = s.struc_info.general.multiplicity
+    charge = s_general.charge
+    nel = s_general.nel
+    m = s_general.multiplicity
+
     # preparing scan inp
     push_l = determine_pulling_distance(entry)
 
     # get atomic connection
-    atom_connection = copy.deepcopy(s.struc_info.general.atomic_connection)
+    atom_connection = copy.deepcopy(s_general.atomic_connection)
     for item in push_l:
         at1 = int(item[0])
         at2 = int(item[1])
         value = np.round(float(item[3]), 2)
         atom_connection.append({"atoms": [at1, at2], "value": value})
-    unreacted = reactants0.copy()
-    unreacted.remove(struc)
-    unreacted = sorted(unreacted, key=int, reverse=True)
+    unreacted = sorted((x for x in reactants0 if x != struc), key=int, reverse=True)
+
+    mbxyz0, ele_l0 = get_endxyz_from_mb(atom_connection, coordinate, ele_l, set_angles=False)
+    mbxyz, mbele_l = get_endxyz_from_mb(atom_connection, mbxyz0, ele_l0, set_angles=True)
+
+
     for u in uhf_l:
         print(f"Simulating disso path {reactionpath}_{count}: R={reactants0}, atl={at_l}, uhf_sim={u} ...",end="")
         scan_wd = join(scanwd, f"{reactionpath}_{count}")
@@ -236,9 +247,8 @@ def dissombff(reactants0, entry, reactionpath, count=0):
             for item in atom_connection:
                 f.write(json.dumps(item) + "\n")
 
-        mbxyz0, ele_l0 = get_endxyz_from_mb(atom_connection, coordinate, ele_l, set_angles=False)
-        write_xyz(mbxyz0, ele_l0, "coord_mb0")
-        mbxyz, mbele_l = get_endxyz_from_mb(atom_connection, mbxyz0, ele_l0, set_angles=True)
+        # for debug
+        # write_xyz(mbxyz0, ele_l0, "coord_mb0")
         write_xyz(mbxyz, mbele_l, "coord_mb")
 
         status = CallxTB(scan_wd,
@@ -264,17 +274,20 @@ def dissombff(reactants0, entry, reactionpath, count=0):
                     constrain_l = get_topo(endxyz, ele_l_end, bo)
                     atcharge = read_atcharge(join(optwd, "charges"))
 
+            endxyz_mb = get_molbar_from_coordinates(endxyz, ele_l_end)
             output_d[f"{reactionpath}_{count}"] = [{"reactants": [struc],
                                                     "unreacted": unreacted,
-                                                    "at_l": at_l, "simuhf": u},  # reactants info
+                                                    "at_l": at_l, "simuhf": u,
+                                                    "scanwd":f"{reactionpath}_{count}"},  # reactants info
                                                    {"atomic_charge": atcharge,
                                                     "charge": charge,
                                                     "nel": nel,
                                                     "uhf": u,
                                                     "coordinate": endxyz,
-                                                    "ele_l": ele_l,
+                                                    "ele_l": ele_l_end,
                                                     "bo": bo,
-                                                    "atomic_connection": constrain_l},  # endxyz info
+                                                    "atomic_connection": constrain_l,
+                                                    "mb":endxyz_mb},  # endxyz info
                                                    {"type": "disso"}  # reaction info
                                                    ]
             print(f"done.")

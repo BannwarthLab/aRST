@@ -91,8 +91,8 @@ def refine_react_l(react_l, identical_atom_d, intra=False, gap_tol=0.01):
 
     for item in react_l:
         if intra:
-            s = item["struc"] if "struc" in item else item["struc_combi"][0]
-            a0, b0 = item["at_combi"]
+            s = item["reactants"]
+            a0, b0 = item["atl"]
             deg_a = _degenerate_group(s, a0)
             deg_b = _degenerate_group(s, b0)
 
@@ -105,16 +105,16 @@ def refine_react_l(react_l, identical_atom_d, intra=False, gap_tol=0.01):
 
                 if key not in best or item["gap"] < best[key]["gap"]:
                     best[key] = {
-                        "struc": s,
-                        "at_combi": [[a, b]],
+                        "reactants": s,
+                        "atl": [[a, b]],
                         "gap": item["gap"],
                         "HOAO": item.get("HOAO"),
                         "LUAO": item.get("LUAO"),
                     }
 
         else:
-            s1, s2 = item["struc_combi"]
-            a0, b0 = item["at_combi"]
+            s1, s2 = item["reactants"]
+            a0, b0 = item["atl"]
 
             deg_a = _degenerate_group(s1, a0)
             deg_b = _degenerate_group(s2, b0)
@@ -134,8 +134,8 @@ def refine_react_l(react_l, identical_atom_d, intra=False, gap_tol=0.01):
 
                 if key not in best or item["gap"] < best[key]["gap"]:
                     best[key] = {
-                        "struc_combi": [s1, s2],
-                        "at_combi": [[a, b]],
+                        "reactants": [s1, s2],
+                        "atl": [[a, b]],
                         "gap": item["gap"],
                         "HOAO": item.get("HOAO"),
                         "LUAO": item.get("LUAO"),
@@ -147,9 +147,9 @@ def refine_react_l(react_l, identical_atom_d, intra=False, gap_tol=0.01):
     if gap_tol and gap_tol > 0:
         def _struct_key(rec):
             if intra:
-                return ("intra", rec["struc"], rec.get("HOAO"), rec.get("LUAO"))
+                return ("intra", rec["reactants"], rec.get("HOAO"), rec.get("LUAO"))
             else:
-                s1, s2 = rec["struc_combi"]
+                s1, s2 = rec["reactants"]
                 return ("inter", s1, s2, rec.get("HOAO"), rec.get("LUAO"))
 
         # group by structure (+ HOAO/LUAO), then merge by gap proximity
@@ -165,36 +165,36 @@ def refine_react_l(react_l, identical_atom_d, intra=False, gap_tol=0.01):
                 if current is None:
                     # start a new bucket
                     current = {**r}
-                    current["at_combi"] = list(r["at_combi"])
+                    current["atl"] = list(r["atl"])
                     continue
 
                 # merge if within tolerance of current bucket's representative gap
                 if abs(r["gap"] - current["gap"]) <= gap_tol:
-                    current["at_combi"].extend(r["at_combi"])
+                    current["atl"].extend(r["atl"])
                 else:
                     # finalize current bucket (dedupe pairs)
                     seen = set()
                     uniq = []
-                    for a, b in current["at_combi"]:
+                    for a, b in current["atl"]:
                         t = (a, b)
                         if t not in seen:
                             seen.add(t)
                             uniq.append([a, b])
-                    current["at_combi"] = uniq
+                    current["atl"] = uniq
                     merged.append(current)
 
                     current = {**r}
-                    current["at_combi"] = list(r["at_combi"])
+                    current["atl"] = list(r["atl"])
 
             if current is not None:
                 seen = set()
                 uniq = []
-                for a, b in current["at_combi"]:
+                for a, b in current["atl"]:
                     t = (a, b)
                     if t not in seen:
                         seen.add(t)
                         uniq.append([a, b])
-                current["at_combi"] = uniq
+                current["atl"] = uniq
                 merged.append(current)
 
         out = merged
@@ -209,7 +209,7 @@ class SPR:
         # self.elculde_elements = [] if elculde_elements is None else elculde_elements
 
         if afo_l is None:
-            maxnat = max(storage.allstruc.get(i).struc_info.reactivity.afo.shape[0] for i in self.reactants)
+            maxnat = max(storage.allstruc.get(i).reactivity.afo.shape[0] for i in self.reactants)
         else:
             maxnat = max(i.shape[0] for i in afo_l)
 
@@ -228,7 +228,7 @@ class SPR:
         for istruc in range(len(self.reactants)):
             strucid = self.reactants[istruc]
             if afo_l is None:
-                mldf_original = storage.allstruc.get(strucid).struc_info.reactivity.afo.copy()
+                mldf_original = storage.allstruc.get(strucid).reactivity.afo.copy()
             else:
                 mldf_original = afo_l[istruc].copy()
 
@@ -276,8 +276,8 @@ class SPR:
         Output:
           list of dicts:
             {
-              "struc_combi": [struc1, struc2],
-              "at_combi": [at1, at2],
+              "reactants": [struc1, struc2],
+              "atl": [at1, at2],
               "HOAO": H,
               "LUAO": L,
               "gap": gap
@@ -345,8 +345,8 @@ class SPR:
 
                 for k in range(len(gaps)):
                     react_l.append({
-                        "struc_combi": [struc1, struc2],
-                        "at_combi": [int(at1[k]), int(at2[k])],
+                        "reactants": [struc1, struc2],
+                        "atl": [int(at1[k]), int(at2[k])],
                         "HOAO": float(hoao_vals[k]),
                         "LUAO": float(luao_vals[k]),
                         "gap": round(float(gaps[k]), decimals),
@@ -402,12 +402,12 @@ class SPR:
         allbonds = SDP(self.reactants, exclude_elements=exclude_elements, exclude_pairs=exclude_pairs).allbonds
         final_react = []
         for item in tmp_react:
-            struc = item["struc"]
-            atl = item["at_combi"][0]
+            struc = item["reactants"]
+            atl = item["atl"][0]
             trigger = True
             for item2 in allbonds:
-                if item2["struc"] == struc:
-                    if item2["at_combi"] == atl or len(set(atl)) == 1:
+                if item2["reactants"] == struc:
+                    if item2["atl"] == atl or len(set(atl)) == 1:
                         trigger = False
             if trigger:
                 final_react.append(item)
@@ -428,8 +428,8 @@ class SDP:
             self.dfs = bo_l
             self.ele_ls = ele_ls
         else:
-            self.dfs = [storage.allstruc.get(_).struc_info.reactivity.bo for _ in self.reactants]
-            self.ele_ls = [storage.allstruc.get(_).struc_info.general.ele_l for _ in self.reactants]
+            self.dfs = [storage.allstruc.get(_).reactivity.bo for _ in self.reactants]
+            self.ele_ls = [storage.allstruc.get(_).general.ele_l for _ in self.reactants]
         exclude_elements = [] if exclude_elements is None else exclude_elements
         exclude_pairs = [] if exclude_pairs is None else exclude_pairs
         from aRST.script.element import element
@@ -460,7 +460,7 @@ class SDP:
             ele_l = self.ele_ls[i]
             z_l = np.array([element[x] for x in ele_l], dtype=np.int16)
 
-            topolist = storage.allstruc.get(struc).struc_info.general.atomic_connection
+            topolist = storage.allstruc.get(struc).general.atomic_connection
             bodf = self.dfs[i]
 
             if topolist is not None:
@@ -474,7 +474,7 @@ class SDP:
                         continue
                     at1, at2, mbo = out
 
-                    allbonds.append({"struc": struc, "at_combi": [at1, at2], "mbo": mbo})
+                    allbonds.append({"reactants": struc, "atl": [at1, at2], "mbo": mbo})
 
             else:
                 if bodf is None:
@@ -488,31 +488,31 @@ class SDP:
                     if out is None:
                         continue
                     at1, at2, mbo = out
-                    allbonds.append({"struc": struc, "at_combi": [at1, at2], "mbo": mbo})
+                    allbonds.append({"reactants": struc, "atl": [at1, at2], "mbo": mbo})
         self.allbonds = sorted(allbonds, key=lambda x: x["mbo"])
 
     def build_react_l(self, tol=0.01):
         # refine react_l
         react_l = []
         for item in self.allbonds:
-            struc = item["struc"]
-            at1, at2 = item["at_combi"]
+            struc = item["reactants"]
+            at1, at2 = item["atl"]
             mbo = item["mbo"]
             if not react_l:
                 react_l.append(item)
-                react_l[0]["at_combi"] = [[at1, at2]]
+                react_l[0]["atl"] = [[at1, at2]]
             else:
                 # loop over react_l if degenerate dissociation pair
                 degenerate = False
                 for item2 in react_l:
-                    if int(item2["struc"]) == int(struc) and abs(mbo - item2["mbo"]) < tol:
+                    if int(item2["reactants"]) == int(struc) and abs(mbo - item2["mbo"]) < tol:
                         degenerate = True
-                        if not any([at1 in _ for _ in item2["at_combi"]]) and not any(
-                                [at2 in _ for _ in item2["at_combi"]]):
-                            item2["at_combi"].append([at1, at2])
+                        if not any([at1 in _ for _ in item2["atl"]]) and not any(
+                                [at2 in _ for _ in item2["atl"]]):
+                            item2["atl"].append([at1, at2])
                             break
                 if not degenerate:
                     react_l.append(item)
-                    react_l[-1]["at_combi"] = [[at1, at2]]
+                    react_l[-1]["atl"] = [[at1, at2]]
 
         return sorted(react_l, key=lambda x: x["mbo"])

@@ -1,10 +1,9 @@
 import os
 import numpy as np
 import pandas as pd
-from os.path import join, exists
-from collections import Counter
-import networkx as nx
-from aRST.script.element import element
+from os.path import exists
+from datetime import datetime
+from functools import wraps
 import aRST.script.initialization as storage
 
 
@@ -97,6 +96,47 @@ def get_topo(coordinate, ele_l, bo):
         topo_l.append({"atoms": [at1, at2], "value": dist, "mbo": float(mbo)})
     return topo_l
 
+def get_topo_covaradii(coordinate, ele_l, scale=1.2):
+    from aRST.script.geom import r0
+
+    coord = np.asarray(coordinate, dtype=float)
+    radii = np.array([r0[e] for e in ele_l], dtype=float)
+
+    n = len(ele_l)
+    topo_l = []
+
+    for i in range(n - 1):
+        diff = coord[i + 1:] - coord[i]
+        dist = np.sqrt(np.einsum("ij,ij->i", diff, diff))
+        cutoff = scale * (radii[i] + radii[i + 1:])
+
+        bonded = np.where(dist <= cutoff)[0]
+        for k in bonded:
+            j = i + 1 + k
+            topo_l.append({
+                "atoms": [i + 1, j + 1],
+                "value": float(dist[k])
+            })
+
+    return topo_l
+
+
+def get_cm(xyffile):
+    with open(xyffile, "r") as f:
+        lines = f.readlines()
+
+    if len(lines) < 2:
+        raise ValueError(f"{xyffile} does not have enough lines")
+
+    parts = lines[1].split()
+    if len(parts) < 2:
+        raise ValueError(f"Second line of {xyffile} must contain c and m")
+
+    c = int(parts[0])
+    m = int(parts[1])
+
+    return c, m
+
 
 def read_bo(bopath):
     bo = pd.read_csv(bopath, header=None, sep='\s+', dtype={0: int, 1: int}) \
@@ -131,55 +171,6 @@ def read_atcharge(atchargepath):
     return atcharge
 
 
-def get_strucinfo_from_path(strucid_path):
-    from aRST.script.callsys import CallxTB, CallORCA, CallMolBar, CallgXTB
-    from aRST.script import input_class
-
-    coordinate, ele_l, nel, m, charge, atcharge, Esp, constrain_l, mb = (None,) * 9
-
-    # determine coord and ele_l
-    # dft opt geom > gfn2 opt geom > input geom
-    if exists(join(strucid_path, "orca", "orca.xyz")):
-        coordinate, ele_l = read_coord(join(strucid_path, "orca", "orca.xyz"))
-    elif exists(join(strucid_path, "xtb", "xtbopt.xyz")):
-        coordinate, ele_l = read_coord(join(strucid_path, "xtb", "xtbopt.xyz"))
-    # find sp coord
-    elif exists(join(strucid_path, "orca", "coord.xyz")):  # dft sp
-        coordinate, ele_l = read_coord(join(strucid_path, "orca", "coord.xyz"))
-    elif exists(join(strucid_path, "gxtb", "coord.xyz")):  # gxtb sp
-        coordinate, ele_l = read_coord(join(strucid_path, "gxtb", "coord.xyz"))
-    else:
-        return {}, False
-
-    xtb = CallxTB(join(strucid_path, "xtb"))
-    charge = xtb.get_charge_from_out()
-    nel = int(sum([element[_] for _ in ele_l])) - charge
-    atcharge = read_atcharge(join(strucid_path, "xtb", "charges"))
-    Esp_gfn = xtb.get_Esp_from_out()
-    # Etrv_gfn = CallxTB(join(strucid_path, "xtb", "trv")).get_Etrv()
-    # Esolv_gfn = CallxTB(join(strucid_path, "xtb", "solv")).get_Esolv()
-    bo = read_bo(join(strucid_path, "xtb", "wbo"))
-    constrain_l = get_topo(coordinate, ele_l, bo)
-    mb = CallMolBar(coordinate, ele_l).get_mb()
-
-    if storage.setting.searching_setting.general.sp_method == "dft":
-        Esp = CallORCA(join(strucid_path, "orca")).get_energy()
-        m = CallORCA(join(strucid_path, "orca")).get_m()
-    else:
-        # can only be gxtb
-        Esp = CallgXTB(join(strucid_path, "gxtb")).get_Esp_from_out()
-        m = 1 if nel % 2 == 0 else 2
-
-    if any(v is None for v in [coordinate, ele_l, nel, m, charge, atcharge, Esp, constrain_l, mb]):
-        return {}, False
-    else:
-        return {"coordinate": coordinate, "ele_l": ele_l, "nel": nel, "m": m, "c": charge, "atcharge": atcharge,
-                "Esp_gfn": Esp_gfn,
-                # "Etrv_gfn": Etrv_gfn,
-                # "Esolv_gfn": Esolv_gfn,
-                "constrain_l": constrain_l, "Esp": Esp, "mb": mb}, True
-
-
 def create_folder(wd):
     wd = os.path.abspath(wd)
     if not exists(wd):
@@ -201,185 +192,15 @@ def get_random_folder_name():
     return random_name
 
 
-def write_xyz(coordinate, ele_l, name):
+def write_xyz(coordinate, ele_l, name, c=None, m=None):
     pwd = os.getcwd()
     nat = len(ele_l)
+    cmline = "" if c is None and m is None else f"{c},{m}"
     with open(f"{pwd}/{name}.xyz", "w") as f:
-        f.write(f"{nat}\n\n")
+        f.write(f"{nat}\n{cmline}\n")
         for at, (x, y, z) in zip(ele_l, coordinate):
             f.write(f"{at:2s} {x:18.14f} {y:18.14f} {z:18.14f}\n")
         f.write("\n")
-
-
-class FragmentAnalyzer:
-    def __init__(self, coordinate, ele_l, bo, atcharge):
-
-        # supra struc info
-        self.Snat = len(ele_l)
-        self.Sbo = bo
-        self.Satcharge = atcharge
-        self.Scharge = np.round(np.sum(atcharge))
-        self.Scoordinate = coordinate
-        self.Sele_l = ele_l
-        self.Snel = int(sum([element[_] for _ in self.Sele_l])) - self.Scharge
-
-        # build up graph
-        self.build_cn_matrix()
-
-        self.define_graph()
-        # self.degree = [deg for node, deg in self.Graph.degree()]
-
-        # fragment struc info
-        self.fragments = [list(_) for _ in nx.connected_components(self.Graph)]
-
-        self.fragment_data = self.get_fragment_info()
-
-        # check if nel doesn't change
-        if not self.check_nel():
-            self.status = 1
-        else:
-            self.status = 0
-
-    def build_cn_matrix(self):
-        self.Mcn = np.zeros((self.Snat, self.Snat), dtype=int)
-        # build up cn matrix base on wbo file
-        if self.Sbo is not None:
-            for i in range(self.Sbo.shape[0]):
-                if self.Sbo.iloc[i, 2] > 0.3:
-                    at1, at2 = self.Sbo.iloc[i, :2]
-                    at1, at2 = int(at1), int(at2)
-                    self.Mcn[at1 - 1, at2 - 1] = self.Mcn[at2 - 1, at1 - 1] = 1
-
-    def define_graph(self):
-        self.Graph = nx.Graph()
-        for i in range(self.Snat):
-            self.Graph.add_node(i)
-            for j in range(i + 1, self.Snat):
-                if self.Mcn[i, j]:
-                    self.Graph.add_edge(i, j)
-        G_sorted = nx.Graph()
-        for node in sorted(self.Graph.nodes):
-            G_sorted.add_node(node)
-        for u, v, data in self.Graph.edges(data=True):
-            G_sorted.add_edge(min(u, v), max(u, v), weight=data["weight"] if "weight" in data.keys() else 1)
-        self.Graph = G_sorted
-
-    def get_fragment_info(self):
-        charge_l_flo = []
-        fragment_data = []
-        for fragment in self.fragments:
-            atcharge = self.Satcharge[list(fragment)]
-            charge_flo = np.sum(atcharge)
-            charge_l_flo.append(float(charge_flo))
-            fragment_data.append({
-                "charge_flo": charge_flo, "atcharge": atcharge})
-
-        # Convert float fragment charges to integers while conserving total charge
-        int_fragment_charges = self.adjust_fragment_charge(charge_l_flo)
-
-        # Update fragment data with integer values
-        for i, frag in enumerate(fragment_data):
-            coordinate = self.Scoordinate[self.fragments[i]]
-            ele_l = self.Sele_l[self.fragments[i]]
-            charge_int = int(int_fragment_charges[i])
-            nel = int(sum([element[_] for _ in ele_l]) - charge_int)
-            frag["coordinate"] = coordinate
-            frag["ele_l"] = ele_l
-            frag["charge_int"] = charge_int
-            frag["nel"] = nel
-        return fragment_data
-
-    def check_nel(self):
-        tmpnel = sum([_["nel"] for _ in self.fragment_data])
-
-        if tmpnel == self.Snel:
-            return True
-        else:
-            return False
-
-    def adjust_fragment_charge(self, charge_l_flo):
-
-        int_charges = np.round(charge_l_flo).astype(int)  # Round to the nearest integer
-        charge_difference = self.Scharge - np.sum(int_charges)  # Compute discrepancy
-
-        if charge_difference != 0:
-            residuals = np.array(charge_l_flo) - int_charges  # Find decimal parts
-            adjustment_indices = np.argsort(-residuals)  # Sort by highest decimal part
-
-            for i in range(int(abs(charge_difference))):
-                idx = adjustment_indices[i]
-                int_charges[idx] += np.sign(charge_difference)  # Adjust by +1 or -1
-        return list(int_charges)
-
-
-#
-class GraphAnalyzer:
-
-    def __init__(self, coordinate, ele_l, bo=None):
-
-        self.nat = len(ele_l)
-        self.atoms = []
-        self.coordinates = []
-        self.coordinates = coordinate
-        self.atoms = ele_l
-        self.wbo = bo
-
-        # get topo matrix
-        self.build_cn_matrix()
-        # build up graph
-        self.define_edge()
-        self.degree = [deg for node, deg in self.Graph.degree()]
-
-    def build_cn_matrix(self):
-        self.Mcn = np.zeros((self.nat, self.nat), dtype=int)
-        if self.wbo is not None:
-            # build up cn matrix base on wbo file
-            for i in range(self.wbo.shape[0]):
-                at1, at2 = self.wbo.iloc[i, :2]
-                at1 = int(at1) - 1
-                at2 = int(at2) - 1
-                self.Mcn[at1, at2] = self.Mcn[at2, at1] = 1
-        else:
-            from aRST.script.element import r0
-            # build up cn matrix base on xyz itself
-            for i in range(self.nat):
-                for j in range(i + 1, self.nat):
-                    dist = np.linalg.norm(self.coordinates[i] - self.coordinates[j])
-                    threshold = r0[self.atoms[i]] + r0[self.atoms[j]]
-                    if dist <= threshold * 1.1:
-                        self.Mcn[i, j] = self.Mcn[j, i] = 1
-
-    def define_edge(self):
-        self.Graph = nx.Graph()
-        for i in range(self.nat):
-            for j in range(i):
-                if self.Mcn[i, j]:
-                    bond_length = np.linalg.norm(self.coordinates[i] - self.coordinates[j])
-                    self.Graph.add_edge(i, j, weight=bond_length)
-
-        G_sorted = nx.Graph()
-        for node in sorted(self.Graph.nodes):
-            G_sorted.add_node(node)
-        for u, v, data in self.Graph.edges(data=True):
-            G_sorted.add_edge(min(u, v), max(u, v), weight=data["weight"] if "weight" in data.keys() else 1)
-        self.Graph = G_sorted
-
-    def get_t2t_path(self, tarat1: int, tarat2: int):
-        from itertools import islice
-        # make sure tarat1 >= tarat2
-        if tarat1 < tarat2:
-            tarat1, tarat2 = tarat2, tarat1
-        paths = nx.shortest_simple_paths(self.Graph, source=tarat1, target=tarat2, weight='weight')
-        shortest_two = list(islice(paths, 2))
-
-        if len(shortest_two) == 1:
-            d = 5  # default as 5x covalent radii
-            bond_length = self.Graph[tarat1][tarat2]['weight']
-            return d * bond_length
-        else:
-            # Straighten the ring.
-            length = sum(self.Graph[u][v]['weight'] for u, v in zip(shortest_two[1][:-1], shortest_two[1][1:])) * 0.9
-            return length
 
 
 def convert_for_json(d, exclude_keys=None):
@@ -416,63 +237,124 @@ import json
 
 
 class CompactJSONEncoder(json.JSONEncoder):
-    def iterencode(self, obj, _one_shot=False):
-        """Override default encoding to keep lists compact."""
-        if isinstance(obj, list):
-            return "[" + ",".join(map(self.encode, obj)) + "]"
-        return super().iterencode(obj, _one_shot)
+    def default(self, obj):
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            return float(obj)
+        return super().default(obj)
 
 
 def write_rxnout():
     import aRST.script.initialization as storage
     from aRST.script.exploration.network import rxnnetwork
     import json
-    data = {
-        "nodes": [
-            {
-                "node": node,
-                "info": rxnnetwork.get_reaction_info(node)}
-            for node in rxnnetwork.graph.nodes
-        ],
-        "edges": list(rxnnetwork.graph.edges)
-    }
-    with open(f'{storage.setting.searching_setting.general.wd}/reaction.json', "w") as file:
-        file.write(json.dumps(data, indent=2, cls=CompactJSONEncoder))
-        file.write('\n')
+
+    path = f'{storage.setting.searching_setting.general.wd}/reaction.json'
+    nodes = list(rxnnetwork.graph.nodes)
+
+    with open(path, "w") as file:
+        file.write("[\n")
+        for i, node in enumerate(nodes):
+            info = rxnnetwork.get_reaction_info(node)
+
+            file.write("{\n")
+            file.write(f'  "node": "{node}",\n')
+            file.write(f'  "info": {json.dumps(info, cls=CompactJSONEncoder)}\n')
+            file.write("}")
+
+            if i != len(nodes) - 1:
+                file.write(",")
+
+            file.write("\n")
+        file.write("]\n")
+
+
+def to_jsonable(obj):
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {k: to_jsonable(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [to_jsonable(v) for v in obj]
+    else:
+        return obj
 
 
 def write_strucout():
     import json
+    import aRST.script.initialization as storage
+
     path = f"{storage.setting.searching_setting.general.wd}/struc.json"
+    all_sids = list(storage.allstruc.data.keys())
 
     with open(path, "w") as file:
-        json.dump(
-            convert_for_json(storage.allstruc.data, {"atomic_connection"}),
-            file,
-            indent=2
-        )
-        file.write("\n")
+        file.write("[\n")
+
+        for i, sid in enumerate(all_sids):
+            s = storage.allstruc.get(sid)
+            g = s.general.model_dump(exclude={"atomic_connection"})
+            e = s.energy.model_dump()
+
+            coordinate = json.dumps(g["coordinate"], cls=CompactJSONEncoder)
+            ele_l = json.dumps(g["ele_l"], cls=CompactJSONEncoder)
+            atcharge = json.dumps(g["atcharge"], cls=CompactJSONEncoder)
+            mb = json.dumps(g["mb"], cls=CompactJSONEncoder)
+            number = json.dumps(g["number"], cls=CompactJSONEncoder)
+            atomic_connection = json.dumps(
+                s.general.atomic_connection,
+                cls=CompactJSONEncoder
+            )
+
+            file.write("{\n")
+            file.write(f'  "id": {sid},\n')
+            file.write('  "struc_info": {\n')
+            file.write('    "general": {\n')
+            file.write(f'      "coordinate": {coordinate},\n')
+            file.write(f'      "ele_l": {ele_l},\n')
+            file.write(f'      "charge": {g["charge"]},\n')
+            file.write(f'      "multiplicity": {g["multiplicity"]},\n')
+            file.write(f'      "nel": {g["nel"]},\n')
+            file.write(f'      "atcharge": {atcharge},\n')
+            file.write(f'      "mb": {mb},\n')
+            file.write(f'      "atomic_connection": {atomic_connection}\n')
+            file.write('    },\n')
+            file.write(f'    "energy": {json.dumps(e, cls=CompactJSONEncoder)}\n')
+            file.write('  }\n')
+            file.write('}')
+
+            if i != len(all_sids) - 1:
+                file.write(',')
+
+            file.write('\n')
+
+        file.write("]\n")
 
 
-def are_same_mb_list(mb_l1, mb_l2, cut=True):
-    if cut:
-        mbcut_length = 5 if storage.setting.searching_setting.general.mb_level == "loose" else 7
-        mb_l1 = [" | ".join(i.split(" | ")[:mbcut_length]) for i in mb_l1]
-        mb_l2 = [" | ".join(i.split(" | ")[:mbcut_length]) for i in mb_l2]
+def timeit(label=None):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            start_time = datetime.now()
 
-    if Counter(mb_l1) == Counter(mb_l2):
-        return True
-    else:
-        return False
+            result = func(*args, **kwargs)
+
+            end_time = datetime.now()
+            total_seconds = (end_time - start_time).total_seconds()
 
 
-def are_same_struc_list(items1, items2, cut=True):
-    if cut:
-        mbcut_length = 5 if storage.setting.searching_setting.general.mb_level == "loose" else 7
-        items1 = [(" | ".join(a.split(" | ")[:mbcut_length]), b, c) for (a, b, c) in items1]
-        items2 = [(" | ".join(a.split(" | ")[:mbcut_length]), b, c) for (a, b, c) in items2]
+            print(
+                f"{label} takes "
+                f"{int(total_seconds // 3600)} hour "
+                f"{int((total_seconds % 3600) // 60)} mins "
+                f"{total_seconds % 60:.2f} sec",
+                flush=True
+            )
 
-    if Counter(items1) == Counter(items2):
-        return True
-    else:
-        return False
+            return result
+
+        return wrapper
+
+    return decorator

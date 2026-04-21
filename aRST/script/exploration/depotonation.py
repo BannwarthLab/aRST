@@ -2,7 +2,7 @@
 import shutil
 from os.path import join,exists
 import aRST.script.initialization as storage
-from aRST.script.toolbox import get_random_folder_name,create_folder,get_strucinfo_from_path,write_xyz
+from aRST.script.toolbox import get_random_folder_name,create_folder,write_xyz
 from aRST.script.callsys import CallCrest
 
 
@@ -13,22 +13,22 @@ def updating_reacntans(reactants,job="depotonation"):
 
     for struc in reactants:
         s = storage.allstruc.get(struc)
-        c = s.struc_info.general.charge
-        constrain_l = s.struc_info.general.atomic_connection
-        ele_l = s.struc_info.general.ele_l
+        c = s.general.charge
+        constrain_l = s.general.atomic_connection
+        ele_l = s.general.ele_l
         if job=="depotonation":
             if not "H" in ele_l:
                 continue
 
         s = storage.allstruc.get(struc)
-        E0 = s.struc_info.energy.sp
-        coordinate = s.struc_info.general.coordinate
-        ele_l = s.struc_info.general.ele_l
-        m = s.struc_info.general.multiplicity
+        E0 = s.energy.sp
+        coordinate = s.general.coordinate
+        ele_l = s.general.ele_l
+        m = s.general.multiplicity
 
-        tmpfolder = create_folder(join(storage.setting.searching_setting.general.bufferwd, get_random_folder_name(),job))
+        tmpfolder = create_folder(join(storage.setting.searching_setting.general.bufferwd, get_random_folder_name()))
         # call depotonation
-        write_xyz(coordinate,ele_l, "coord")
+        write_xyz(coordinate,ele_l, "coord",c=c,m=m)
         crest_parse = CallCrest(tmpfolder,
                          custom_settings={"charge": c, "uhf": m-1})
         if job=="depotonation":
@@ -44,8 +44,8 @@ def updating_reacntans(reactants,job="depotonation"):
             if updated_coordinate is not None:
                 # reset AFO features
                 s = storage.allstruc.get(struc)
-                s.struc_info.reactivity.afo = None
-                s.struc_info.reactivity.bo = None
+                s.reactivity.afo = None
+                s.reactivity.bo = None
                 if job == "depotonation":
                     print(
                         f"The deprotonated form of the reactant {struc} is more energetically favorable->\n"
@@ -57,13 +57,9 @@ def updating_reacntans(reactants,job="depotonation"):
                         f"  updated to reactant")
                     c += 1
 
-                storage.allstruc.refine_struc_info(updated_coordinate,updated_ele_l, c, m, storage.setting,strucid=struc,wd0=tmpfolder)
-                struc_info = get_strucinfo_from_path(tmpfolder)
-                storage.allstruc.set_value_from_struc_info(struc, struc_info)
-                tarwd = join(storage.setting.searching_setting.general.strucwd, struc,job)
-                if exists(tarwd):
-                    shutil.rmtree(tarwd)
-                shutil.move(tmpfolder,tarwd)
+
+                features = storage.Singlestruc(updated_coordinate,updated_ele_l, c, m,).process_workflow(tmpfolder)
+                storage.allstruc.update_current_structure_info(features,struc)
             else:
                 print(f"The non-deprotonated/non-protonated form of the reactant {struc} is more energetically favorable->\n"
                       f"  keep the original reactant structure.")

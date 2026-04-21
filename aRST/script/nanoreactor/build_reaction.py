@@ -1,4 +1,4 @@
-from aRST.script.exploration.assign_reaction import SingleCycleSearch
+from aRST.script.exploration.reactionsearch import SingleCycleSearch
 from aRST.script.exploration.network import rxnnetwork
 from aRST.script.exploration.interA import *
 from aRST.script.head import print_simulation_details,print_react_l
@@ -39,9 +39,8 @@ def print_selected_react_l(final_react_l):
     print(title.center(totw))
     print(side + "*" * border_width)
     for entry in final_react_l:
-        struc_l = entry["struc_combi"] \
-            if "struc_combi" in entry.keys() else entry["struc"]
-        at_l = entry["at_combi"]
+        struc_l = entry["reactants"]
+        at_l = entry["atl"]
         gap = entry["gap"]
         strgap = f"{gap:.2f}" if isinstance(gap, float) else "np.inf"
         print(side + f"{str(struc_l).center(col1)}"
@@ -63,7 +62,7 @@ def select_react_l_interA(all_strucs_l, npair=10, gaplim=1, etemp=1000):
         reactant_counts = Counter(all_strucs_l)
         nallstruc = len(all_strucs_l)
         weights = np.array([
-            reactant_counts[item["struc_combi"][0]] * reactant_counts[item["struc_combi"][1]]/(nallstruc**2)
+            reactant_counts[item["reactants"][0]] * reactant_counts[item["reactants"][1]]/(nallstruc**2)
             for item in screen_react_l
         ])
         weights = weights / np.sum(weights)
@@ -193,14 +192,14 @@ def pseudo_nanoreactor_inter(step=0):
             # call xtb scan
             for entry in reactl_interA:
                 if not afoprepare.rxn_guess_exist(entry, "interA"):
-                    reactants = entry["struc_combi"]
+                    reactants = entry["reactants"]
                     res, searchcount = interxtbscan(reactants, entry, str(step), searchcount)
                     output_interA.update(res)
         else:
             # call mbff
             for entry in reactl_interA:
                 if not afoprepare.rxn_guess_exist(entry, "interA"):
-                    reactants = entry["struc_combi"]
+                    reactants = entry["reactants"]
                     res, searchcount = intermbff(reactants, entry, str(step), searchcount)
                     output_interA.update(res)
         out = {}

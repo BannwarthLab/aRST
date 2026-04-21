@@ -1,11 +1,11 @@
 import toml
 import threading
 import os
-from typing import Dict
 from os.path import join, exists
-from aRST.script.toolbox import create_folder, mydict, read_coord, get_strucinfo_from_path, write_xyz
-from aRST.script.callsys import CallxTB, CallORCA, CallgXTB, CallMolBar
-from aRST.script import input_class, structure_class
+from aRST.script.toolbox import  read_coord
+from aRST.script.callsys import  CallMolBar
+from aRST.script.exploration.structure import Allstruc,Singlestruc
+from aRST.script import input_class
 from pydantic import ValidationError
 
 
@@ -23,7 +23,6 @@ class Setting:
     def _load_config(self, infile):
         with open(infile, "r") as f:
             self.config = toml.load(f)
-        self.config = mydict(self.config)
 
         # checking config
         print("Checking input TOML...", end="")
@@ -101,224 +100,64 @@ class Setting:
             print(f"CREST_BIN checked, PATH={crest_bin}")
 
 
-class Allstruc:
-    def __init__(self, model):
-        self.model = model
-        self.data = mydict({})
-        self.reactants_ini = []  # record reactants for the input
-        self._next_id = 0
-        self._lock = threading.Lock()
-        self.unique_struc = {} # key = (mb_cut,c,m); val = sid
-        self._initialize()
 
+def register_init_input_reactants(setting,allstruc,getfeatures=True):
+    reactants_ini = []  # record reactants for the input
+    wd = setting.searching_setting.general.wd
+    ## reactants
+    reactant_keys = [k for k in setting.geom.keys() if k.startswith("reactant")]
+    for id, key in enumerate(reactant_keys):
+        reactant = setting.geom[key]
+        coord_path = join(wd, reactant.name)
+        coordinate, ele_l = read_coord(coord_path)
+        c = reactant.charge
+        m = reactant.multiplicity
+        mb = CallMolBar(coordinate, ele_l).get_mb()
+        ns = setting.geom[key].number  # repeat adding time
 
-    def creat_new_sid(self):
-        with self._lock:
-            sid = self._next_id
-            self._next_id += 1
-        s = structure_class.Structure(id=sid)
-        self.data[sid] = s
-        return sid, s
+        currentstruc = Singlestruc(coordinate,ele_l,c,m,mb)
 
-
-    def _struc_exist(self,mb,c,m):
-        mb_cut = " | ".join(mb.split(" | ")[:self.model.searching_setting.general.mbcut_length])
-        with self._lock:
-            sid = self.unique_struc.get((mb_cut,c,m))
-            if sid:
-                return True, sid
-            else:
-                return False,None
-
-    def _initialize(self):
-        wd = self.model.searching_setting.general.wd
-        ## reactants
-        reactant_keys = [k for k in self.model.geom.keys() if k.startswith("reactant")]
-        for id, key in enumerate(reactant_keys):
-            reactant = self.model.geom[key]
-            coord_path = join(wd, reactant.name)
-            coordinate, ele_l = read_coord(coord_path)
-            c = reactant.charge
-            m = reactant.multiplicity
-            mb = CallMolBar(coordinate, ele_l).get_mb()
-            ns = self.model.geom[key].number # repeat adding time
-
-            sid_exist, refsid = self._struc_exist(mb,c,m)
-            if not sid_exist:
-                sid, s = self.creat_new_sid()
-                mb_cut = " | ".join(mb.split(" | ")[:self.model.searching_setting.general.mbcut_length])
-                self.unique_struc[(mb_cut,c,m)] = sid
-                entry = s.struc_info.general
-                entry.coordinate = coordinate
-                entry.ele_l = ele_l
-                entry.charge = c
-                entry.multiplicity = m
-                entry.mb = mb
-                for _ in range(ns):
-                    self.reactants_ini.append(sid)
-            else:
-                for _ in range(ns):
-                    self.reactants_ini.append(refsid)
-
-
-        if self.model.read.general.jumprefine:
-            # collect struc refine info
-            print(f"Reading structure information of input {list(set(self.reactants_ini))} from folder struc/ ...")
-            for sid in list(set(self.reactants_ini)):
-                struc_info, info_complete = get_strucinfo_from_path(join(wd, "struc", str(sid)))
-                if info_complete:
-                    # compare mb to make sure
-                    if struc_info["mb"] != self.data[sid].struc_info.general.mb:
-                        print(self.data[sid].struc_info.general.mb)
-                    self.set_value_from_struc_info(sid, struc_info)
+        sid_exist, refsid = currentstruc.structure_exist()
+        if not sid_exist:
+            sid,s = allstruc.placeholde_new_sid()
+            if setting.read.general.jumprefine:
+                features,readsuss = currentstruc.read_features_from_struc_folder(rootfolder=join(wd, "struc", str(sid)),
+                                                                                 charge=c,m=m)
+                if readsuss:
+                    allstruc.register_new_sid(sid,s, features)
                 else:
-                    print(f"Info of structure {sid} is not complete, start to refine it")
-                    entry = self.data[sid].struc_info.general
-                    coordinate = entry.coordinate
-                    ele_l = entry.ele_l
-                    c = entry.charge
-                    m = entry.multiplicity
-                    struc_info = self.refine_struc_info(sid, coordinate, ele_l, c, m)
-                    self.set_value_from_struc_info(sid, struc_info)
-            print("done.\n")
-        else:
-            print(f"Refining structure information of input {list(set(self.reactants_ini))} ...")
-            for sid in list(set(self.reactants_ini)):
-                entry = self.data[sid].struc_info.general
-                coordinate = entry.coordinate
-                ele_l = entry.ele_l
-                c = entry.charge
-                m = entry.multiplicity
-                struc_info = self.refine_struc_info(sid, coordinate, ele_l, c, m)
-                self.set_value_from_struc_info(sid, struc_info)
-            print("done.\n")
-
-    def set_value_from_struc_info(self, sid, struc_info):
-        enrty = self.data[sid].struc_info.general
-        enrty.coordinate = struc_info["coordinate"]
-        enrty.ele_l = struc_info["ele_l"]
-        enrty.nel = struc_info["nel"]
-        enrty.multiplicity = struc_info["m"]
-        enrty.charge = struc_info["c"]
-        enrty.atcharge = struc_info["atcharge"]
-        enrty.mb = struc_info["mb"]
-        enrty.atomic_connection = struc_info["constrain_l"]
-        self.data[sid].struc_info.energy.sp = struc_info["Esp"]
-
-    def refine_struc_info(self, sid, coordinate, ele_l, charge, m):
-        comdir = join(self.model.searching_setting.general.wd, "struc", str(sid), )
-
-        #########  OPT  #########
-        if self.model.read.general.gfn2opt and len(ele_l) > 1:
-            wd = create_folder(join(comdir, "xtb"))
-            write_xyz(coordinate, ele_l, "coord")
-            staus = CallxTB(wd, custom_settings={"charge": charge, "uhf": m - 1}).opt()
-            if staus == 0:
-                coordinate, ele_l = read_coord(join(wd, "xtbopt.xyz"))
+                    if getfeatures:
+                        features = currentstruc.process_workflow(rootfolder=join(wd,"struc",str(sid)),ideal=False)
+                    else:
+                        features = {
+                            "coordinate": coordinate,
+                            "ele_l": ele_l,
+                            "multiplicity": m,
+                            "charge": c,
+                            "mb": mb,
+                        }
             else:
-                print(f'Warning: struc {sid} opt at xtb failed, continue with unopt struc')
-
-        # do DFT opt if required
-        forcedftopt = self.model.read.general.dftopt
-        generalopt = self.model.orca_setting.dftopt
-        if (forcedftopt or generalopt) and len(ele_l) > 1:
-            wd = create_folder(join(comdir, "orca"))
-            write_xyz(coordinate, ele_l, "coord")
-            staus = CallORCA(wd, custom_settings={"charge": charge, "m": m, "caltyp": "SP OPT"}).call()
-            if staus == 0:
-                coordinate, ele_l = read_coord(join(wd, "orca.xyz"))
-            else:
-                print(f'Warning: struc {sid} opt at ORCA failed, continue with unopt struc')
-
-        #########  SP  #########
-
-        ## xtb sp
-        if not exists(join(comdir, "xtb", "xtbopt.xyz")):
-            wd = create_folder(join(comdir, "xtb"))
-            write_xyz(coordinate, ele_l, "coord")
-            staus = CallxTB(wd, custom_settings={"charge": charge, "uhf": m - 1}).sp()
-            if staus != 0:
-                print(f'Warning: struc {sid} sp at xtb failed, continue anyhow')
-
-        ## DFT or gxtb sp
-        # priority gxtb > orca
-        if self.model.searching_setting.general.sp_method == "dft":
-            if not (forcedftopt or generalopt) or len(ele_l) == 1:
-                wd = create_folder(join(comdir, "orca"))
-                write_xyz(coordinate, ele_l, "coord")
-                staus = CallORCA(wd, custom_settings={"charge": charge, "m": m}).call()
-                if staus != 0:
-                    print(f'Warning: struc {sid} sp at ORCA failed, continue anyhow')
+                if getfeatures:
+                    features = currentstruc.process_workflow(rootfolder=join(wd, "struc", str(sid)),ideal=False)
+                else:
+                    features = {
+                        "coordinate": coordinate,
+                        "ele_l": ele_l,
+                        "multiplicity": m,
+                        "charge": c,
+                        "mb": mb,
+                    }
+            allstruc.register_new_sid(sid,s, features)
+            for _ in range(ns):
+                reactants_ini.append(sid)
         else:
-            # gxtb sp
-            wd = create_folder(join(comdir, "gxtb"))
-            write_xyz(coordinate, ele_l, "coord")
-            par = CallgXTB(wd, custom_settings={"charge": charge, "uhf": m - 1})
-            # write .charg and .uhf file
-            with open(".CHRG", "w") as file:
-                file.write(f"{charge}\n")
-            with open(".UHF", "w") as file:
-                file.write(f"{m - 1}\n")
-            status = par.sp()
-
-        # #########  TRV  #########
-        # wd = create_folder(join(Setting.strucwd, strucid, "xtb", "trv"))
-        # write_xyz(coord, "coord")
-        # staus = CallxTB(wd, custom_settings={"charge": charge, "uhf": m - 1}).trv()
-        # if staus != 0:
-        #     print(f'Warning: struc {strucid} trv failed, continue anyhow')
-
-        #########  SOLV  #########
-        # wd = create_folder(join(Setting.strucwd, strucid, "xtb", "solv"))
-        # write_xyz(coord, "coord")
-        # staus = CallxTB(wd, custom_settings={"charge": charge, "uhf": m - 1}).solv()
-        # if staus != 0:
-        #     print(f'Warning: struc {strucid} solv failed, continue anyhow')
-
-        # #########  get res  #########
-        struc_info, complete = get_strucinfo_from_path(comdir)
-
-        return struc_info
-
-    def get(self, sid):
-        return self.data[sid]
-
-
-# class Allrxn:
-#     _instance = None
-#     _lock = threading.Lock()
-#
-#     def __new__(cls):
-#         if cls._instance is None:
-#             with cls._lock:
-#                 if cls._instance is None:
-#                     cls._instance = super().__new__(cls)
-#                     cls._instance.data = mydict({})
-#         return cls._instance
-#
-#     def get_value(self, target_key, default_value=None):
-#         value = self.data.get_value(target_key, default_value)
-#         return value
-#
-#     def set_value(self, target_key, new_value):
-#         self.data.set_value(target_key, new_value)
-#
-#     def compare_value(self, key1, key2):
-#         return self.data.compare_value(key1, key2)
-#
-#     def get_all_keys(self):
-#         return list(self.data.keys())
-#
-#     def get_layer_keys(self, layer=0):
-#         # cycle0: 0_0, 0_1, 0_2....
-#         # cycle1: 0_0_0, 0_0_1,0_0_2......
-#         allkeys = self.get_all_keys()
-#         return [_ for _ in allkeys if len(_.split("_")) == layer + 1]
+            for _ in range(ns):
+                reactants_ini.append(refsid)
+    return reactants_ini
 
 
 setting = None
 allstruc = None
-# allrxn = Allrxn()
 
 
 def initialize(setting_instance):

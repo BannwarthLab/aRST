@@ -12,49 +12,52 @@ from aRST.script.callsys import CallxTB
 import aRST.script.initialization as storage
 from aRST.script.head import print_react_l
 import copy
+from molbar.barcode import get_molbar_from_coordinates
 
 
 def get_intraA_react_l(reactants0):
+    generalsetting = storage.setting.searching_setting.general
+    intrasetting = storage.setting.searching_setting.intra
     react_l = SPR(reactants0,
-                  storage.setting.searching_setting.general.spr_mode,
+                  generalsetting.spr_mode,
                   ).intra(
-        equivalent_afogap_tol=storage.setting.searching_setting.general.equivalent_afogap_tol,
-        exclude_elements=storage.setting.searching_setting.general.exclude_elements,
-        exclude_pairs=storage.setting.searching_setting.general.exclude_pairs
+        equivalent_afogap_tol=generalsetting.equivalent_afogap_tol,
+        exclude_elements=generalsetting.exclude_elements,
+        exclude_pairs=generalsetting.exclude_pairs
     )
-    cut = 2 if storage.setting.searching_setting.intra.concerted_pair else 1
+    cut = 2 if intrasetting.concerted_pair else 1
     for item in react_l:
-        pairs = item["at_combi"][:cut]
-        item["at_combi"] = pairs
+        pairs = item["atl"][:cut]
+        item["atl"] = pairs
 
     print_react_l(reactants0, react_l)
     # write full react_l in file
-    with open(join(storage.setting.searching_setting.general.wd, "react_l"), "w") as f:
+    with open(join(generalsetting.wd, "react_l"), "w") as f:
         for item in react_l:
             f.write(json.dumps(item) + "\n")
 
-    atom_pairs = storage.setting.searching_setting.intra.atom_pair
+    atom_pairs = intrasetting.atom_pair
     if atom_pairs:
         # overwrite react_l with user's input
         # predifined reaction, used in one cycle
         at1, at2 = atom_pairs[0]
-        react_l = [{"struc": reactants0[0],
-                    "at_combi": [[at1, at2]],
+        react_l = [{"reactants": reactants0[0],
+                    "atl": [[at1, at2]],
                     "gap": 0,
                     "force_combination": True}]
         if len(atom_pairs) > 1:
-            storage.setting.searching_setting.intra.concerted_pair = True
+            intrasetting.concerted_pair = True
             for atom_pair in atom_pairs[1:]:
-                at_combi_list = react_l[0]["at_combi"]
+                atl_list = react_l[0]["atl"]
                 at3, at4 = atom_pair
-                at_combi_list.append([at3, at4])
+                atl_list.append([at3, at4])
 
     return react_l
 
 
 def check_scan_uhf_intraA(entry):
-    struc = entry["struc"]
-    nel = storage.allstruc.get(struc).struc_info.general.nel
+    struc = entry["reactants"]
+    nel = storage.allstruc.get(struc).general.nel
     if nel % 2 == 0:
         return [0, 2]
     elif nel % 2 != 0:
@@ -62,47 +65,48 @@ def check_scan_uhf_intraA(entry):
 
 
 def intraxtbscan(reactants0, entry, reactionpath, count=0):
-    scanwd = storage.setting.searching_setting.general.scanwd
+    generalsetting = storage.setting.searching_setting.general
+    intrasetting = storage.setting.searching_setting.intra
+    xtbsetting = storage.setting.xtb_setting
+    scanwd = generalsetting.scanwd
     output_d = {}
     uhf_l = check_scan_uhf_intraA(entry)
-    struc = entry["struc"]
+    struc = entry["reactants"]
     s = storage.allstruc.get(struc)
-    coordinate = s.struc_info.general.coordinate
-    ele_l = s.struc_info.general.ele_l
-    at_l = entry["at_combi"]
+    coordinate = s.general.coordinate
+    ele_l = s.general.ele_l
+    at_l = entry["atl"]
     push_l = build_push_l(coordinate, ele_l, at_l)
-    charge = s.struc_info.general.charge
-    nel = s.struc_info.general.nel
-    m = s.struc_info.general.multiplicity
+    charge = s.general.charge
+    nel = s.general.nel
+    m = s.general.multiplicity
 
     # preparing scan inp
     constrain_setting = {
         "constrain": {
-            "force_constant": storage.setting.xtb_setting.k
+            "force_constant": xtbsetting.k
         },
         "scan": {
             "mode": "concerted" if len(at_l) == 2 else None,
             "distance": push_l if push_l else None,
-            "step": storage.setting.xtb_setting.step
+            "step": xtbsetting.step
         }
     }
-    if storage.setting.searching_setting.intra.loose_bond and len(ele_l) > 2:
+    if intrasetting.loose_bond and len(ele_l) > 2:
         # searching weakest bond
         allbonds = SDP([struc],
-                       exclude_elements=storage.setting.searching_setting.general.exclude_elements,
-                       exclude_pairs=storage.setting.searching_setting.general.exclude_pairs
+                       exclude_elements=generalsetting.exclude_elements,
+                       exclude_pairs=generalsetting.exclude_pairs
                        )
         allbonds = sorted(allbonds, key=lambda x: x["mbo"])
         item = allbonds[0]
         if item["mbo"] <= 0.9:
-            at1, at2 = item["at_combi"]
+            at1, at2 = item["atl"]
             at1, at2 = int(at1), int(at2)
             dd = np.round(Coord(coordinate, ele_l).get_ats_distance(int(at1), int(at2)), 3)
             constrain_setting["constrain"]["loose_bond"] = at1 + 1, at2 + 1, dd
 
-    unreacted = reactants0.copy()
-    unreacted.remove(struc)
-    unreacted = sorted(unreacted, key=int, reverse=True)
+    unreacted = sorted((x for x in reactants0 if x != struc), key=int, reverse=True)
     for u in uhf_l:
         print(f"Simulating intraA path {reactionpath}_{count}: R={reactants0}, atl={at_l}, uhf_sim={u} ...",end="")
         scan_wd = join(scanwd, f"{reactionpath}_{count}")
@@ -114,7 +118,7 @@ def intraxtbscan(reactants0, entry, reactionpath, count=0):
         # call xtb scan
         status = CallxTB(scan_wd,
                          custom_settings={"charge": charge, "uhf": u,
-                                          "etemp": storage.setting.xtb_setting.scan_etemp}).scan(
+                                          "etemp": xtbsetting.scan_etemp}).scan(
             constrain_setting)
         if status == 0:
             endxyz, ele_l_end = read_coord(join(scan_wd, "xtbopt.xyz"))
@@ -122,7 +126,7 @@ def intraxtbscan(reactants0, entry, reactionpath, count=0):
             constrain_l = get_topo(endxyz, ele_l_end, bo)
             atcharge = read_atcharge(join(scan_wd, "charges"))
 
-            if storage.setting.searching_setting.general.sep_mode != 0:
+            if generalsetting.sep_mode != 0:
                 # do a unconstarined opt
                 optwd = join(scan_wd, "opt")
                 create_folder(optwd)
@@ -134,10 +138,12 @@ def intraxtbscan(reactants0, entry, reactionpath, count=0):
                     constrain_l = get_topo(endxyz, ele_l_end, bo)
                     atcharge = read_atcharge(join(optwd, "charges"))
 
+            endxyz_mb = get_molbar_from_coordinates(endxyz, ele_l_end)
             output_d[f"{reactionpath}_{count}"] = [{"reactants": [struc],
                                                     "unreacted": unreacted,
                                                     "at_l": at_l,
-                                                    "simuhf": u},  # reactants info
+                                                    "simuhf": u,
+                                                    "scanwd":f"{reactionpath}_{count}"},  # reactants info
                                                    {"atomic_charge": atcharge,
                                                     "charge": charge,
                                                     "nel": nel,
@@ -145,7 +151,8 @@ def intraxtbscan(reactants0, entry, reactionpath, count=0):
                                                     "coordinate": endxyz,
                                                     "ele_l": ele_l_end,
                                                     "bo": bo,
-                                                    "atomic_connection": constrain_l},  # endxyz info
+                                                    "atomic_connection": constrain_l,
+                                                    "mb":endxyz_mb},  # endxyz info
                                                    {"type": "intraA"}  # reaction info
                                                    ]
             print(f"done.")
@@ -156,29 +163,41 @@ def intraxtbscan(reactants0, entry, reactionpath, count=0):
 
 
 def intrambff(reactants0, entry, reactionpath, count=0):
-    scanwd = storage.setting.searching_setting.general.scanwd
+    generalsetting = storage.setting.searching_setting.general
+    xtbsetting = storage.setting.xtb_setting
+    scanwd = generalsetting.scanwd
     output_d = {}
     uhf_l = check_scan_uhf_intraA(entry)
-    struc = entry["struc"]
+    struc = entry["reactants"]
     s = storage.allstruc.get(struc)
-    coordinate = s.struc_info.general.coordinate
-    ele_l = s.struc_info.general.ele_l
-    at_l = entry["at_combi"]
+    coordinate = s.general.coordinate
+    ele_l = s.general.ele_l
+    at_l = entry["atl"]
     push_l = build_push_l(coordinate, ele_l, at_l)
-    charge = s.struc_info.general.charge
-    nel = s.struc_info.general.nel
-    m = s.struc_info.general.multiplicity
+    charge = s.general.charge
+    nel = s.general.nel
+    m = s.general.multiplicity
 
     # get atomic connection (COPY!)
-    atom_connection = copy.deepcopy(s.struc_info.general.atomic_connection)
+    atom_connection = copy.deepcopy(s.general.atomic_connection)
     for item in push_l:
         at1, at2 = int(item[0]), int(item[1])
         value = np.round(float(item[3]), 3)
         atom_connection.append({"atoms": [at1, at2], "value": value})
 
-    unreacted = reactants0.copy()
-    unreacted.remove(struc)
-    unreacted = sorted(unreacted, key=int, reverse=True)
+    unreacted = sorted((x for x in reactants0 if x != struc), key=int, reverse=True)
+    # try first forcing set_angles=Ture to generate target bond connection
+    mb_test, mb_ele_test = get_endxyz_from_mb(atom_connection, coordinate, ele_l,
+                                              set_angles=True,
+                                              repulsion_charge=100)
+    connectd_trigger = True
+    for item in push_l:
+        at1, at2 = int(item[0]), int(item[1])
+        value = np.round(float(item[3]), 2)
+        bond_length = Coord(mb_test, mb_ele_test).get_ats_distance(at1 - 1, at2 - 1)
+        if bond_length > value * 1.05:
+            connectd_trigger = False
+            break
     for u in uhf_l:
         print(f"Simulating intraA path {reactionpath}_{count}: R={reactants0}, atl={at_l}, uhf_sim={u} ...",end="")
         scan_wd = join(scanwd, f"{reactionpath}_{count}")
@@ -192,18 +211,6 @@ def intrambff(reactants0, entry, reactionpath, count=0):
             for item in atom_connection:
                 f.write(json.dumps(item) + "\n")
 
-        # try first forcing set_angles=Ture to generate target bond connection
-        mb_test, mb_ele_test = get_endxyz_from_mb(atom_connection, coordinate, ele_l,
-                                                  set_angles=True,
-                                                  repulsion_charge=100)
-        connectd_trigger = True
-        for item in push_l:
-            at1, at2 = int(item[0]), int(item[1])
-            value = np.round(float(item[3]), 2)
-            bond_length = Coord(mb_test, mb_ele_test).get_ats_distance(at1 - 1, at2 - 1)
-            if bond_length > value * 1.05:
-                connectd_trigger = False
-                break
         if not connectd_trigger:
             # otherwise do 2. FF constrain opt
             mbxyz0, ele_l0 = get_endxyz_from_mb(atom_connection, coordinate, ele_l,
@@ -219,15 +226,15 @@ def intrambff(reactants0, entry, reactionpath, count=0):
         write_xyz(mbxyz, mb_ele_l, "coord_mb")
         status = CallxTB(scan_wd,
                          custom_settings={"charge": charge, "uhf": u, "coordfn": "coord_mb",
-                                          "k": storage.setting.xtb_setting.k,
-                                          "etemp": storage.setting.xtb_setting.scan_etemp}
+                                          "k": xtbsetting.k,
+                                          "etemp": xtbsetting.scan_etemp}
                          ).constrained_opt(newbond=atom_connection[-len(push_l):])
         if status == 0:
             endxyz, ele_l_end = read_coord(join(scan_wd, "xtbopt.xyz"))
             bo = read_bo(join(scan_wd, "wbo"))
             constrain_l = get_topo(endxyz, ele_l_end, bo)
             atcharge = read_atcharge(join(scan_wd, "charges"))
-            if storage.setting.searching_setting.general.sep_mode != 0:
+            if generalsetting.sep_mode != 0:
                 # do a unconstarined opt
                 optwd = join(scan_wd, "opt")
                 create_folder(optwd)
@@ -239,10 +246,12 @@ def intrambff(reactants0, entry, reactionpath, count=0):
                     constrain_l = get_topo(endxyz, ele_l_end, bo)
                     atcharge = read_atcharge(join(optwd, "charges"))
 
+            endxyz_mb = get_molbar_from_coordinates(endxyz, ele_l_end)
             output_d[f"{reactionpath}_{count}"] = [{"reactants": [struc],
                                                     "unreacted": unreacted,
                                                     "at_l": at_l,
-                                                    "simuhf": u},  # reactants info
+                                                    "simuhf": u,
+                                                    "scanwd":f"{reactionpath}_{count}"},  # reactants info
                                                    {"atomic_charge": atcharge,
                                                     "charge": charge,
                                                     "nel": nel,
@@ -250,7 +259,8 @@ def intrambff(reactants0, entry, reactionpath, count=0):
                                                     "coordinate": endxyz,
                                                     "ele_l": ele_l_end,
                                                     "bo": bo,
-                                                    "atomic_connection": constrain_l},  # endxyz info
+                                                    "atomic_connection": constrain_l,
+                                                    "mb":endxyz_mb},  # endxyz info
                                                    {"type": "intraA"}  # reaction info
                                                    ]
             print(f"done.")

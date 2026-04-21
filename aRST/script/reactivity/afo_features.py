@@ -1,12 +1,12 @@
-from aRST.script.exploration.assign_reaction import SingleCycleSearch
+from aRST.script.exploration.reactionsearch import SingleCycleSearch
 from aRST.script.exploration.intraA import *
 from aRST.script.exploration.intraD import *
 def show_afo(printnumber=10):
     reactants = storage.allstruc.reactants_ini
     # preapre afo
     SingleCycleSearch(reactants)
-    coordinates = [storage.allstruc.get(_).struc_info.general.coordinate for _ in reactants]
-    ele_ls = [storage.allstruc.get(_).struc_info.general.ele_l for _ in reactants]
+    coordinates = [storage.allstruc.get(_).general.coordinate for _ in reactants]
+    ele_ls = [storage.allstruc.get(_).general.ele_l for _ in reactants]
 
     # show interA reactivity
     if len(reactants) > 1:

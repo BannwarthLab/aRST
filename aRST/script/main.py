@@ -64,14 +64,14 @@ def main():
     # print_args(args)
 
     if args.explore:
-        from aRST.script.exploration.assign_reaction import ReactionSearch
+        from aRST.script.exploration.reactionsearch import ReactionSearch
         from datetime import datetime
         print_theo_setting()
         start_time = datetime.now()
         try:
-            # checking the input parameter
-
-            ReactionSearch()
+            # prepare the input reactant
+            reactants_ini = init.register_init_input_reactants(init.setting, init.allstruc)
+            ReactionSearch(reactants_ini)
             from aRST.script.toolbox import write_rxnout,write_strucout
             write_rxnout()
             write_strucout()
@@ -95,7 +95,8 @@ def main():
         show_afo()
     elif args.align:
         from aRST.script.alignment.do_alignment import aligning_two_structures
-        aligning_two_structures()
+        reactants_ini = init.register_init_input_reactants(init.setting, init.allstruc)
+        aligning_two_structures(reactants=reactants_ini)
     elif args.nanoreactor:
         from aRST.script.nanoreactor.build_reaction import pseudo_nanoreactor_inter
         pseudo_nanoreactor_inter()

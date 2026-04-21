@@ -265,7 +265,7 @@ def print_simulation_details(info_l: List[Dict[str, Any]], node_name: str) -> No
         bond_change = bool(item.get("bond_change"))
         therm_allow = bool(item.get("therdy_allow"))
         e_rxn = item.get("E_rxn", 0.0)
-        exist_code = item.get("reaction_exist")
+        reaction_exist = bool(item.get("reaction_exist"))
         rxnid = item.get("rxnid") if bond_change else "-"
 
         comment = ""
@@ -275,14 +275,10 @@ def print_simulation_details(info_l: List[Dict[str, Any]], node_name: str) -> No
             comment = "energetic unfavorable"
         else:
             ref_id = item.get("ref_id")
-            if exist_code == 0:
+            if reaction_exist :
                 comment = "RXN same to {}".format(ref_id)
-            elif exist_code == 1:
-                comment = "RXN same to {}, but has different un".format(ref_id)
-            elif exist_code == 2:
+            elif not reaction_exist:
                 comment = "New RXN"
-            elif exist_code == 3:
-                comment = "Unknown MB in product detected: {}".format(rxnid)
 
         line = (
             "{:^{w1}} {:^{w2}} {:^{w3}} {:^{w4}} {:^{w5}} {:^{w6}} {:^{w7}.2f} {:<{w8}}".format(
@@ -330,8 +326,8 @@ def print_react_l(reactants: Any, react_l: List[Dict[str, Any]]) -> None:
     print(side + "-" * border_width)
 
     for i, entry in enumerate(react_l[:10]):
-        struc_l = entry.get("struc_combi", entry.get("struc", ""))
-        at_l = entry.get("at_combi", [])
+        struc_l = entry.get("reactants", entry.get("reactants", ""))
+        at_l = entry.get("atl", [])
 
         formatted_atl = ", ".join(
             "[{}]".format(",".join(map(str, inner))) for inner in at_l
