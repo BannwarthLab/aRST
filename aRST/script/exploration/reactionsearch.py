@@ -295,6 +295,7 @@ class SingleCycleSearch:
                 edge_l = [lastnode]
                 newnode_index = rxnnetwork.add_newnode(info=info_temp, edge_l=edge_l, linkoldnode=linkoldnode)
                 info_temp["rxnid"] = newnode_index
+                info_temp["products"]=info_temp["reactants"]
                 return info_temp
 
             else:
