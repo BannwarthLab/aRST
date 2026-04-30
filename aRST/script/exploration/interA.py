@@ -1,16 +1,12 @@
 # Reaction simulation for intramolecular association
 import json
 from os.path import join
-import shutil
 import numpy as np
-from aRST.script.toolbox import create_folder, write_xyz, read_coord, read_bo, read_atcharge, get_topo
-from aRST.script.spr import SPR, SDP
-from aRST.script.geom import Coord, alignment
-from aRST.script.callsys import CallxTB
-from aRST.script.do_scan import build_push_l
-from aRST.script.do_scan import get_endxyz_from_mb
+from aRST.script.spr import SPR
+from aRST.script.geom import alignment
+from aRST.script.do_scan import get_endxyz_from_mb, build_push_l
+from aRST.script.exploration.pathsearch import SinglePathSearch
 import aRST.script.initialization as storage
-from molbar.barcode import get_molbar_from_coordinates
 from aRST.script.head import print_react_l
 import copy
 
@@ -118,79 +114,26 @@ def interxtbscan(reactants0, entry, reactionpath, count=0):
             "step": xtbsetting.step
         }
     }
-    if intersetting.loose_bond:
-        # searching weakest bond
-        allbonds = SDP([struc1, struc2],
-                       exclude_elements=generalsetting.exclude_elements,
-                       exclude_pairs=generalsetting.exclude_pairs
-                       ).allbonds
-        allbonds = sorted(allbonds, key=lambda x: x["mbo"])
-        item = allbonds[0]
-        if item["mbo"] <= 0.9:
-            if item["reactants"] == struc1:
-                at1, at2 = item["atl"]
-                at1, at2 = int(at1), int(at2)
-            else:
-                at1, at2 = item["atl"]
-                at1, at2 = int(at1) + nat_coord1, int(at2) + nat_coord1
-            dd = np.round(Coord(coordinate_merge, ele_merged).get_ats_distance(int(at1), int(at2)), 3)
-            constrain_setting["constrain"]["loose_bond"] = at1 + 1, at2 + 1, dd
-
     unreacted = sorted((x for x in reactants0 if x != struc1 and x != struc2), key=int, reverse=True)
+
     for u in uhf_l:
         print(f"Simulating interA path {reactionpath}_{count}: R={reactants0}, atl={at_l}, uhf_sim={u} ...", end="")
         scan_wd = join(scanwd, f"{reactionpath}_{count}")
-        create_folder(scan_wd)
-        write_xyz(coordinate_merge, ele_merged, f"coord")
 
-        with open(join(scan_wd, "atl"), "w") as f:
-            f.write(json.dumps(entry))
+        reactantinfo = {"reactants": [struc1, struc2],
+                        "unreacted": unreacted,
+                        "at_l": at_l, "simuhf": u,
+                        "scanwd": f"{reactionpath}_{count}"}  # reactants info
+        results = SinglePathSearch(coordinate_merge,
+                                   ele_merged,
+                                   u, charge,scan_wd,
+                                   nat_coord1, [struc1, struc2]).run_one_scan_search(
+            constrain_setting, "interA", reactantinfo, totnel
+        )
+        if results:
 
-        # call xtb scan
-        status = CallxTB(scan_wd,
-                         custom_settings={"charge": charge, "uhf": u,
-                                          "etemp": xtbsetting.scan_etemp}).scan(constrain_setting)
+            output_d[f"{reactionpath}_{count}"] = results
 
-        if status == 0:
-            endxyz, ele_l_end = read_coord(join(scan_wd, "xtbopt.xyz"))
-            bo = read_bo(join(scan_wd, "wbo"))
-            constrain_l = get_topo(endxyz, ele_l_end, bo)
-            atcharge = read_atcharge(join(scan_wd, "charges"))
-            if generalsetting.sep_mode != 0:
-                # do a unconstarined opt
-                optwd = join(scan_wd, "opt")
-                create_folder(optwd)
-                write_xyz(endxyz, ele_l_end, "coord")
-                status2 = CallxTB(optwd, custom_settings={"charge": charge, "uhf": u}).opt()
-                if status2 == 0:
-                    endxyz, ele_l_end = read_coord(join(optwd, "xtbopt.xyz"))
-                    bo = read_bo(join(optwd, "wbo"))
-                    constrain_l = get_topo(endxyz, ele_l_end, bo)
-                    atcharge = read_atcharge(join(optwd, "charges"))
-            # md optional
-            if generalsetting.md:
-                mdwd = join(scan_wd, "md")
-                bo, constrain_l, atcharge, endxyz, ele_l_end = _short_md_for_product_struc_guess(mdwd, endxyz,
-                                                                                                 ele_l_end, push_l,
-                                                                                                 charge, u)
-
-            endxyz_mb = get_molbar_from_coordinates(endxyz, ele_l_end)
-            output_d[f"{reactionpath}_{count}"] = [{"reactants": [struc1, struc2],
-                                                    "unreacted": unreacted,
-                                                    "at_l": at_l, "simuhf": u,
-                                                    "scanwd": f"{reactionpath}_{count}"},  # reactants info
-                                                   {"atcharge": atcharge,
-                                                    "charge": charge,
-                                                    "nel": totnel,
-                                                    "uhf": u,
-                                                    "coordinate": endxyz,
-                                                    "ele_l": ele_l_end,
-                                                    "bo": bo,
-                                                    "atomic_connection": constrain_l,
-                                                    "mb":endxyz_mb},  # endxyz info
-                                                   {"type": "interA"}  # reaction info
-                                                   ]
-            print(f"done.")
         else:
             print(f"failed.")
         count += 1
@@ -228,101 +171,23 @@ def intermbff(reactants0, entry, reactionpath, count=0):
     for u in uhf_l:
         print(f"Simulating interA path {reactionpath}_{count}: R={reactants0}, atl={at_l}, uhf_sim={u} ...", end="")
         scan_wd = join(scanwd, f"{reactionpath}_{count}")
-        create_folder(scan_wd)
-        write_xyz(coordinate_merge, ele_merged, f"coord")
+        reactantinfo = {"reactants": [struc1, struc2],
+                        "unreacted": unreacted,
+                        "at_l": at_l, "simuhf": u,
+                        "scanwd": f"{reactionpath}_{count}"}  # reactants info
+        results = SinglePathSearch(mbxyz,
+                                   mbele_l,
+                                   u, charge,scan_wd,
+                                   nat_coord1,
+                                   [struc1, struc2]).run_xtbopt_for_mbff_search(atom_connection, push_l,
+                                                                                "interA", reactantinfo, totnel)
 
-        with open(join(scan_wd, "atl"), "w") as f:
-            f.write(json.dumps(entry))
+        if results:
+            output_d[f"{reactionpath}_{count}"] = results
 
-        with open(join(scan_wd, "newbond"), "w") as f:
-            for item in atom_connection:
-                f.write(json.dumps(item) + "\n")
-
-        # mbxyz=get_endxyz_from_mb(atom_connection, coordinates, ele, set_angles=True)
-
-        write_xyz(mbxyz0, ele_l0, "coord_mb0")
-        write_xyz(mbxyz, mbele_l, "coord_mb")
-        # constrained opt in gfn2
-        status = CallxTB(scan_wd,
-                         custom_settings={"charge": charge, "uhf": u,
-                                          "k": storage.setting.xtb_setting.k,
-                                          "coordfn": "coord_mb",
-                                          "etemp": storage.setting.xtb_setting.scan_etemp
-                                          }).constrained_opt(
-            newbond=atom_connection[-len(push_l):])
-        if status == 0:
-            endxyz, ele_l_end = read_coord(join(scan_wd, "xtbopt.xyz"))
-            bo = read_bo(join(scan_wd, "wbo"))
-            constrain_l = get_topo(endxyz, ele_l_end, bo)
-            atcharge = read_atcharge(join(scan_wd, "charges"))
-
-            if generalsetting.sep_mode != 0:
-                # do a unconstarined opt
-                optwd = join(scan_wd, "opt")
-                create_folder(optwd)
-                shutil.copyfile(join(scan_wd, 'xtbopt.xyz'), join(optwd, 'coord.xyz'))
-                status2 = CallxTB(optwd, custom_settings={"charge": charge, "uhf": u}).opt()
-                if status2 == 0:
-                    endxyz, ele_l_end = read_coord(join(optwd, "xtbopt.xyz"))
-                    bo = read_bo(join(optwd, "wbo"))
-                    constrain_l = get_topo(endxyz, ele_l_end, bo)
-                    atcharge = read_atcharge(join(optwd, "charges"))
-            if generalsetting.md:
-                mdwd = join(scan_wd, "md")
-                bo, constrain_l, atcharge, endxyz, ele_l_end = _short_md_for_product_struc_guess(mdwd, endxyz,
-                                                                                                 ele_l_end, push_l,
-                                                                                                 charge, u)
-
-            endxyz_mb = get_molbar_from_coordinates(endxyz, ele_l_end)
-            output_d[f"{reactionpath}_{count}"] = [{"reactants": [struc1, struc2],
-                                                    "unreacted": unreacted,
-                                                    "at_l": at_l,
-                                                    "simuhf": u,
-                                                    "scanwd": f"{reactionpath}_{count}"},  # reactants info
-                                                   {"atcharge": atcharge,
-                                                    "charge": charge,
-                                                    "nel": totnel,
-                                                    "uhf": u,
-                                                    "coordinate": endxyz,
-                                                    "ele_l": ele_l_end,
-                                                    "bo": bo,
-                                                    "atomic_connection": constrain_l,
-                                                    "mb":endxyz_mb},  # endxyz info
-                                                   {"type": "interA"}  # reaction info
-                                                   ]
             print(f"done.")
+
         else:
             print(f"failed.")
         count += 1
     return output_d, count
-
-
-def _short_md_for_product_struc_guess(mdwd, coordinate, ele_l, constrained_bonds, charge, uhf):
-    create_folder(mdwd)
-    write_xyz(coordinate, ele_l, "coord")
-    mdtemp = storage.setting.xtb_setting.scan_etemp
-    mdsetting=storage.setting.searching_setting.md
-    xtbmdparse = CallxTB(mdwd, custom_settings={"charge": charge, "uhf": uhf,
-                                                "mdetemp": mdtemp,
-                                                "mdtime": mdsetting.time,
-                                                "mdstep": mdsetting.step,
-                                                "mdshake": mdsetting.shake,
-                                                "mddump": mdsetting.dump,
-                                                "etemp": storage.setting.xtb_setting.scan_etemp
-                                                # sp after md
-                                                })
-    status = xtbmdparse.short_md(constrained_bonds=constrained_bonds)
-    if status != 0:
-        raise ValueError(f"md has error, check {mdwd}")
-    # get energy min struc in the md simulation
-    # coord can't be single at in this case
-    coordinate, ele_l, emd = xtbmdparse.get_Emin_geom_from_mdtrj(nat=len(ele_l))
-    write_xyz(coordinate, ele_l, "emincoord")
-    # doing a sp in the same folder for sp information
-    status = xtbmdparse.sp()
-    if status != 0:
-        raise ValueError(f"sp after md has error, check {mdwd}")
-    bo = read_bo(join(mdwd, "wbo"))
-    constrain_l = get_topo(coordinate, ele_l, bo)
-    atcharge = read_atcharge(join(mdwd, "charges"))
-    return bo, constrain_l, atcharge, coordinate, ele_l

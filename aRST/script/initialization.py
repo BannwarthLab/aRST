@@ -39,6 +39,9 @@ class Setting:
         self.check_environment()
         print("done.\n")
 
+        # checking the validty of old restart files
+        check_restart_compatible(self.config, self.model.searching_setting.general.wd)
+
         # clean up buffer struc
         if exists(self.model.searching_setting.general.bufferwd):
             import shutil
@@ -159,6 +162,58 @@ def register_init_input_reactants(setting,allstruc,getfeatures=True):
 setting = None
 allstruc = None
 
+import hashlib
+import json
+import shutil
+def make_config_hash(config):
+    EXCLUDE_KEYS = {
+        ("searching_setting", "disso", "number"),
+        ("searching_setting", "inter", "number"),
+        ("searching_setting", "intra", "number"),
+    }
+    filtered = filter_config(config, EXCLUDE_KEYS)
+
+    import json, hashlib
+    text = json.dumps(filtered, sort_keys=True, default=str)
+    return hashlib.sha256(text.encode()).hexdigest()
+
+
+def filter_config(config, exclude_keys):
+    def _filter(d, path=()):
+        if not isinstance(d, dict):
+            return d
+
+        new_d = {}
+        for k, v in d.items():
+            new_path = path + (k,)
+
+            if new_path in exclude_keys:
+                continue
+
+            new_d[k] = _filter(v, new_path)
+
+        return new_d
+
+    return _filter(config)
+
+def check_restart_compatible(config: dict, wd: str, restart_dir="checkpoint"):
+    restart_path = join(wd, restart_dir)
+    hash_file = join(restart_path, "input.sha256")
+
+    new_hash = make_config_hash(config)
+
+    if exists(hash_file):
+        with open(hash_file, "r") as f:
+            old_hash = f.read().strip()
+
+        if old_hash != new_hash:
+            print("NOTICE: input TOML changed, removing old restart files")
+            shutil.rmtree(restart_path)
+
+    os.makedirs(restart_path, exist_ok=True)
+
+    with open(hash_file, "w") as f:
+        f.write(new_hash)
 
 def initialize(setting_instance):
     """Initialize global setting and allstruc with the provided Setting instance."""

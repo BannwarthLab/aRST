@@ -1,18 +1,13 @@
-# Reaction simulation for intramolecular association
-import os
-from os.path import join
-import shutil
 import json
+from os.path import join
 import numpy as np
-from aRST.script.toolbox import create_folder, write_xyz, read_coord, read_bo, read_atcharge, get_topo
 from aRST.script.spr import SDP
-from aRST.script.geom import Coord
-from aRST.script.callsys import CallxTB
 from aRST.script.do_scan import get_endxyz_from_mb
+from aRST.script.exploration.pathsearch import SinglePathSearch
 import aRST.script.initialization as storage
 from aRST.script.head import print_react_l
+from aRST.script.geom import Coord
 import copy
-from molbar.barcode import get_molbar_from_coordinates
 
 
 def get_intraD_react_l(reactants0, gaplim=5):
@@ -42,7 +37,7 @@ def get_intraD_react_l(reactants0, gaplim=5):
                     "gap": 0,
                     "force_combination": True}]
         if len(atom_pairs) > 1:
-            disso_setting.concerted_pair=True
+            disso_setting.concerted_pair = True
             for atom_pair in atom_pairs[1:]:
                 at_combi_list = react_l[0]["atl"]
                 at3, at4 = atom_pair
@@ -154,51 +149,22 @@ def dissoxtbscan(reactants0, entry, reactionpath, count=0):
     for u in uhf_l:
         print(f"Simulating disso path {reactionpath}_{count}: R={reactants0}, atl={at_l}, uhf_sim={u} ...", end="")
         scan_wd = join(scanwd, f"{reactionpath}_{count}")
-        create_folder(scan_wd)
-        write_xyz(coordinate, ele_l, "coord")
+        reactantinfo = {"reactants": [struc],
+                        "unreacted": unreacted,
+                        "at_l": at_l, "simuhf": u,
+                        "scanwd": f"{reactionpath}_{count}"}  # reactants info
 
-        status = CallxTB(scan_wd,
-                         custom_settings={"charge": charge, "uhf": u,
-                                          "etemp": xtbsetting.scan_etemp}).scan(
-            constrain_setting)
-        if status == 0:
-            endxyz, ele_l_end = read_coord(join(scan_wd, "xtbopt.xyz"))
-            bo = read_bo(join(scan_wd, "wbo"))
-            constrain_l = get_topo(endxyz, ele_l_end, bo)
-            atcharge = read_atcharge(join(scan_wd, "charges"))
-            if storage.setting.searching_setting.general.sep_mode != 0:
-                # do a unconstarined opt
-                optwd = join(scan_wd, "opt")
-                create_folder(optwd)
-                shutil.copyfile(join(scan_wd, 'xtbopt.xyz'), join(optwd, 'coord.xyz'))
-                status2 = CallxTB(optwd,
-                                  custom_settings={"charge": charge, "uhf": u}).opt()
-                if status2 == 0:
-                    endxyz, ele_l_end = read_coord(join(optwd, "xtbopt.xyz"))
-                    bo = read_bo(join(optwd, "wbo"))
-                    constrain_l = get_topo(endxyz, ele_l_end, bo)
-                    atcharge = read_atcharge(join(optwd, "charges"))
+        results = SinglePathSearch(coordinate,
+                                   ele_l,
+                                   scan_wd,
+                                   u, charge,
+                                   reactants=[struc]).run_one_scan_search(constrain_setting, "dissoD", reactantinfo,
+                                                                          nel)
+        if results:
+            output_d[f"{reactionpath}_{count}"] = results
 
-            endxyz_mb = get_molbar_from_coordinates(endxyz, ele_l_end)
-            output_d[f"{reactionpath}_{count}"] = [{"reactants": [struc],
-                                                    "unreacted": unreacted,
-                                                    "at_l": at_l, "simuhf": u,
-                                                    "scanwd":f"{reactionpath}_{count}"},  # reactants info
-                                                   {"atcharge": atcharge,
-                                                    "charge": charge,
-                                                    "nel": nel,
-                                                    "uhf": u,
-                                                    "coordinate": endxyz,
-                                                    "ele_l": ele_l_end,
-                                                    "bo": bo,
-                                                    "atomic_connection": constrain_l,
-                                                    "mb":endxyz_mb},  # endxyz info
-                                                   {"type": "disso"}  # reaction info
-                                                   ]
-            print(f"done.")
         else:
             print(f"failed.")
-
         count += 1
     return output_d, count
 
@@ -234,63 +200,24 @@ def dissombff(reactants0, entry, reactionpath, count=0):
     mbxyz0, ele_l0 = get_endxyz_from_mb(atom_connection, coordinate, ele_l, set_angles=False)
     mbxyz, mbele_l = get_endxyz_from_mb(atom_connection, mbxyz0, ele_l0, set_angles=True)
 
-
     for u in uhf_l:
-        print(f"Simulating disso path {reactionpath}_{count}: R={reactants0}, atl={at_l}, uhf_sim={u} ...",end="")
+        print(f"Simulating disso path {reactionpath}_{count}: R={reactants0}, atl={at_l}, uhf_sim={u} ...", end="")
         scan_wd = join(scanwd, f"{reactionpath}_{count}")
-        create_folder(scan_wd)
-        write_xyz(coordinate, ele_l, "coord")
-        with open(join(scan_wd, "atl"), "w") as f:
-            f.write(json.dumps(entry))
+        reactantinfo = {"reactants": [struc],
+                        "unreacted": unreacted,
+                        "at_l": at_l, "simuhf": u,
+                        "scanwd": f"{reactionpath}_{count}"}  # reactants info
+        results = SinglePathSearch(mbxyz,
+                                   mbele_l,
+                                   u,charge,scan_wd,
+                                   reactants=[struc]).run_xtbopt_for_mbff_search(atom_connection, push_l,
+                                                                                 "dissoD", reactantinfo, nel)
 
-        with open(join(scan_wd, "newbond"), "w") as f:
-            for item in atom_connection:
-                f.write(json.dumps(item) + "\n")
+        if results:
+            output_d[f"{reactionpath}_{count}"] = results
 
-        # for debug
-        # write_xyz(mbxyz0, ele_l0, "coord_mb0")
-        write_xyz(mbxyz, mbele_l, "coord_mb")
-
-        status = CallxTB(scan_wd,
-                         custom_settings={"charge": charge, "uhf": u, "coordfn": "coord_mb",
-                                          "etemp": storage.setting.xtb_setting.scan_etemp
-                                          }).constrained_opt(newbond=atom_connection[-len(push_l):])
-        if status == 0:
-            endxyz, ele_l_end = read_coord(join(scan_wd, "xtbopt.xyz"))
-            bo = read_bo(join(scan_wd, "wbo"))
-            constrain_l = get_topo(endxyz, ele_l_end, bo)
-            atcharge = read_atcharge(join(scan_wd, "charges"))
-            if storage.setting.searching_setting.general.sep_mode != 0:
-                # do a unconstarined opt
-                optwd = join(scan_wd, "opt")
-                create_folder(optwd)
-                shutil.copyfile(join(scan_wd, 'xtbopt.xyz'), join(optwd, 'coord.xyz'))
-                status2 = CallxTB(optwd,
-                                  custom_settings={"charge": charge, "uhf": u,
-                                                   "etemp": storage.setting.xtb_setting.scan_etemp}).opt()
-                if status2 == 0:
-                    endxyz, ele_l_end = read_coord(join(optwd, "xtbopt.xyz"))
-                    bo = read_bo(join(optwd, "wbo"))
-                    constrain_l = get_topo(endxyz, ele_l_end, bo)
-                    atcharge = read_atcharge(join(optwd, "charges"))
-
-            endxyz_mb = get_molbar_from_coordinates(endxyz, ele_l_end)
-            output_d[f"{reactionpath}_{count}"] = [{"reactants": [struc],
-                                                    "unreacted": unreacted,
-                                                    "at_l": at_l, "simuhf": u,
-                                                    "scanwd":f"{reactionpath}_{count}"},  # reactants info
-                                                   {"atcharge": atcharge,
-                                                    "charge": charge,
-                                                    "nel": nel,
-                                                    "uhf": u,
-                                                    "coordinate": endxyz,
-                                                    "ele_l": ele_l_end,
-                                                    "bo": bo,
-                                                    "atomic_connection": constrain_l,
-                                                    "mb":endxyz_mb},  # endxyz info
-                                                   {"type": "disso"}  # reaction info
-                                                   ]
             print(f"done.")
+
         else:
             print(f"failed.")
         count += 1

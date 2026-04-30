@@ -1,18 +1,13 @@
 # Reaction simulation for intramolecular association
 import json
 from os.path import join
-import shutil
 import numpy as np
-import pandas as pd
-from aRST.script.toolbox import create_folder, write_xyz, read_coord, read_bo, read_atcharge, get_topo
-from aRST.script.do_scan import build_push_l, get_endxyz_from_mb
-from aRST.script.spr import SPR, SDP
-from aRST.script.geom import Coord
-from aRST.script.callsys import CallxTB
+from aRST.script.spr import SPR
+from aRST.script.do_scan import get_endxyz_from_mb, build_push_l
+from aRST.script.exploration.pathsearch import SinglePathSearch
 import aRST.script.initialization as storage
 from aRST.script.head import print_react_l
 import copy
-from molbar.barcode import get_molbar_from_coordinates
 
 
 def get_intraA_react_l(reactants0):
@@ -66,7 +61,6 @@ def check_scan_uhf_intraA(entry):
 
 def intraxtbscan(reactants0, entry, reactionpath, count=0):
     generalsetting = storage.setting.searching_setting.general
-    intrasetting = storage.setting.searching_setting.intra
     xtbsetting = storage.setting.xtb_setting
     scanwd = generalsetting.scanwd
     output_d = {}
@@ -92,69 +86,23 @@ def intraxtbscan(reactants0, entry, reactionpath, count=0):
             "step": xtbsetting.step
         }
     }
-    if intrasetting.loose_bond and len(ele_l) > 2:
-        # searching weakest bond
-        allbonds = SDP([struc],
-                       exclude_elements=generalsetting.exclude_elements,
-                       exclude_pairs=generalsetting.exclude_pairs
-                       )
-        allbonds = sorted(allbonds, key=lambda x: x["mbo"])
-        item = allbonds[0]
-        if item["mbo"] <= 0.9:
-            at1, at2 = item["atl"]
-            at1, at2 = int(at1), int(at2)
-            dd = np.round(Coord(coordinate, ele_l).get_ats_distance(int(at1), int(at2)), 3)
-            constrain_setting["constrain"]["loose_bond"] = at1 + 1, at2 + 1, dd
 
     unreacted = sorted((x for x in reactants0 if x != struc), key=int, reverse=True)
+
     for u in uhf_l:
-        print(f"Simulating intraA path {reactionpath}_{count}: R={reactants0}, atl={at_l}, uhf_sim={u} ...",end="")
+        print(f"Simulating intraA path {reactionpath}_{count}: R={reactants0}, atl={at_l}, uhf_sim={u} ...", end="")
         scan_wd = join(scanwd, f"{reactionpath}_{count}")
-        create_folder(scan_wd)
-        write_xyz(coordinate, ele_l, "coord")
-        with open(join(scan_wd, "atl"), "w") as f:
-            f.write(json.dumps(entry))
-
-        # call xtb scan
-        status = CallxTB(scan_wd,
-                         custom_settings={"charge": charge, "uhf": u,
-                                          "etemp": xtbsetting.scan_etemp}).scan(
-            constrain_setting)
-        if status == 0:
-            endxyz, ele_l_end = read_coord(join(scan_wd, "xtbopt.xyz"))
-            bo = read_bo(join(scan_wd, "wbo"))
-            constrain_l = get_topo(endxyz, ele_l_end, bo)
-            atcharge = read_atcharge(join(scan_wd, "charges"))
-
-            if generalsetting.sep_mode != 0:
-                # do a unconstarined opt
-                optwd = join(scan_wd, "opt")
-                create_folder(optwd)
-                shutil.copyfile(join(scan_wd, 'xtbopt.xyz'), join(optwd, 'coord.xyz'))
-                status2 = CallxTB(optwd, custom_settings={"charge": charge, "uhf": u}).opt()
-                if status2 == 0:
-                    endxyz, ele_l_end = read_coord(join(optwd, "xtbopt.xyz"))
-                    bo = read_bo(join(optwd, "wbo"))
-                    constrain_l = get_topo(endxyz, ele_l_end, bo)
-                    atcharge = read_atcharge(join(optwd, "charges"))
-
-            endxyz_mb = get_molbar_from_coordinates(endxyz, ele_l_end)
-            output_d[f"{reactionpath}_{count}"] = [{"reactants": [struc],
-                                                    "unreacted": unreacted,
-                                                    "at_l": at_l,
-                                                    "simuhf": u,
-                                                    "scanwd":f"{reactionpath}_{count}"},  # reactants info
-                                                   {"atcharge": atcharge,
-                                                    "charge": charge,
-                                                    "nel": nel,
-                                                    "uhf": u,
-                                                    "coordinate": endxyz,
-                                                    "ele_l": ele_l_end,
-                                                    "bo": bo,
-                                                    "atomic_connection": constrain_l,
-                                                    "mb":endxyz_mb},  # endxyz info
-                                                   {"type": "intraA"}  # reaction info
-                                                   ]
+        reactantinfo = {"reactants": [struc],
+                        "unreacted": unreacted,
+                        "at_l": at_l, "simuhf": u,
+                        "scanwd": f"{reactionpath}_{count}"}  # reactants info
+        results = SinglePathSearch(coordinate,
+                                   ele_l,
+                                   u, charge,scan_wd,
+                                   reactants=[struc]).run_one_scan_search(constrain_setting,
+                                                                          "intraA", reactantinfo, nel)
+        if results:
+            output_d[f"{reactionpath}_{count}"] = results
             print(f"done.")
         else:
             print(f"failed.")
@@ -186,84 +134,25 @@ def intrambff(reactants0, entry, reactionpath, count=0):
         atom_connection.append({"atoms": [at1, at2], "value": value})
 
     unreacted = sorted((x for x in reactants0 if x != struc), key=int, reverse=True)
-    # try first forcing set_angles=Ture to generate target bond connection
-    mb_test, mb_ele_test = get_endxyz_from_mb(atom_connection, coordinate, ele_l,
-                                              set_angles=True,
-                                              repulsion_charge=100)
-    connectd_trigger = True
-    for item in push_l:
-        at1, at2 = int(item[0]), int(item[1])
-        value = np.round(float(item[3]), 2)
-        bond_length = Coord(mb_test, mb_ele_test).get_ats_distance(at1 - 1, at2 - 1)
-        if bond_length > value * 1.05:
-            connectd_trigger = False
-            break
+    mbxyz0, ele_l0 = get_endxyz_from_mb(atom_connection, coordinate, ele_l, set_angles=False)
+    mbxyz, mbele_l = get_endxyz_from_mb(atom_connection, mbxyz0, ele_l0, set_angles=True)
+
     for u in uhf_l:
-        print(f"Simulating intraA path {reactionpath}_{count}: R={reactants0}, atl={at_l}, uhf_sim={u} ...",end="")
+        print(f"Simulating intraA path {reactionpath}_{count}: R={reactants0}, atl={at_l}, uhf_sim={u} ...", end="")
         scan_wd = join(scanwd, f"{reactionpath}_{count}")
-        create_folder(scan_wd)
-
-        write_xyz(coordinate, ele_l, "coord")
-        with open(join(scan_wd, "atl"), "w") as f:
-            f.write(json.dumps(entry))
-
-        with open(join(scan_wd, "newbond"), "w") as f:
-            for item in atom_connection:
-                f.write(json.dumps(item) + "\n")
-
-        if not connectd_trigger:
-            # otherwise do 2. FF constrain opt
-            mbxyz0, ele_l0 = get_endxyz_from_mb(atom_connection, coordinate, ele_l,
-                                                set_angles=False,
-                                                repulsion_charge=100)
-            write_xyz(mbxyz0, ele_l0, "coord_mb0")
-            mbxyz0 = pd.read_table(join(scan_wd, "coord_mb0.xyz"), header=None, skiprows=2, sep='\s+')
-            mbxyz, mb_ele_l = get_endxyz_from_mb(atom_connection, mbxyz0, ele_l0,
-                                                 set_angles=True,
-                                                 repulsion_charge=100)
-        else:
-            mbxyz, mb_ele_l = mb_test, mb_ele_test
-        write_xyz(mbxyz, mb_ele_l, "coord_mb")
-        status = CallxTB(scan_wd,
-                         custom_settings={"charge": charge, "uhf": u, "coordfn": "coord_mb",
-                                          "k": xtbsetting.k,
-                                          "etemp": xtbsetting.scan_etemp}
-                         ).constrained_opt(newbond=atom_connection[-len(push_l):])
-        if status == 0:
-            endxyz, ele_l_end = read_coord(join(scan_wd, "xtbopt.xyz"))
-            bo = read_bo(join(scan_wd, "wbo"))
-            constrain_l = get_topo(endxyz, ele_l_end, bo)
-            atcharge = read_atcharge(join(scan_wd, "charges"))
-            if generalsetting.sep_mode != 0:
-                # do a unconstarined opt
-                optwd = join(scan_wd, "opt")
-                create_folder(optwd)
-                shutil.copyfile(join(scan_wd, 'xtbopt.xyz'), join(optwd, 'coord.xyz'))
-                status2 = CallxTB(optwd, custom_settings={"charge": charge, "uhf": u}).opt()
-                if status2 == 0:
-                    endxyz, ele_l_end = read_coord(join(optwd, "xtbopt.xyz"))
-                    bo = read_bo(join(optwd, "wbo"))
-                    constrain_l = get_topo(endxyz, ele_l_end, bo)
-                    atcharge = read_atcharge(join(optwd, "charges"))
-
-            endxyz_mb = get_molbar_from_coordinates(endxyz, ele_l_end)
-            output_d[f"{reactionpath}_{count}"] = [{"reactants": [struc],
-                                                    "unreacted": unreacted,
-                                                    "at_l": at_l,
-                                                    "simuhf": u,
-                                                    "scanwd":f"{reactionpath}_{count}"},  # reactants info
-                                                   {"atcharge": atcharge,
-                                                    "charge": charge,
-                                                    "nel": nel,
-                                                    "uhf": u,
-                                                    "coordinate": endxyz,
-                                                    "ele_l": ele_l_end,
-                                                    "bo": bo,
-                                                    "atomic_connection": constrain_l,
-                                                    "mb":endxyz_mb},  # endxyz info
-                                                   {"type": "intraA"}  # reaction info
-                                                   ]
+        reactantinfo = {"reactants": [struc],
+                        "unreacted": unreacted,
+                        "at_l": at_l, "simuhf": u,
+                        "scanwd": f"{reactionpath}_{count}"}  # reactants info
+        results = SinglePathSearch(mbxyz,
+                                   mbele_l,
+                                   u, charge, scan_wd,
+                                   reactants=[struc]).run_xtbopt_for_mbff_search(atom_connection, push_l,
+                                                                                 "intraA", reactantinfo, nel)
+        if results:
+            output_d[f"{reactionpath}_{count}"] = results
             print(f"done.")
+
         else:
             print(f"failed.")
         count += 1

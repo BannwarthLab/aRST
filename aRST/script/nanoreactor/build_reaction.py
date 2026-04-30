@@ -103,9 +103,6 @@ def _get_path_possibility(newadded_node_l):
     k = 1.9872041 * 10 - 3  # kcal/mol
     etemp = storage.setting.xtb_setting.scan_etemp
     p_l = np.array([np.exp(-(E / (k * etemp))) for E in E_rxn_l])
-    print("!!")
-    print(E_rxn_l)
-    print(p_l)
     return p_l
 
 
