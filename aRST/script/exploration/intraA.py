@@ -144,7 +144,7 @@ def intraxtbscan(reactants0, entry, reactionpath, count=0):
                                                     "at_l": at_l,
                                                     "simuhf": u,
                                                     "scanwd":f"{reactionpath}_{count}"},  # reactants info
-                                                   {"atomic_charge": atcharge,
+                                                   {"atcharge": atcharge,
                                                     "charge": charge,
                                                     "nel": nel,
                                                     "uhf": u,
@@ -252,7 +252,7 @@ def intrambff(reactants0, entry, reactionpath, count=0):
                                                     "at_l": at_l,
                                                     "simuhf": u,
                                                     "scanwd":f"{reactionpath}_{count}"},  # reactants info
-                                                   {"atomic_charge": atcharge,
+                                                   {"atcharge": atcharge,
                                                     "charge": charge,
                                                     "nel": nel,
                                                     "uhf": u,

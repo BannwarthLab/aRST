@@ -19,18 +19,18 @@ def remove_file(old_path, new_path):
 
 class CallORCA:
     @classmethod
-    def default_settings(cls, setting):
+    def default_settings(cls, orcasetting):
         """Dynamically generates default settings based on the `setting` class."""
         return {
-            "functional": setting.orca_setting.functional,
-            "basis": setting.orca_setting.basis,
+            "functional": orcasetting.functional,
+            "basis": orcasetting.basis,
             "charge": 0,
             "m": 1,
             "fn": "coord",
             "caltyp": "SP",
             "caltyp2": "RKS",  # This can be updated dynamically if needed
-            "cpcm": setting.orca_setting.cpcm,  # only use cpcm when opt
-            "ncpu": setting.orca_setting.ncpu,
+            "cpcm": orcasetting.cpcm,  # only use cpcm when opt
+            "ncpu": orcasetting.ncpu,
         }
 
     def __init__(self, wd, command_d=None, custom_settings=None):
@@ -39,7 +39,7 @@ class CallORCA:
             self.cmd = mydict(command_d)
         else:
             import aRST.script.initialization as storage
-            command_d = self.default_settings(storage.setting)
+            command_d = self.default_settings(storage.setting.orca_setting)
             if custom_settings is not None:
                 command_d.update(custom_settings)
 
@@ -47,18 +47,24 @@ class CallORCA:
             self.cmd = mydict(command_d)
 
     def orcasubprocess(self, cmd_string, writeenergy=True, removegbw=True):
-        with open(f'{self.wd}/orca.out', 'w') as stdout_file, open(f'{self.wd}/orca_err.out', 'w') as stderr_file:
+        out_path = f'{self.wd}/orca.out'
+        err_path = f'{self.wd}/orca_err.out'
+
+        with open(out_path, 'w') as stdout_file, open(err_path, 'w') as stderr_file:
             p = subprocess.Popen(cmd_string, stdout=stdout_file, stderr=stderr_file, shell=True)
             p.wait()
             rc = p.returncode
-        if rc == 0 and writeenergy:
-            with open(f'{self.wd}/orca.out', 'r') as f:
-                lines = f.readlines()
-                for line in reversed(lines):
-                    if 'FINAL SINGLE' in line:
-                        with open(f'{self.wd}/ENERGY', 'w') as f2:
-                            f2.write(str(re.findall(r'\-?\d+\.?\d*', line)[0]))
-                        break
+        if rc == 0:
+            if os.path.exists(err_path) and os.path.getsize(err_path) == 0:
+                os.remove(err_path)
+            if writeenergy:
+                with open(out_path, 'r') as f:
+                    lines = f.readlines()
+                    for line in reversed(lines):
+                        if 'FINAL SINGLE' in line:
+                            with open(f'{self.wd}/ENERGY', 'w') as f2:
+                                f2.write(str(re.findall(r'\-?\d+\.?\d*', line)[0]))
+                            break
         extensions_to_remove = ['.densities', '.opt']
         keep_list = ['.xyz', '.inp', '.in', '.out', '.input', '.molden', '.gbw']
         if removegbw:
@@ -113,7 +119,8 @@ class CallORCA:
         return coordinate, ele_l
 
     def get_energy_from_out(self, out="orca.out"):
-        Esp = None
+        import numpy as np
+        Esp = np.inf
         if exists(join(self.wd, "ENERGY")):
             with open(join(self.wd, "ENERGY"), 'r') as file:
                 Esp = float(file.readlines()[0])
@@ -140,15 +147,15 @@ class CallORCA:
 
 class CallCrest:
     @classmethod
-    def default_settings(cls, setting):
+    def default_settings(cls, xtbsetting):
         """Dynamically generates default settings based on the `setting` class."""
-        return {"method": setting.xtb_setting.method,
+        return {"method": xtbsetting.method,
                 "coordfn": "coord",
-                "optlevel": setting.xtb_setting.optlevel,
+                "optlevel": xtbsetting.optlevel,
                 "charge": 0,
                 "uhf": 0,
-                "alpb": setting.xtb_setting.alpb,
-                "etemp": setting.xtb_setting.struc_etemp,
+                "alpb": xtbsetting.alpb,
+                "etemp": xtbsetting.struc_etemp,
                 }
 
     def __init__(self, wd, command_d=None, custom_settings=None):
@@ -157,17 +164,21 @@ class CallCrest:
             self.cmd = mydict(command_d)
         else:
             import aRST.script.initialization as storage
-            command_d = self.default_settings(storage.setting)
+            command_d = self.default_settings(storage.setting.xtb_setting)
             if custom_settings is not None:
                 command_d.update(custom_settings)
 
             self.cmd = mydict(command_d)
 
     def crestsubprocess(self, cmd_string):
-        with open(f'{self.wd}/crest.out', 'w') as stdout_file, open(f'{self.wd}/crest_err.out', 'w') as stderr_file:
+        out_path = f'{self.wd}/crest.out'
+        err_path = f'{self.wd}/crest_err.out'
+        with open(out_path, 'w') as stdout_file, open(err_path, 'w') as stderr_file:
             p = subprocess.Popen(cmd_string, stdout=stdout_file, stderr=stderr_file, shell=True)
             p.wait()
             rc = p.returncode
+        if rc==0 and os.path.exists(err_path) and os.path.getsize(err_path) == 0:
+            os.remove(err_path)
         return rc
 
     def generate_cmd_string(self):
@@ -258,15 +269,15 @@ class CallCrest:
 
 class CallxTB:
     @classmethod
-    def default_settings(cls, setting):
+    def default_settings(cls, xtbsetting):
         """Dynamically generates default settings based on the `setting` class."""
-        return {"method": setting.xtb_setting.method,
+        return {"method": xtbsetting.method,
                 "coordfn": "coord",
-                "optlevel": setting.xtb_setting.optlevel,
+                "optlevel": xtbsetting.optlevel,
                 "charge": 0,
                 "uhf": 0,
-                "alpb": setting.xtb_setting.alpb,
-                "etemp": setting.xtb_setting.struc_etemp,
+                "alpb": xtbsetting.alpb,
+                "etemp": xtbsetting.struc_etemp,
                 }
 
     def __init__(self, wd, command_d=None, custom_settings=None):
@@ -275,25 +286,30 @@ class CallxTB:
             self.cmd = mydict(command_d)
         else:
             import aRST.script.initialization as storage
-            command_d = self.default_settings(storage.setting)
+            command_d = self.default_settings(storage.setting.xtb_setting)
             if custom_settings is not None:
                 command_d.update(custom_settings)
 
             self.cmd = mydict(command_d)
 
     def xtbsubprocess(self, cmd_string, writeenergy=False):
-        with open(f'{self.wd}/xtb.out', 'w') as stdout_file, open(f'{self.wd}/xtb_err.out', 'w') as stderr_file:
+        out_path = f'{self.wd}/xtb.out'
+        err_path = f'{self.wd}/xtb_err.out'
+        with open(out_path, 'w') as stdout_file, open(err_path, 'w') as stderr_file:
             p = subprocess.Popen(cmd_string, stdout=stdout_file, stderr=stderr_file, shell=True)
             p.wait()
             rc = p.returncode
-        if rc == 0 and writeenergy:
-            with open(f'{self.wd}/xtb.out', 'r') as f:
-                lines = f.readlines()
-                for line in reversed(lines):
-                    if 'TOTAL ENERGY' in line:
-                        with open(f'{self.wd}/ENERGY', 'w') as f2:
-                            f2.write(str(re.findall(r'\-?\d+\.?\d*', line)[0]))
-                        break
+        if rc == 0:
+            if os.path.exists(err_path) and os.path.getsize(err_path) == 0:
+                os.remove(err_path)
+            if writeenergy:
+                with open(err_path, 'r') as f:
+                    lines = f.readlines()
+                    for line in reversed(lines):
+                        if 'TOTAL ENERGY' in line:
+                            with open(f'{self.wd}/ENERGY', 'w') as f2:
+                                f2.write(str(re.findall(r'\-?\d+\.?\d*', line)[0]))
+                            break
         return rc
 
     def generate_cmd_string(self, opt=False, xtbmlversion=False, bar1M=False):
@@ -578,7 +594,8 @@ class CallxTB:
 
     def get_Esp_from_out(self, out="xtb.out"):
         # unit in eh
-        Esp = None
+        import numpy as np
+        Esp = np.inf
         if exists(join(self.wd, "ENERGY")):
             with open(join(self.wd, "ENERGY"), 'r') as file:
                 Esp = float(file.readlines()[0])
@@ -609,36 +626,6 @@ class CallxTB:
                 Esolv = float(file.readlines()[0])
         return Esolv
 
-    # def get_topo(self, out="xtbtopo.mol"):
-    #     # constrain_l, ele required in mb; at index starts with 1
-    #     constrain_l, ele = None, None
-    #     coord = None
-    #     for file in os.listdir(self.wd):
-    #         if file.endswith("xyz"):
-    #             from aRST.script.toolbox import read_coord
-    #             coord = read_coord(join(self.wd, file))
-    #             break
-    #     if coord is not None:
-    #         if exists(join(self.wd, out)):
-    #             constrain_l, ele = [], []
-    #             from aRST.script.geom import Coord
-    #             # V2000
-    #             with open(join(self.wd, out)) as f:
-    #                 lines = f.readlines()
-    #             ln_parts = lines[3].split()
-    #             nat, nbond = int(ln_parts[0]), int(ln_parts[1])
-    #
-    #             for i in range(nat):
-    #                 ele.append(lines[4 + i].split()[3])
-    #             for i in range(nbond):
-    #                 ln_parts = lines[4 + nat + i].split()
-    #                 at1, at2 = int(ln_parts[0]), int(ln_parts[1])
-    #                 bond_length = Coord(coord).get_ats_distance(at1 - 1, at2 - 1)
-    #                 constrain_l.append({"atoms": [at1, at2], "value": bond_length})
-    #         else:
-    #             # single at
-    #             constrain_l, ele = [], [str(coord.iloc[0, 0])]
-    #     return constrain_l, ele
 
 
 class CallTerachem:
@@ -747,16 +734,16 @@ class CallMolBar:
 
 class CallgXTB:
     @classmethod
-    def default_settings(cls, setting):
+    def default_settings(cls, xtbsetting):
         # use gfn2 setting to obtain .charg and .uhf
         """Dynamically generates default settings based on the `setting` class."""
-        return {"method": setting.xtb_setting.method,
+        return {"method": xtbsetting.method,
                 "coordfn": "coord",
-                "optlevel": setting.xtb_setting.optlevel,
+                "optlevel": xtbsetting.optlevel,
                 "charge": 0,
                 "uhf": 0,
-                "alpb": setting.xtb_setting.alpb,
-                "etemp": setting.xtb_setting.struc_etemp,
+                "alpb": xtbsetting.alpb,
+                "etemp": xtbsetting.struc_etemp,
                 }
 
     def __init__(self, wd, command_d=None, custom_settings=None):
@@ -765,57 +752,22 @@ class CallgXTB:
             self.cmd = mydict(command_d)
         else:
             import aRST.script.initialization as storage
-            command_d = self.default_settings(storage.setting)
+            command_d = self.default_settings(storage.setting.xtb_setting)
             if custom_settings is not None:
                 command_d.update(custom_settings)
 
             self.cmd = mydict(command_d)
-
-    # def xtbsubprocess(self, cmd_string, writeenergy=False):
-    #     with open(f'{self.wd}/xtb.out', 'w') as stdout_file, open(f'{self.wd}/xtb_err.out', 'w') as stderr_file:
-    #         p = subprocess.Popen(cmd_string, stdout=stdout_file, stderr=stderr_file, shell=True)
-    #         p.wait()
-    #         rc = p.returncode
-    #     if rc == 0 and writeenergy:
-    #         with open(f'{self.wd}/xtb.out', 'r') as f:
-    #             lines = f.readlines()
-    #             for line in reversed(lines):
-    #                 if 'TOTAL ENERGY' in line:
-    #                     with open(f'{self.wd}/ENERGY', 'w') as f2:
-    #                         f2.write(str(re.findall(r'\-?\d+\.?\d*', line)[0]))
-    #                     break
-    #     return rc
-
     def gxtbsubprocess(self, cmd_string):
-        with open(f'{self.wd}/gxtb.out', 'w') as stdout_file, open(f'{self.wd}/gxtb_err.out', 'w') as stderr_file:
+        out_path = f'{self.wd}/gxtb.out'
+        err_path = f'{self.wd}/gxtb_err.out'
+        with open(out_path, 'w') as stdout_file, open(err_path, 'w') as stderr_file:
             p = subprocess.Popen(cmd_string, stdout=stdout_file, stderr=stderr_file, shell=True)
             p.wait()
             rc = p.returncode
+            if rc==0 and os.path.exists(err_path) and os.path.getsize(err_path) == 0:
+                os.remove(err_path)
         return rc
 
-    # def generate_XTBcmd_string(self, opt=False):
-    #     cmd_string = os.environ['XTB_BIN'] + " "
-    #     coordfn = self.cmd.get_value("coordfn")
-    #     if coordfn is None:
-    #         raise Exception(f"coord in {self.wd} can't find right coordfn name")
-    #     cmd_string += f"{coordfn}.xyz "
-    #     if opt:
-    #         optlevel = self.cmd.get_value("optlevel")
-    #         cmd_string += f"--opt {optlevel} " if optlevel else "--opt "
-    #
-    #     cmd_string += f"--{self.cmd.get_value('method')} " \
-    #         if self.cmd.get_value('method') else ""
-    #     cmd_string += f"-c {self.cmd.get_value('charge')} " \
-    #         if self.cmd.get_value('charge') else ""
-    #     cmd_string += f"--uhf {self.cmd.get_value('uhf')} " \
-    #         if self.cmd.get_value('uhf') else ""
-    #     cmd_string += f"--etemp {self.cmd.get_value('etemp')} " \
-    #         if self.cmd.get_value('etemp') else ""
-    #     cmd_string += f"--alpb {self.cmd.get_value('alpb')} " \
-    #         if self.cmd.get_value('alpb') else ""
-    #     cmd_string += f"{self.cmd.get_value('extracmd')} " \
-    #         if self.cmd.get_value('extracmd') else ""
-    #     return cmd_string
 
     def generate_gXTBcmd_string(self):
         cmd_string = os.environ['GXTB_BIN'] + " -c "
@@ -853,8 +805,9 @@ class CallgXTB:
         return rc
 
     def get_Esp_from_out(self, out="gxtb.out"):
+        import numpy as np
         # unit in eh
-        Esp = None
+        Esp = np.inf
         if exists(join(self.wd, "NOT_CONVERGED")):
             return Esp
 

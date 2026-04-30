@@ -194,15 +194,18 @@ class ReactionNetwork:
                 continue
 
             info = self.get_reaction_info(node)
+            products = info["products"]
+            if "unknow" in products:
+                continue
             if "reaction_exist" not in info.keys() or not info["reaction_exist"]:
                 reactants = info["reactants"]
                 E_r = [storage.allstruc.get(_).energy.sp for _ in reactants]
-                products = info["products"]
                 E_p = [storage.allstruc.get(_).energy.sp for _ in products]
                 E_rxn = sum(E_p) - sum(E_r)
                 E_rxn_kcal = E_rxn * 627.503
                 info["E_rxn"] = E_rxn_kcal
             else:
+                # has a refid or already recalc
                 refnode = self.rxn_idx_to_nodeid[info["ref_id"]]
                 info["E_rxn"] = self.get_reaction_info(refnode)["E_rxn"]
         if print_item_tobeupdated:

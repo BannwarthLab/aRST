@@ -53,7 +53,12 @@ class Singlestruc:
             if proc == 0:
                 self.coordinate, self.ele_l = read_coord(join(comdir, "xtbopt.xyz"))
             else:
-                print(f'Warning: struc in {comdir} opt at xtb failed, continue with unopt struc')
+                proc = CallxTB(comdir, custom_settings={"charge": self.c, "uhf": self.m - 1}).sp()
+                print(f'Warning: struc in {comdir} opt at xtb failed, try with unopt struc')
+                if proc == 0:
+                    return self.coordinate, self.ele_l
+                else:
+                    self.coordinate, self.ele_l
         else:
             raise ValueError(f"Unknown engine for opt: {engine}")
         return self.coordinate, self.ele_l
@@ -84,6 +89,9 @@ class Singlestruc:
                 print(f'Warning: struc in {comdir} sp at ORCA failed, continue anyhow')
         else:
             raise ValueError(f"Unknown engine for sp: {engine}")
+        if energy is None:
+            energy = np.inf
+            print(f'Warning: struc in {comdir} sp prop fails, structure energy will be set as inf')
         return energy
 
     def _idealize(self, topo_l):
@@ -238,43 +246,60 @@ class Supramolecule:
         self.Fragments_atcharge_list = []
         self.Fragments_nel_list = []
         self.Fragments_atomidx_list = []
+        self.Fragments_topo_list = []
 
     def split(self):
-        components = list(nx.connected_components(self.Sgraph))  # [{1, 2, 3, 4}, {5, 6}, {7}]
+        components = list(nx.connected_components(self.Sgraph))
 
-        # tmp build
         frag_coord_list = []
         frag_ele_list = []
         frag_atcharge_list = []
         frag_c_float_list = []
         frag_nel_list = []
+        frag_topo_list = []
+
+        # print("sum Supra_atcharge =", float(np.sum(self.Supra_atcharge)))
+        # print("totc =", self.totc)
         for comp in components:
-            atom_idxs = [i - 1 for i in comp]  # change to index starts 0
-            frag_coord = self.Supra_coordinate[atom_idxs]
-            frag_ele = self.Supra_ele_l[atom_idxs]
-            frag_atcharge = [self.Supra_atcharge[i] for i in atom_idxs]
+
+            comp_sorted = sorted(comp)
+            atom_idxs0 = [i - 1 for i in comp_sorted]
+
+            # map supra global 1-based -> fragment local 1-based
+            global_to_local = {g: l for l, g in enumerate(comp_sorted, start=1)}
+
+            frag_coord = self.Supra_coordinate[atom_idxs0]
+            frag_ele = [self.Supra_ele_l[i] for i in atom_idxs0]
+            frag_atcharge = [self.Supra_atcharge[i] for i in atom_idxs0]
 
             frag_c_float = float(np.sum(frag_atcharge))
+
+            tmp_topo_l = []
+            for item in self.Supra_topo_l:
+                at1, at2 = item["atoms"]  # 1-based topo labels
+                if at1 in global_to_local and at2 in global_to_local:
+                    new_item = {
+                        "atoms": [global_to_local[at1], global_to_local[at2]],
+                        "value": item["value"]
+                    }
+                    if "mbo" in item:
+                        new_item["mbo"] = item["mbo"]
+                    tmp_topo_l.append(new_item)
 
             frag_coord_list.append(frag_coord)
             frag_ele_list.append(frag_ele)
             frag_atcharge_list.append(frag_atcharge)
             frag_c_float_list.append(frag_c_float)
+            frag_topo_list.append(tmp_topo_l)
 
-        if not np.isclose(sum(frag_c_float_list), self.totc, atol=1e-4):
-            raise ValueError(
-                f"sum of fragment float charges {sum(frag_c_float_list)} != total charge {self.totc}"
-            )
+        float_charge_sum = float(sum(frag_c_float_list))
 
-            # adjust fragment integer charges
         frag_c_int_list = self.adjust_fragment_charge(frag_c_float_list)
 
-        # compute fragment electron counts
         for frag_ele, frag_charge in zip(frag_ele_list, frag_c_int_list):
             frag_nel = sum(element[e] for e in frag_ele) - frag_charge
             frag_nel_list.append(int(frag_nel))
 
-        # final check
         if sum(frag_nel_list) != self.totnel:
             diff = self.totnel - sum(frag_nel_list)
             raise ValueError(
@@ -287,6 +312,7 @@ class Supramolecule:
         self.Fragments_atcharge_list = frag_atcharge_list
         self.Fragments_c_list = frag_c_int_list
         self.Fragments_nel_list = frag_nel_list
+        self.Fragments_topo_list = frag_topo_list
 
     def adjust_fragment_charge(self, frag_c_float_list):
         charge_l_flo = np.array(frag_c_float_list)
@@ -413,54 +439,92 @@ class Allstruc:
         self.Psupra_to_rxnid[(mb_full, c, m)] = refid
         self.rxnid_to_Psupra[refid] = (mb_full, c, m)
 
-
-def process_fragment_recursive(coordinate, ele_l, c, nel, rootfolder, depth=0, maxdepth=3):
-    if depth >= maxdepth:
-        return [{
-            "coordinate": coordinate,
-            "ele_l": ele_l,
-            "charge": c,
-            "nel": nel,
-        }]
-
+def optimize_fragment(coordinate, ele_l, charge, nel, mb, rootfolder):
     from aRST.script.toolbox import get_random_folder_name
+    import numpy as np
+    from os.path import join
+
     m_l = [1, 3] if nel % 2 == 0 else [2]
     E_sp = np.inf
-    features = None
-    mb = CallMolBar(coordinate, ele_l).get_mb()
-    ideal = True if storage.setting.searching_setting.general.scan_mode == 1 else False
+    best_features = None
+    ideal = False
+
     for m in m_l:
         random_name = get_random_folder_name()
         comdir = join(rootfolder, random_name)
-        tmpfeatures = Singlestruc(coordinate, ele_l, c, m, mb).process_workflow(rootfolder=comdir, ideal=ideal)
+
+        tmpfeatures = Singlestruc(
+            coordinate, ele_l, charge, m, mb
+        ).process_workflow(rootfolder=comdir, ideal=ideal)
+
         if tmpfeatures["Esp"] < E_sp:
             E_sp = tmpfeatures["Esp"]
-            features = tmpfeatures
+            best_features = tmpfeatures
 
+    return best_features
+def process_fragment_recursive(supra_info, rootfolder, depth=0,maxdepth=2):
+    """
+        Split first, then optimize each fragment, then recurse until each final
+        processed object is a single-fragment structure.
+
+        Returns
+        -------
+        list[dict]
+            A list of processed feature dicts for all terminal single-structure fragments.
+        """
+    from aRST.script.toolbox import get_random_folder_name
+    from molbar.barcode import get_molbar_from_coordinates
+
+    coordinate = supra_info["coordinate"]
+    ele_l = supra_info["ele_l"]
+    charge = supra_info["charge"]
+    nel = supra_info["nel"]
+    atcharge = supra_info["atcharge"]
+    atomic_connection = supra_info["atomic_connection"]
+    mb = supra_info.get("mb")
+    if mb is None:
+        mb = get_molbar_from_coordinates(coordinate, ele_l)
+    # separate
     sup = Supramolecule(
-        Supra_coordinate=features["coordinate"],
-        Supra_ele_l=features["ele_l"],
-        Supra_atcharge=features["atcharge"],
-        Supra_topo_l=features["atomic_connection"],
-        totnel=features["nel"],
-        totc=features["charge"]
+        Supra_coordinate=coordinate,
+        Supra_ele_l=ele_l,
+        Supra_atcharge=atcharge,
+        Supra_topo_l=atomic_connection,
+        totnel=nel,
+        totc=charge
     )
     sup.split()
 
+
+    if depth >= maxdepth:
+        return [optimize_fragment(coordinate, ele_l, charge, nel, mb, rootfolder)]
+
     if len(sup.Fragments_coordinate_list) == 1:
-        return [features]
+        return [optimize_fragment(coordinate, ele_l, charge, nel, mb, rootfolder)]
 
     out = []
-    for sub_coord, sub_ele, sub_c, sub_nel in zip(
+    for sub_coord, sub_ele, sub_c, sub_nel,sub_topo_l,sub_atcharge in zip(
             sup.Fragments_coordinate_list,
             sup.Fragments_ele_l_list,
             sup.Fragments_c_list,
             sup.Fragments_nel_list,
+            sup.Fragments_topo_list,
+            sup.Fragments_atcharge_list,
     ):
+        frag_info = {
+            "coordinate":sub_coord,
+            "ele_l":sub_ele,
+            "charge":sub_c,
+            "nel":sub_nel,
+            "atcharge":sub_atcharge,
+            "atomic_connection":sub_topo_l
+        }
+
         out.extend(
             process_fragment_recursive(
-                sub_coord, sub_ele, sub_c, sub_nel, rootfolder,
-                depth=depth + 1, maxdepth=maxdepth
+                frag_info,
+                rootfolder,
             )
         )
+
     return out

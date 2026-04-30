@@ -215,20 +215,14 @@ class SingleCycleSearch:
         mb = endxyz_info["mb"]
         refrxnid = storage.allstruc.Psupra_to_rxnid.get((mb, c, m))
         if refrxnid is not None:
-            print(refrxnid, mb)
             return [],refrxnid
         else:
             bufferwd = storage.setting.searching_setting.general.bufferwd
-            products_info = process_fragment_recursive(endxyz_info["coordinate"],
-                                                       endxyz_info["ele_l"],
-                                                       endxyz_info["charge"],
-                                                       endxyz_info["nel"], bufferwd)
+            products_info = process_fragment_recursive(endxyz_info, bufferwd)
             return products_info,None
 
     @staticmethod
     def evalueate_path(reactants_info, products_info, reaction_info, endxyz_info,refrxnid=None, layer=0, linkoldnode=True):
-
-
         from collections import Counter
         reactants = reactants_info["reactants"]
         unreactants = reactants_info["unreacted"]
@@ -252,13 +246,15 @@ class SingleCycleSearch:
                      # reaction_exist= T/F
                      # "ref_id"
                      }
-
         if refrxnid is not None:
-            print(info_temp["scanwd"],"!!!")
             refnodeid = rxnnetwork.rxn_idx_to_nodeid[refrxnid]
             refnodeinfo = rxnnetwork.get_reaction_info(refnodeid)
             info_temp["products"] = refnodeinfo["products"]
-            info_temp["products"] = refnodeinfo["products"]
+            info_temp["E_rxn"] = refnodeinfo["E_rxn"]
+            info_temp["bond_change"] = refnodeinfo["bond_change"]
+            info_temp["therdy_allow"] = refnodeinfo["therdy_allow"]
+            info_temp["reaction_exist"] = True
+            info_temp["ref_id"] = refrxnid
             newnode_index = rxnnetwork.add_newnode(info=info_temp, linkoldnode=linkoldnode)
             info_temp["rxnid"]=newnode_index
             return info_temp
@@ -274,12 +270,12 @@ class SingleCycleSearch:
 
 
         search_rxn_key = rxnnetwork.normal_rxn_key_from_items(reactants_items, unreactants_items, product_items)
-        refrxn_idx = rxnnetwork.rxn_index.get(search_rxn_key)
-        if refrxn_idx is not None:
-            refnodeid = rxnnetwork.rxn_idx_to_nodeid[refrxn_idx]
+        refrxnid = rxnnetwork.rxn_index.get(search_rxn_key)
+        if refrxnid is not None:
+            refnodeid = rxnnetwork.rxn_idx_to_nodeid[refrxnid]
             refnodeinfo = rxnnetwork.get_reaction_info(refnodeid)
             info_temp["reaction_exist"] = True
-            info_temp["ref_id"] = refrxn_idx
+            info_temp["ref_id"] = refrxnid
             info_temp["E_rxn"] = refnodeinfo["E_rxn"]  # will be updated later
             info_temp["bond_change"] = refnodeinfo["bond_change"]
             info_temp["therdy_allow"] = refnodeinfo["therdy_allow"]
@@ -311,10 +307,9 @@ class SingleCycleSearch:
                 # print(key,E_rxn_kcal)
                 if E_rxn_kcal > storage.setting.searching_setting.general.elim:
                     info_temp["therdy_allow"] = False
-                    info_temp["products"] = ["unknow"]
-                    newnode_index = rxnnetwork.add_newnode(info=info_temp, linkoldnode=linkoldnode)
-                    info_temp["rxnid"] = newnode_index
-                    return info_temp
+                    # info_temp["products"] = ["unknow"]
+                    # newnode_index = rxnnetwork.add_newnode(info=info_temp, linkoldnode=linkoldnode)
+                    # info_temp["rxnid"] = newnode_index
                 else:
                     info_temp["therdy_allow"] = True
         # update or add allstruc
@@ -338,7 +333,7 @@ class SingleCycleSearch:
             else:
                 products.append("unknow")
         info_temp["products"] = products
-        if refrxn_idx is not None:
+        if refrxnid is not None:
             newnode_index = rxnnetwork.add_newnode(info=info_temp, linkoldnode=linkoldnode, registerindex=False)
         else:
             newnode_index = rxnnetwork.add_newnode(info=info_temp, linkoldnode=linkoldnode)

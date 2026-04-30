@@ -184,7 +184,7 @@ def dissoxtbscan(reactants0, entry, reactionpath, count=0):
                                                     "unreacted": unreacted,
                                                     "at_l": at_l, "simuhf": u,
                                                     "scanwd":f"{reactionpath}_{count}"},  # reactants info
-                                                   {"atomic_charge": atcharge,
+                                                   {"atcharge": atcharge,
                                                     "charge": charge,
                                                     "nel": nel,
                                                     "uhf": u,
@@ -279,7 +279,7 @@ def dissombff(reactants0, entry, reactionpath, count=0):
                                                     "unreacted": unreacted,
                                                     "at_l": at_l, "simuhf": u,
                                                     "scanwd":f"{reactionpath}_{count}"},  # reactants info
-                                                   {"atomic_charge": atcharge,
+                                                   {"atcharge": atcharge,
                                                     "charge": charge,
                                                     "nel": nel,
                                                     "uhf": u,

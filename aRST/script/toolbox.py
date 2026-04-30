@@ -82,7 +82,7 @@ def read_coord(coordpath):
 
 def get_topo(coordinate, ele_l, bo):
     # check if single atom:
-    if len(ele_l) == 1:
+    if len(ele_l) == 1 or bo is None:
         return []
     from aRST.script.geom import Coord
     # index starts from 1

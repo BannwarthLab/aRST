@@ -179,7 +179,7 @@ def interxtbscan(reactants0, entry, reactionpath, count=0):
                                                     "unreacted": unreacted,
                                                     "at_l": at_l, "simuhf": u,
                                                     "scanwd": f"{reactionpath}_{count}"},  # reactants info
-                                                   {"atomic_charge": atcharge,
+                                                   {"atcharge": atcharge,
                                                     "charge": charge,
                                                     "nel": totnel,
                                                     "uhf": u,
@@ -279,7 +279,7 @@ def intermbff(reactants0, entry, reactionpath, count=0):
                                                     "at_l": at_l,
                                                     "simuhf": u,
                                                     "scanwd": f"{reactionpath}_{count}"},  # reactants info
-                                                   {"atomic_charge": atcharge,
+                                                   {"atcharge": atcharge,
                                                     "charge": charge,
                                                     "nel": totnel,
                                                     "uhf": u,
