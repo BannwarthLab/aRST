@@ -50,14 +50,14 @@ class ReactivityPreparer:
                     columns=['index', 'HOAO_a (eV)', 'HOAO_b (eV)', 'LUAO_a (eV)', 'LUAO_b (eV)', 'Atom'])
                 if c == 1:
                     # H+
-                    afo.loc[0, :] = [0, -np.inf, -np.inf, -np.inf, -np.inf, 1]
+                    afo.loc[0, :] = [0, -1e5, -1e5, -1e5, -1e5, 1]
 
                 elif c == -1:
                     # H-
-                    afo.loc[0, :] = [0, np.inf, np.inf, np.inf, np.inf, 1]
+                    afo.loc[0, :] = [0, 1e5, 1e5, 1e5, 1e5, 1]
                 else:
                     # H radical
-                    afo.loc[0, :] = [0, np.inf, -np.inf, np.inf, -np.inf, 1]
+                    afo.loc[0, :] = [0, 1e5, -1e5, 1e5, -1e5, 1]
                 s_reactivityentry.afo = afo
                 s_reactivityentry.bo = mbo
                 continue
