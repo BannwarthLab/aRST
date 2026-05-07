@@ -24,14 +24,15 @@ setup(
     install_requires=[
         "billiard~=4.2.1",
         "matplotlib~=3.7.5",
-        "molbar~=1.2.0",
+        "molbar~=1.1.3",
         "networkx~=3.1",
         "numpy~=1.24.4",
         "pandas~=2.0.3",
         "read~=0.0.2",
         "scipy~=1.10.1",
         "setuptools~=70.0.0",
-        "toml~=0.10.2"
+        "toml~=0.10.2",
+        "pydantic~=2.13.3",
     ],
     entry_points={
         'console_scripts': [

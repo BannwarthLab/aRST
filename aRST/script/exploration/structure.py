@@ -472,7 +472,6 @@ def process_fragment_recursive(supra_info, rootfolder, depth=0,maxdepth=2):
         list[dict]
             A list of processed feature dicts for all terminal single-structure fragments.
         """
-    from aRST.script.toolbox import get_random_folder_name
     from molbar.barcode import get_molbar_from_coordinates
 
     coordinate = supra_info["coordinate"]

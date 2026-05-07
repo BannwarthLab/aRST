@@ -25,7 +25,7 @@ def main():
 
     # add arguments
 
-    parser.add_argument("in_file", type=str, help="The input file.")
+    parser.add_argument("in_file", type=str,nargs="?", help="The input file.")
     parser.add_argument('--explore',
                         '-e',
                         action='store_true',
@@ -49,10 +49,31 @@ def main():
     parser.add_argument("-u", "--unbuffered", action="store_true",
                         help="Run in unbuffered mode (forces real-time output).")
 
+    parser.add_argument(
+        "--view",
+        "-v",
+        type=str,
+        default=None,nargs="+",
+        metavar="FILE, Strucjson",
+        help="put in the to be viewed file and struc.json"
+    )
+
     args = parser.parse_args()
     if args.unbuffered:
         sys.stdout = open(sys.stdout.fileno(), mode="w", buffering=1)
         sys.stderr = open(sys.stderr.fileno(), mode="w", buffering=1)
+
+    if args.view is not None:
+        if len(args.view) ==3:
+            from aRST.script.visual.aseView import ViewSimPath
+            ViewSimPath(args.view).show()
+            return
+        if len(args.view)==2 and not args.view[0].endswith("log"):
+            from aRST.script.visual.aseView import ViewReactiveAtl
+            ViewReactiveAtl(args.view).show()
+            return
+
+
 
     print_head()
 

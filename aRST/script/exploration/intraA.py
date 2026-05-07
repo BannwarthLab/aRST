@@ -36,7 +36,7 @@ def get_intraA_react_l(reactants0):
         # overwrite react_l with user's input
         # predifined reaction, used in one cycle
         at1, at2 = atom_pairs[0]
-        react_l = [{"reactants": reactants0[0],
+        react_l = [{"reactants": [reactants0[0]],
                     "atl": [[at1, at2]],
                     "gap": 0,
                     "force_combination": True}]

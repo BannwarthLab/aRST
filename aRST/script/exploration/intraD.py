@@ -32,7 +32,7 @@ def get_intraD_react_l(reactants0, gaplim=5):
         # overwrite react_l with user's input
         # predifined reaction, used in one cycle
         at1, at2 = atom_pairs[0]
-        react_l = [{"reactants": reactants0[0],
+        react_l = [{"reactants": [reactants0[0]],
                     "atl": [[at1, at2]],
                     "gap": 0,
                     "force_combination": True}]
@@ -156,8 +156,7 @@ def dissoxtbscan(reactants0, entry, reactionpath, count=0):
 
         results = SinglePathSearch(coordinate,
                                    ele_l,
-                                   scan_wd,
-                                   u, charge,
+                                   u, charge,scan_wd,
                                    reactants=[struc]).run_one_scan_search(constrain_setting, "dissoD", reactantinfo,
                                                                           nel)
         if results:
