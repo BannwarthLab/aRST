@@ -58,9 +58,14 @@ class Singlestruc:
                 if proc == 0:
                     return self.coordinate, self.ele_l
                 else:
-                    self.coordinate, self.ele_l
+                    raise ValueError(F"struc in {comdir} SP at xtb failed!")
         else:
             raise ValueError(f"Unknown engine for opt: {engine}")
+        # update the mb
+        mb = CallMolBar(self.coordinate, self.ele_l).get_mb()
+        if self.mb!=mb:
+            # print(f'Warning: Molbar code of struc in {comdir} changed after opt')
+            self.mb = mb
         return self.coordinate, self.ele_l
 
     def _run_sp(self, comdir, engine="gxtb"):
