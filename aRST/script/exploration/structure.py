@@ -372,6 +372,35 @@ class StrucGraph:
     def get_fragments(self):
         return list(nx.connected_components(self.graph))
 
+    def bond_exist(self,at_l):
+        target = set(at_l)
+        exists = any(set(item["atoms"]) == target for item in self.topo_l)
+        return exists
+
+    def get_atomic_path_of_2atoms(self, at1, at2):
+        try:
+            # shortest path based on atomic distance
+            atomicpath = nx.shortest_path(
+                self.graph,
+                source=at1,
+                target=at2,
+                weight="distance"
+            )
+
+            # total distance along the path
+            path_length = nx.shortest_path_length(
+                self.graph,
+                source=at1,
+                target=at2,
+                weight="distance"
+            )
+
+            return atomicpath, path_length
+
+        except (nx.NetworkXNoPath, nx.NodeNotFound):
+            return None, None
+
+
 
 class Allstruc:
     def __init__(self, model):
@@ -499,36 +528,73 @@ def process_fragment_recursive(supra_info, rootfolder, depth=0,maxdepth=2):
     )
     sup.split()
 
-
-    if depth >= maxdepth:
-        return [optimize_fragment(coordinate, ele_l, charge, nel, mb, rootfolder)]
-
-    if len(sup.Fragments_coordinate_list) == 1:
-        return [optimize_fragment(coordinate, ele_l, charge, nel, mb, rootfolder)]
-
-    out = []
-    for sub_coord, sub_ele, sub_c, sub_nel,sub_topo_l,sub_atcharge in zip(
-            sup.Fragments_coordinate_list,
-            sup.Fragments_ele_l_list,
-            sup.Fragments_c_list,
-            sup.Fragments_nel_list,
-            sup.Fragments_topo_list,
-            sup.Fragments_atcharge_list,
-    ):
-        frag_info = {
-            "coordinate":sub_coord,
-            "ele_l":sub_ele,
-            "charge":sub_c,
-            "nel":sub_nel,
-            "atcharge":sub_atcharge,
-            "atomic_connection":sub_topo_l
-        }
-
-        out.extend(
-            process_fragment_recursive(
-                frag_info,
+    if len(sup.Fragments_coordinate_list) > 1 and depth < maxdepth:
+        out = []
+        for sub_coord, sub_ele, sub_c, sub_nel, sub_topo_l, sub_atcharge in zip(
+                sup.Fragments_coordinate_list,
+                sup.Fragments_ele_l_list,
+                sup.Fragments_c_list,
+                sup.Fragments_nel_list,
+                sup.Fragments_topo_list,
+                sup.Fragments_atcharge_list,
+        ):
+            out.extend(process_fragment_recursive(
+                {
+                    "coordinate": sub_coord,
+                    "ele_l": sub_ele,
+                    "charge": sub_c,
+                    "nel": sub_nel,
+                    "atcharge": sub_atcharge,
+                    "atomic_connection": sub_topo_l,
+                },
                 rootfolder,
-            )
-        )
+                depth=depth + 1,
+                maxdepth=maxdepth,
+            ))
+        return out
+    # for the single-structure
+    opt_info = optimize_fragment(coordinate, ele_l, charge, nel, mb, rootfolder)
 
-    return out
+    opt_coord = opt_info["coordinate"]
+    opt_ele_l = opt_info["ele_l"]
+    opt_charge = opt_info["charge"]
+    opt_nel = opt_info["nel"]
+    opt_atcharge = opt_info["atcharge"]
+    opt_topo = opt_info["atomic_connection"]
+
+    post_sup = Supramolecule(
+        Supra_coordinate=opt_coord,
+        Supra_ele_l=opt_ele_l,
+        Supra_atcharge=opt_atcharge,
+        Supra_topo_l=opt_topo,
+        totnel=opt_nel,
+        totc=opt_charge,
+    )
+    post_sup.split()
+
+    if len(post_sup.Fragments_coordinate_list) > 1 and depth < maxdepth:
+        out = []
+        for sub_coord, sub_ele, sub_c, sub_nel, sub_topo_l, sub_atcharge in zip(
+                post_sup.Fragments_coordinate_list,
+                post_sup.Fragments_ele_l_list,
+                post_sup.Fragments_c_list,
+                post_sup.Fragments_nel_list,
+                post_sup.Fragments_topo_list,
+                post_sup.Fragments_atcharge_list,
+        ):
+            out.extend(process_fragment_recursive(
+                {
+                    "coordinate": sub_coord,
+                    "ele_l": sub_ele,
+                    "charge": sub_c,
+                    "nel": sub_nel,
+                    "atcharge": sub_atcharge,
+                    "atomic_connection": sub_topo_l,
+                },
+                rootfolder,
+                depth=depth + 1,
+                maxdepth=maxdepth,
+            ))
+        return out
+
+    return [opt_info]

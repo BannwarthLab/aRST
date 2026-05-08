@@ -7,6 +7,7 @@ from aRST.script.exploration.pathsearch import SinglePathSearch
 import aRST.script.initialization as storage
 from aRST.script.head import print_react_l
 from aRST.script.geom import Coord
+from aRST.script.exploration.structure import StrucGraph
 import copy
 
 
@@ -80,40 +81,45 @@ def determine_pulling_distance(entry):
             push_l.append([at1_reindex, at2_reindex, dis_current, dis_tar])
 
     else:
-        ## B: Defined as a multiple of the current distance
         mul_dis = disso_setting.pulling_distance
-        if mul_dis == "auto":
-            ### Automatically set the pulling distance:
-            # If there is only one bond needs to be pulled,
-            # target pull distance will be set to the tot. bond length between this atom pair
-            # (benefit of ring-opening reaction for stretching molecules).
-            # Otherwise, just pull to defalut setting (5x current covalent radii)
-            if len(at_l) == 1:
-                from aRST.script.toolbox import GraphAnalyzer
-                at1, at2 = map(int, at_l[0])
-                bo = storage.allstruc.get(struc).reactivity.bo
-                dis_current = np.round(instance.get_ats_distance(at1, at2), 2)
-                terminals_length = GraphAnalyzer(coordinate, ele_l, bo).get_t2t_path(at1, at2)
-                at1_reindex = at1 + 1
-                at2_reindex = at2 + 1
-                push_l.append([at1_reindex, at2_reindex, dis_current, terminals_length])
-            else:
-                for pair in at_l[:2]:
-                    at1, at2 = map(int, pair)
-                    dis_current = np.round(instance.get_ats_distance(at1, at2), 3)
-                    cradii_sum = float(instance.rcov_l[at1]) + float(instance.rcov_l[at2])
-                    at1_reindex = at1 + 1
-                    at2_reindex = at2 + 1
-                    push_l.append([at1_reindex, at2_reindex, dis_current, cradii_sum * 5])
+
+        if mul_dis == "auto" and len(at_l) == 1:
+            strucgraph = StrucGraph(coordinate, ele_l, s_general.atomic_connection)
+
+            at1, at2 = map(int, at_l[0])  # 0-based
+            at1_, at2_ = at1 + 1, at2 + 1  # 1-based for graph
+
+            dis_current = np.round(instance.get_ats_distance(at1, at2), 3)
+
+            if not strucgraph.bond_exist([at1_, at2_]):
+                atomic_path, atomic_length = strucgraph.get_atomic_path_of_2atoms(at1_, at2_)
+
+                if atomic_length is not None:
+                    push_l.append([at1_, at2_, dis_current, atomic_length])
+                    return push_l
+
+            # fallback if bonded OR no atomic path
+            mul_dis = 5
         else:
-            for pair in at_l[:2]:
-                at1, at2 = map(int, pair)
-                dis_current = np.round(instance.get_ats_distance(at1, at2), 3)
-                cradii_sum = float(instance.rcov_l[at1] + instance.rcov_l[at2])
-                at1_reindex = at1 + 1
-                at2_reindex = at2 + 1
-                push_l.append([at1_reindex, at2_reindex, dis_current, cradii_sum * float(mul_dis)])
-    return push_l
+            mul_dis = 5
+
+        for pair in at_l[:2]:
+            at1, at2 = map(int, pair)
+
+            dis_current = np.round(instance.get_ats_distance(at1, at2), 3)
+            cradii_sum = float(instance.rcov_l[at1] + instance.rcov_l[at2])
+
+            at1_reindex = at1 + 1
+            at2_reindex = at2 + 1
+
+            push_l.append([
+                at1_reindex,
+                at2_reindex,
+                dis_current,
+                cradii_sum * float(mul_dis)
+            ])
+
+        return push_l
 
 
 def dissoxtbscan(reactants0, entry, reactionpath, count=0):
@@ -156,7 +162,7 @@ def dissoxtbscan(reactants0, entry, reactionpath, count=0):
 
         results = SinglePathSearch(coordinate,
                                    ele_l,
-                                   u, charge,scan_wd,
+                                   u, charge, scan_wd,
                                    reactants=[struc]).run_one_scan_search(constrain_setting, "dissoD", reactantinfo,
                                                                           nel)
         if results:
@@ -208,7 +214,7 @@ def dissombff(reactants0, entry, reactionpath, count=0):
                         "scanwd": f"{reactionpath}_{count}"}  # reactants info
         results = SinglePathSearch(mbxyz,
                                    mbele_l,
-                                   u,charge,scan_wd,
+                                   u, charge, scan_wd,
                                    reactants=[struc]).run_xtbopt_for_mbff_search(atom_connection, push_l,
                                                                                  "dissoD", reactantinfo, nel)
 
