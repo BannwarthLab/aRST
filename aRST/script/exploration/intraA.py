@@ -18,7 +18,7 @@ def get_intraA_react_l(reactants0):
                   ).intra(
         equivalent_afogap_tol=generalsetting.equivalent_afogap_tol,
         exclude_elements=generalsetting.exclude_elements,
-        exclude_pairs=generalsetting.exclude_pairs
+        exclude_pairs=generalsetting.exclude_pairs if generalsetting.cycle==1 else None
     )
     cut = 2 if intrasetting.concerted_pair else 1
     for item in react_l:
@@ -51,7 +51,7 @@ def get_intraA_react_l(reactants0):
 
 
 def check_scan_uhf_intraA(entry):
-    struc = entry["reactants"]
+    struc = entry["reactants"][0]
     nel = storage.allstruc.get(struc).general.nel
     if nel % 2 == 0:
         return [0, 2]
@@ -65,7 +65,7 @@ def intraxtbscan(reactants0, entry, reactionpath, count=0):
     scanwd = generalsetting.scanwd
     output_d = {}
     uhf_l = check_scan_uhf_intraA(entry)
-    struc = entry["reactants"]
+    struc = entry["reactants"][0]
     s = storage.allstruc.get(struc)
     coordinate = s.general.coordinate
     ele_l = s.general.ele_l
@@ -116,7 +116,7 @@ def intrambff(reactants0, entry, reactionpath, count=0):
     scanwd = generalsetting.scanwd
     output_d = {}
     uhf_l = check_scan_uhf_intraA(entry)
-    struc = entry["reactants"]
+    struc = entry["reactants"][0]
     s = storage.allstruc.get(struc)
     coordinate = s.general.coordinate
     ele_l = s.general.ele_l

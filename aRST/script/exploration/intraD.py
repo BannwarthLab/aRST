@@ -16,7 +16,7 @@ def get_intraD_react_l(reactants0, gaplim=5):
     disso_setting = storage.setting.searching_setting.disso
     react_l = SDP(reactants0,
                   exclude_elements=general_setting.exclude_elements,
-                  exclude_pairs=general_setting.exclude_pairs
+                  exclude_pairs=general_setting.exclude_pairs if general_setting.cycle==1 else None
                   ).build_react_l(tol=1e-5)
     cut = 2 if disso_setting.concerted_pair else 1
     for item in react_l:

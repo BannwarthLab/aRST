@@ -17,7 +17,7 @@ def get_interA_react_l(reactants0):
     react_l = SPR(reactants0, generalsetting.spr_mode).inter(
         equivalent_afogap_tol=generalsetting.equivalent_afogap_tol,
         exclude_elements=generalsetting.exclude_elements,
-        exclude_pairs=generalsetting.exclude_pairs
+        exclude_pairs=generalsetting.exclude_pairs if generalsetting.cycle==1 else None
     )
     cut = 2 if intersetting.concerted_pair else 1
     for item in react_l:
