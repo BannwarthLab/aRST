@@ -58,7 +58,7 @@ def updating_reacntans(reactants,job="depotonation"):
                     c += 1
 
 
-                features = storage.Singlestruc(updated_coordinate,updated_ele_l, c, m,).process_workflow(tmpfolder)
+                features = storage.Singlestruc(updated_coordinate,updated_ele_l, c, m,).process_workflow(tmpfolder,ideal=False)
                 storage.allstruc.update_current_structure_info(features,struc)
             else:
                 print(f"The non-deprotonated/non-protonated form of the reactant {struc} is more energetically favorable->\n"

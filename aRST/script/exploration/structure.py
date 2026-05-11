@@ -12,7 +12,7 @@ import shutil
 
 
 class Singlestruc:
-    # complest electronic properties of a given single structure
+    # generate electronic properties of a given single structure
     def __init__(self, coordinate, ele_l, c, m, mb=None):
         self.coordinate = coordinate
         self.ele_l = ele_l
@@ -356,14 +356,21 @@ class StrucGraph:
             )
 
         # add bonds/topology as edges
+        # with topology: self.topo_l is func(get_topo_covaradii); otherwise acc. mbo>0.3
         for item in self.topo_l:
             at1, at2 = item["atoms"]
-            attrs = {"distance": item["value"]}
+
             mbo = item.get("mbo")
+
+            if mbo is not None and mbo < 0.3:
+                continue
+
+            attrs = {"distance": item["value"]}
+
             if mbo is not None:
                 attrs["mbo"] = mbo
-            G.add_edge(at1, at2, **attrs)
 
+            G.add_edge(at1, at2, **attrs)
         return G
 
     def count_fragments(self):
