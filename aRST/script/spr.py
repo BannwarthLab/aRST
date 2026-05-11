@@ -60,8 +60,7 @@ def find_identical_at_from_afo(HOAO_a, HOAO_b, LUAO_a, LUAO_b, tol=0.01):
     return out
 
 
-def refine_react_l(react_l, identical_atom_d, intra=False, gap_tol=0.01):
-
+def merge_react_l(react_l, identical_atom_d, gap_tol=0.01):
     def _degenerate_group(struc, atom):
         for grp in identical_atom_d.get(struc, []):
             atoms = grp.get("atom", [])
@@ -69,124 +68,61 @@ def refine_react_l(react_l, identical_atom_d, intra=False, gap_tol=0.01):
                 return list(atoms)
         return [atom]
 
-    def _select_unique_pairs(all_pairs, same_structure):
-        selected = []
-        if same_structure:
-            used = set()
-            for a, b in all_pairs:
-                if a not in used and b not in used:
-                    selected.append((a, b))
-                    used.add(a); used.add(b)
-        else:
-            used_a = set()
-            used_b = set()
-            for a, b in all_pairs:
-                if a not in used_a and b not in used_b:
-                    selected.append((a, b))
-                    used_a.add(a); used_b.add(b)
-        return selected
-
-    # best[key] = record with smallest gap for that final pair key
+    # best[key] = record with the smallest gap for that final pair key
     best = {}
 
+    # find out beest afo val
     for item in react_l:
-        if intra:
-            s = item["reactants"]
-            a0, b0 = item["atl"]
-            deg_a = _degenerate_group(s, a0)
-            deg_b = _degenerate_group(s, b0)
-
+        s1, s2 = item["reactants"]
+        a0, b0 = item["atl"]
+        deg_a = _degenerate_group(s1, a0)
+        deg_b = _degenerate_group(s2, b0)
+        same_structure = (s1 == s2)
+        if not same_structure:
             all_pairs = list(product(deg_a, deg_b))
-            pairs = _select_unique_pairs(all_pairs, same_structure=True)
-
-            for a, b in pairs:
-                a, b = (a, b) if a >= b else (b, a)
-                key = ("intra", s, a, b)
-
-                if key not in best or item["gap"] < best[key]["gap"]:
-                    best[key] = {
-                        "reactants": s,
-                        "atl": [[a, b]],
-                        "gap": item["gap"],
-                        "HOAO": item.get("HOAO"),
-                        "LUAO": item.get("LUAO"),
-                    }
-
         else:
-            s1, s2 = item["reactants"]
-            a0, b0 = item["atl"]
+            all_pairs = [
+                (max(a, b), min(a, b))
+                for a, b in product(deg_a, deg_b)
+            ]
 
-            deg_a = _degenerate_group(s1, a0)
-            deg_b = _degenerate_group(s2, b0)
-
-            all_pairs = list(product(deg_a, deg_b))
-            same_structure = (s1 == s2)
-            if same_structure:
-                all_pairs += list(product(deg_b, deg_a))
-
-            pairs = _select_unique_pairs(all_pairs, same_structure=same_structure)
-
-            for a, b in pairs:
-                if same_structure:
-                    a, b = (a, b) if a >= b else (b, a)
-
-                key = ("inter", s1, s2, a, b)
-
-                if key not in best or item["gap"] < best[key]["gap"]:
-                    best[key] = {
-                        "reactants": [s1, s2],
-                        "atl": [[a, b]],
-                        "gap": item["gap"],
-                        "HOAO": item.get("HOAO"),
-                        "LUAO": item.get("LUAO"),
-                    }
+        for a, b in all_pairs:
+            key = (s1, s2, a, b)
+            if key not in best or item["gap"] < best[key]["gap"]:
+                best[key] = {
+                    "reactants": [s1, s2],
+                    "atl": [[a, b]],
+                    "gap": item["gap"],
+                    "HOAO": item.get("HOAO"),
+                    "LUAO": item.get("LUAO"),
+                }
 
     out = list(best.values())
 
-    # ---------------- merge by gap tolerance ----------------
-    if gap_tol and gap_tol > 0:
-        def _struct_key(rec):
-            if intra:
-                return ("intra", rec["reactants"], rec.get("HOAO"), rec.get("LUAO"))
+    def _struct_key(entry):
+        s1, s2 = entry["reactants"]
+        return (s1, s2, entry.get("HOAO"), entry.get("LUAO"))
+
+    grouped = {}
+    for entry in out:
+        grouped.setdefault(_struct_key(entry), []).append(entry)
+
+    merged = []
+    for _, recs in grouped.items():
+        recs.sort(key=lambda r: r["gap"])
+        current = None
+        for r in recs:
+            if current is None:
+                # start a new bucket
+                current = {**r}
+                current["atl"] = list(r["atl"])
+                continue
+
+            # merge if within tolerance of current bucket's representative gap
+            if abs(r["gap"] - current["gap"]) <= gap_tol:
+                current["atl"].extend(r["atl"])
             else:
-                s1, s2 = rec["reactants"]
-                return ("inter", s1, s2, rec.get("HOAO"), rec.get("LUAO"))
-
-        # group by structure (+ HOAO/LUAO), then merge by gap proximity
-        grouped = {}
-        for rec in out:
-            grouped.setdefault(_struct_key(rec), []).append(rec)
-
-        merged = []
-        for _, recs in grouped.items():
-            recs.sort(key=lambda r: r["gap"])
-            current = None
-            for r in recs:
-                if current is None:
-                    # start a new bucket
-                    current = {**r}
-                    current["atl"] = list(r["atl"])
-                    continue
-
-                # merge if within tolerance of current bucket's representative gap
-                if abs(r["gap"] - current["gap"]) <= gap_tol:
-                    current["atl"].extend(r["atl"])
-                else:
-                    # finalize current bucket (dedupe pairs)
-                    seen = set()
-                    uniq = []
-                    for a, b in current["atl"]:
-                        t = (a, b)
-                        if t not in seen:
-                            seen.add(t)
-                            uniq.append([a, b])
-                    current["atl"] = uniq
-                    merged.append(current)
-
-                    current = {**r}
-                    current["atl"] = list(r["atl"])
-
-            if current is not None:
+                # finalize current bucket (dedupe pairs)
                 seen = set()
                 uniq = []
                 for a, b in current["atl"]:
@@ -196,6 +132,20 @@ def refine_react_l(react_l, identical_atom_d, intra=False, gap_tol=0.01):
                         uniq.append([a, b])
                 current["atl"] = uniq
                 merged.append(current)
+
+                current = {**r}
+                current["atl"] = list(r["atl"])
+
+        if current is not None:
+            seen = set()
+            uniq = []
+            for a, b in current["atl"]:
+                t = (a, b)
+                if t not in seen:
+                    seen.add(t)
+                    uniq.append([a, b])
+            current["atl"] = uniq
+            merged.append(current)
 
         out = merged
 
@@ -249,7 +199,9 @@ class SPR:
         self.LUAO_a_np = self.LUAO_a.to_numpy(dtype=float)
         self.LUAO_b_np = self.LUAO_b.to_numpy(dtype=float)
 
-        if spr_mode == 1:
+        if np.allclose(self.HOAO_a_np, self.HOAO_b_np) and np.allclose(self.LUAO_a_np, self.LUAO_b_np):
+            self.pairs = [(self.HOAO_a_np, self.LUAO_a_np)]
+        elif spr_mode == 1:
             self.pairs = [
                 (self.HOAO_a_np, self.LUAO_a_np),
                 (self.HOAO_b_np, self.LUAO_b_np),
@@ -285,12 +237,14 @@ class SPR:
         """
         exclude_elements = [] if exclude_elements is None else exclude_elements
         exclude_pairs = [] if exclude_pairs is None else exclude_pairs
-        ex_el = {tuple(p) for p in exclude_pairs}
-        ex_el |= {(b, a) for (a, b) in ex_el}
-        decimals = int(round(-np.log10(equivalent_afogap_tol)))  # for print afo gap
+        exclude_element_pairs = {tuple(p) for p in exclude_pairs}
+        exclude_element_pairs |= {(b, a) for (a, b) in exclude_element_pairs}
+
+        decimals = int(round(-np.log10(equivalent_afogap_tol)))
 
         react_l = []
         nat, nstruc = H.shape
+        seen = set()
         for il in range(nstruc):
             Lcol = L[:, il]
             L_elements = self.elements[:, il]
@@ -299,9 +253,9 @@ class SPR:
                 L_ok &= ~np.isin(L_elements, exclude_elements)
 
             for ih in range(nstruc):
-                if search_mode == 0 and il != ih:
+                if search_mode == 0 and il != ih:  # intra mode, only search gap with same col_index in HL
                     continue
-                if search_mode == 1 and il == ih:
+                if search_mode == 1 and il == ih:  # inter mode, only search gap with diff col_index in HL (struc id can be the same!)
                     continue
                 Hcol = H[:, ih]
                 H_elements = self.elements[:, ih]
@@ -310,40 +264,66 @@ class SPR:
                 if exclude_elements:
                     H_ok &= (~np.isin(H_elements, exclude_elements))
 
-                # Broadcast to get all (iat_l, iat_h) gaps
-                # gap[i_l, i_h] corresponds to L[i_l] - H[i_h]
-                gap_mat = ceil_tol(Lcol[:, None] - Hcol[None, :], round_tol=equivalent_afogap_tol)
                 valid = L_ok[:, None] & H_ok[None, :]
                 i_l, i_h = np.where(valid)
                 if i_l.size == 0:
                     continue
 
-                if ex_el:
-                    Z_l = self.elements[i_l, il]
-                    Z_h = self.elements[i_h, ih]
-                    keep = np.array([(int(zl), int(zh)) not in ex_el for zl, zh in zip(Z_l, Z_h)], dtype=bool)
+                s_l = int(struc_ids[il])
+                s_h = int(struc_ids[ih])
+
+                # Canonicalize structure and atom ordering
+                if s_l < s_h:
+                    struc1, struc2 = s_h, s_l
+                    at1, at2 = i_h, i_l
+                    Z1 = self.elements[at1, ih]
+                    Z2 = self.elements[at2, il]
+
+                elif s_l > s_h:
+                    struc1, struc2 = s_l, s_h
+                    at1, at2 = i_l, i_h
+                    Z1 = self.elements[at1, il]
+                    Z2 = self.elements[at2, ih]
+
+                else:
+                    struc1, struc2 = s_h, s_l
+                    at1 = np.maximum(i_h, i_l)
+                    at2 = np.minimum(i_h, i_l)
+                    Z1 = self.elements[at1, ih]
+                    Z2 = self.elements[at2, ih]
+
+                # remove excluded elements pairs
+                if exclude_element_pairs:
+                    keep = np.array([(int(z1), int(z2)) not in exclude_element_pairs
+                                     for z1, z2 in zip(Z1, Z2)], dtype=bool)
                     if not np.any(keep):
                         continue
                     i_l = i_l[keep]
                     i_h = i_h[keep]
+                    at1 = at1[keep]
+                    at2 = at2[keep]
 
-                gaps = gap_mat[i_l, i_h]
+                # Broadcast to get all (iat_l, iat_h) gaps
+                gaps = ceil_tol(
+                    Lcol[i_l] - Hcol[i_h],
+                    round_tol=equivalent_afogap_tol
+                )
+
                 hoao_vals = Hcol[i_h]
                 luao_vals = Lcol[i_l]
 
-                s_l = struc_ids[il]
-                s_h = struc_ids[ih]
-
-                if s_l <= s_h:
-                    struc1, struc2 = int(s_h), int(s_l)
-                    at1 = i_h
-                    at2 = i_l
-                else:
-                    struc1, struc2 = int(s_l), int(s_h)
-                    at1 = i_l
-                    at2 = i_h
-
                 for k in range(len(gaps)):
+                    key = (
+                        struc1,
+                        struc2,
+                        int(at1[k]),
+                        int(at2[k]),
+                        float(hoao_vals[k]),
+                        float(luao_vals[k]),
+                    )
+                    if key in seen:
+                        continue
+                    seen.add(key)
                     react_l.append({
                         "reactants": [struc1, struc2],
                         "atl": [int(at1[k]), int(at2[k])],
@@ -373,7 +353,8 @@ class SPR:
                     exclude_pairs=exclude_pairs
                 )
             )
-        final_react = sorted(refine_react_l(final_react, identical_atom_d,gap_tol=equivalent_afogap_tol), key=lambda x: x['gap'])
+        final_react = sorted(merge_react_l(final_react, identical_atom_d, gap_tol=equivalent_afogap_tol),
+                             key=lambda x: x['gap'])
         return final_react
 
     def intra(self, equivalent_afogap_tol=0.01, exclude_elements=None, exclude_pairs=None):
@@ -397,12 +378,13 @@ class SPR:
                 )
             )
 
-        tmp_react = sorted(refine_react_l(final_react, identical_atom_d, intra=True,gap_tol=equivalent_afogap_tol), key=lambda x: x['gap'])
+        tmp_react = sorted(merge_react_l(final_react, identical_atom_d, gap_tol=equivalent_afogap_tol),
+                           key=lambda x: x['gap'])
         # del all connected bond
         allbonds = SDP(self.reactants, exclude_elements=exclude_elements, exclude_pairs=exclude_pairs).allbonds
         final_react = []
         for item in tmp_react:
-            struc = item["reactants"]
+            struc = item["reactants"][0]
             atl = item["atl"][0]
             trigger = True
             for item2 in allbonds:
