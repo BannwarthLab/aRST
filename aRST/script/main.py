@@ -48,6 +48,8 @@ def main():
                         help='Aligning two strucs with given atom index.')
     parser.add_argument("-u", "--unbuffered", action="store_true",
                         help="Run in unbuffered mode (forces real-time output).")
+    parser.add_argument("-d", "--debug", action="store_true",
+                        help="keep buffer folder")
 
     parser.add_argument(
         "--view",
@@ -108,6 +110,9 @@ def main():
         print()
         print(f"***** Job finished in {int(total_seconds // 3600)} hour "
               f"{int((total_seconds % 3600) // 60)} mins {total_seconds % 60:.2f} sec *****", flush=True)
+        # clean up
+        from aRST.script.exploration.reactionsearch import clean_up_bufferwd
+        clean_up_bufferwd(args.debug, init.setting.searching_setting.general.bufferwd)
         # plot_rxnnetwork()
 
 

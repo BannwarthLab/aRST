@@ -426,7 +426,11 @@ def ReactionSearch(reactants_ini, step=0):
                 print_info = singlecycle.workflow(prefix_rpid=prefix_rpid, step=step)
                 print_simulation_details(print_info, nodewd)
             step += 1
+
+
+
+def clean_up_bufferwd(degubtrigger, bufferwd):
     # clean up buffer_struc
-    if exists(storage.setting.searching_setting.general.bufferwd):
+    if not degubtrigger and exists(bufferwd):
         import shutil
-        shutil.rmtree(storage.setting.searching_setting.general.bufferwd, ignore_errors=True)
+        shutil.rmtree(bufferwd, ignore_errors=True)
