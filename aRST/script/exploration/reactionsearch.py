@@ -1,25 +1,67 @@
+import sys
 from os.path import exists
+import numpy as np
 from aRST.script.exploration.interA import *
 from aRST.script.exploration.intraA import *
 from aRST.script.exploration.intraD import *
 from aRST.script.head import print_simulation_details, print_jobhead
 from aRST.script.exploration.network import rxnnetwork
 from aRST.script.exploration.prepare_afo import ReactivityPreparer
-from aRST.script.exploration.structure import process_fragment_recursive
-from aRST.script.toolbox import timeit
+from aRST.script.exploration.structure import process_fragment_recursive, map_fragments_topo_l_back_to_Supramol, \
+    check_target_bond_change, TSstructure_NEBTS
+from aRST.script.toolbox import timeit, del_dir
+import shutil
 
 
-class SingleCycleSearch:
-    def __init__(self, reactants):
-        self.reactants = reactants
+class PathEval:
+
+    @staticmethod
+    def allow_H_involved_rxn(entry):
+        reactants = entry["reactants"]
+        atl = entry["atl"]
+
+        structs = [storage.allstruc.get(r) for r in reactants]
+        ele_ls = [s.general.ele_l for s in structs]
+        weakHs = [set(s.reactivity.weakH) for s in structs]
+
+        def is_only_single_H_structure(i):
+            return len(ele_ls[i]) == 1 and ele_ls[i][0].lower() == "h"
+
+        for a, b in atl:
+            if len(reactants) == 1:
+                # (struc, at)
+                atoms = [(0, a), (0, b)]
+            else:
+                atoms = [(0, a), (1, b)]
+
+            h_atoms = [
+                (si, ai)
+                for si, ai in atoms
+                if ele_ls[si][ai].lower() == "h"
+            ]
+
+            # no H involved -> allow
+            if not h_atoms:
+                return True
+
+            # any of structure is single-atom H ->allow
+            if any(is_only_single_H_structure(si) for si, _ in h_atoms):
+                return True
+
+            # any H is strong -> not allowed
+            if any(ai not in weakHs[si] for si, ai in h_atoms):
+                return False
+
+        return True
 
     @staticmethod
     def rxn_search_exist(entry):
         reactants = entry["reactants"]
-        if isinstance(reactants, list):
-            reactants = tuple(reactants)
-        else:
-            reactants = (reactants,)
+        reactants = tuple(reactants)
+        # if isinstance(reactants, list):
+        #     reactants = tuple(reactants)
+        # else:
+        #     reactants = (reactants,)
 
         atl = entry["atl"]
 
@@ -32,6 +74,231 @@ class SingleCycleSearch:
 
         searchkey = (reactants, tuple(atl))
         return searchkey in rxnnetwork.searchpath_index
+
+    @staticmethod
+    # @timeit("Separting SuparMol")
+    def followup_process_pathway(endxyz_info):
+        """
+        output_d[f"{reactionpath}_{count}"] = [{"reactants": [struc1, struc2],
+                                                    "unreacted": unreacted,
+                                                    "at_l": at_l,
+                                                    "simuhf": u,"scanwd":scanwd},  # reactants info
+
+
+                                                   {"atomic_charge": atcharge,
+                                                    "charge": charge,
+                                                    "nel": totnel,
+                                                    "uhf": u,
+                                                    "c": endxyz,
+                                                    "ele_l": ele_l_end,
+                                                    "bo": bo,
+                                                    "atomic_connection": constrain_l
+                                                    "mb":mb},  # endxyz info
+
+                                                   {"type": "interA"}  # reaction info
+                                                   ]
+
+        :return: (products_info, refrxnid)
+        If the end structure already maps to an existing reaction/product entry,
+        returns ([], refrxnid).
+
+        products_info = [
+        features_p1 = {
+            "coordinate": self.coordinate,
+            "ele_l": self.ele_l,
+            "nel": int(sum([element[_] for _ in self.ele_l])) - self.c,
+            "multiplicity": self.m,
+            "charge": self.c,
+            "atcharge": read_atcharge(join(rootfolder, "xtb", "charges")),
+            "mb": self.mb,
+            "atomic_connection": constrain_l,
+            "Esp": energy,
+            "strucwd":rootfolder (abswd)
+        }, features_p2,....]
+        """
+        # test if this endxyz exists
+        c = endxyz_info["charge"]
+        m = endxyz_info["uhf"] + 1
+        mb = endxyz_info["mb"]
+        refrxnid = storage.allstruc.Psupra_to_rxnid.get((mb, c, m))
+        if refrxnid is not None:
+            return [], refrxnid
+        else:
+            bufferwd = storage.setting.searching_setting.general.bufferwd
+            products_info = process_fragment_recursive(endxyz_info, bufferwd)
+            return products_info, None
+
+    @staticmethod
+    def TS_evaluate(reactants_info, endxyz_info,debugtrigger):
+
+        Rcoordinate = reactants_info["coordinate"]
+        Rele_l = reactants_info["ele_l"]
+        Pcoordinate = endxyz_info["coordinate"]
+        Pele_l = endxyz_info["ele_l"]
+        c = endxyz_info["charge"]
+        m = endxyz_info["uhf"] + 1
+        bufferwd = storage.setting.searching_setting.general.bufferwd
+        rc, Esp_TS = TSstructure_NEBTS(Rcoordinate, Rele_l, Pcoordinate, Pele_l, c, m).run(rootfolder=bufferwd,debugtrigger=debugtrigger)
+        E_r = [storage.allstruc.get(i).energy.sp for i in reactants_info["reactants"]]
+        if np.isinf(Esp_TS):
+            delta_E = np.inf
+        elif Esp_TS == 0:
+            delta_E = 0
+        else:
+            delta_E = Esp_TS - E_r
+        return delta_E
+
+    @staticmethod
+    def evalueate_path(reactants_info, products_info, reaction_info, endxyz_info, refrxnid=None, layer=0,
+                       linkoldnode=True, delscanwd=False):
+        from collections import Counter
+        reactants = reactants_info["reactants"]
+        unreactants = reactants_info["unreacted"]
+        simuhf = reactants_info["simuhf"]
+        atl = reactants_info["at_l"]
+        scanwd = reactants_info["scanwd"]
+        mbcut_length = storage.setting.searching_setting.general.mbcut_length
+        abs_scanwd = join(storage.setting.searching_setting.general.scanwd, scanwd)
+
+        info_temp = {"reactants": reactants,
+                     "unreacted": unreactants,
+                     "at_l": atl,
+                     "sim_uhf": simuhf,
+                     "products": [],
+                     "scanwd": scanwd,
+                     # "E_rxn": E_rxn,
+                     # "bond_change": bond_change,
+                     # "therdy_allow": therdy_allow,
+                     "layer": layer,  # of which cycle step
+                     "type": reaction_info["type"],
+                     # "target_change": if at_l bond/break as desired
+                     # "rxnid" =
+                     # reaction_exist= T/F
+                     # "ref_id"
+                     }
+        if refrxnid is not None:
+            refnodeid = rxnnetwork.rxn_idx_to_nodeid[refrxnid]
+            refnodeinfo = rxnnetwork.get_reaction_info(refnodeid)
+            for key in ["products", "E_rxn", "bond_change", "therdy_allow"]:
+                if key in refnodeinfo:
+                    info_temp[key] = refnodeinfo[key]
+            info_temp["reaction_exist"] = True
+            info_temp["ref_id"] = refrxnid
+            newnode_index = rxnnetwork.add_newnode(info=info_temp, linkoldnode=linkoldnode)
+            info_temp["rxnid"] = newnode_index
+            del_dir(delscanwd, abs_scanwd)
+            return info_temp
+
+        # check if the target atl change is simulated
+        map_topo_l = map_fragments_topo_l_back_to_Supramol(products_info)
+        if reaction_info["type"] == "interA":
+            struc1, struc2 = reactants
+            nat1 = len(storage.allstruc.get(struc1).general.ele_l)
+            maped_atl = [[a, b + nat1] for a, b in atl]
+        else:
+            maped_atl = atl
+        target_change = check_target_bond_change(maped_atl, map_topo_l, reaction_info["type"])
+        if not target_change:
+            info_temp["target_change"] = False
+            del_dir(delscanwd, abs_scanwd)
+            info_temp["reaction_exist"] = False
+            info_temp["products"] = ["-"]
+            return info_temp
+        else:
+            info_temp["target_change"] = True
+
+        reactants_items = [storage.allstruc.sid_to_strucitems[_] for _ in reactants]
+        unreactants_items = [storage.allstruc.sid_to_strucitems[_] for _ in unreactants]
+        product_items = [(" | ".join(item["mb"].split(" | ")[:mbcut_length]),
+                          item["charge"],
+                          item["multiplicity"]) for item in products_info]
+
+        search_rxn_key = rxnnetwork.normal_rxn_key_from_items(reactants_items, unreactants_items, product_items)
+        refrxnid = rxnnetwork.rxn_index.get(search_rxn_key)
+        if refrxnid is not None:
+            refnodeid = rxnnetwork.rxn_idx_to_nodeid[refrxnid]
+            refnodeinfo = rxnnetwork.get_reaction_info(refnodeid)
+            info_temp["reaction_exist"] = True
+            info_temp["ref_id"] = refrxnid
+            info_temp["E_rxn"] = refnodeinfo["E_rxn"]  # will be updated later
+            info_temp["bond_change"] = refnodeinfo["bond_change"]
+            info_temp["therdy_allow"] = refnodeinfo["therdy_allow"]
+            info_temp["products"] = refnodeinfo["products"]
+        else:
+            # new info
+            info_temp["reaction_exist"] = False
+            bond_change = False if Counter(reactants_items) == Counter(product_items) else True
+            info_temp["bond_change"] = bond_change
+            if not bond_change:
+                info_temp["E_rxn"] = 0
+                lastnode = rxnnetwork.get_lastnode_from_scanwd(scanwd)
+                edge_l = [lastnode]
+                newnode_index = rxnnetwork.add_newnode(info=info_temp, edge_l=edge_l, linkoldnode=linkoldnode)
+                info_temp["rxnid"] = newnode_index
+                info_temp["products"] = info_temp["reactants"]
+                del_dir(delscanwd, abs_scanwd)
+                return info_temp
+
+            else:
+                E_p = [Pfeatures["Esp"] for Pfeatures in products_info]
+                E_r = [storage.allstruc.get(i).energy.sp for i in reactants]
+                all_energies = E_p + E_r
+                if any(e is None or not np.isfinite(e) for e in all_energies):
+                    E_rxn = np.inf
+                else:
+                    E_rxn = sum(E_p) - sum(E_r)
+                E_rxn_kcal = E_rxn * 627.503 if not np.isinf(E_rxn) else np.inf
+                info_temp["E_rxn"] = E_rxn_kcal
+                # print(key,E_rxn_kcal)
+                if E_rxn_kcal > storage.setting.searching_setting.general.elim:
+                    info_temp["therdy_allow"] = False
+                    # info_temp["products"] = ["unknow"]
+                    # newnode_index = rxnnetwork.add_newnode(info=info_temp, linkoldnode=linkoldnode)
+                    # info_temp["rxnid"] = newnode_index
+                else:
+                    info_temp["therdy_allow"] = True
+        # update or add allstruc
+        products = []
+        for Pfeatures in products_info:
+            mb = Pfeatures["mb"]
+            if not "unknow" in mb:
+                P_item = (
+                    " | ".join(mb.split(" | ")[:mbcut_length]), Pfeatures["charge"], Pfeatures["multiplicity"])
+                ref_Pid = storage.allstruc.strucitems_to_sid.get(P_item)
+                if ref_Pid is not None:
+                    Esp_now = Pfeatures["Esp"]
+                    Esp_ref = storage.allstruc.get(ref_Pid).energy.sp
+                    if Esp_now < Esp_ref:
+                        storage.allstruc.update_current_structure_info(Pfeatures, ref_Pid)
+                    products.append(ref_Pid)
+                else:
+                    if not np.isinf(Pfeatures["Esp"]):
+                        sid, s = storage.allstruc.placeholde_new_sid()
+                        storage.allstruc.register_new_sid(sid, s, Pfeatures, movefolder=True)
+                        products.append(sid)
+                    else:
+                        products.append("unknow")
+            else:
+                products.append("unknow")
+        info_temp["products"] = products
+        if refrxnid is not None:
+            newnode_index = rxnnetwork.add_newnode(info=info_temp, linkoldnode=linkoldnode, registerindex=False)
+        else:
+            newnode_index = rxnnetwork.add_newnode(info=info_temp, linkoldnode=linkoldnode)
+
+            # store endxyz info
+            mb = endxyz_info["mb"]
+            c = endxyz_info["charge"]
+            m = endxyz_info["uhf"] + 1
+            storage.allstruc.register_new_SupraMol(mb, c, m, newnode_index)
+        info_temp["rxnid"] = newnode_index
+        del_dir(delscanwd, abs_scanwd)
+        return info_temp
+
+
+class SingleCycleSearch(PathEval):
+    def __init__(self, reactants):
+        self.reactants = reactants
 
     @timeit("Reaction simulation")
     def explore_workflow(self, strnr="0"):
@@ -78,13 +345,13 @@ class SingleCycleSearch:
             # call xtb scan
             for entry in react_l[:ninter]:
                 if not self.rxn_search_exist(entry):
-                    res, searchcount = interxtbscan(self.reactants, entry, strnr, searchcount)
+                    res, searchcount, rc = interxtbscan(self.reactants, entry, strnr, searchcount)
                     output_interA.update(res)
         else:
             # call mbff
             for entry in react_l[:ninter]:
                 if not self.rxn_search_exist(entry):
-                    res, searchcount = intermbff(self.reactants, entry, strnr, searchcount)
+                    res, searchcount, rc = intermbff(self.reactants, entry, strnr, searchcount)
                     output_interA.update(res)
         return output_interA, searchcount
 
@@ -118,13 +385,13 @@ class SingleCycleSearch:
             # call xtb scan
             for entry in react_l[:nintra]:
                 if not self.rxn_search_exist(entry):
-                    res, searchcount = intraxtbscan(self.reactants, entry, strnr, searchcount)
+                    res, searchcount, rc = intraxtbscan(self.reactants, entry, strnr, searchcount)
                     output_intraA.update(res)
         else:
             # call mbff
             for entry in react_l[:nintra]:
                 if not self.rxn_search_exist(entry):
-                    res, searchcount = intrambff(self.reactants, entry, strnr, searchcount)
+                    res, searchcount, rc = intrambff(self.reactants, entry, strnr, searchcount)
                     output_intraA.update(res)
         return output_intraA, searchcount
 
@@ -157,202 +424,25 @@ class SingleCycleSearch:
             # call xtb scan
             for entry in react_l[:ndisso]:
                 if not self.rxn_search_exist(entry):
-                    res, searchcount = dissoxtbscan(self.reactants, entry, strnr, searchcount)
+                    res, searchcount, rc = dissoxtbscan(self.reactants, entry, strnr, searchcount)
                     output_D.update(res)
 
         else:
             # call mbff
             for entry in react_l[:ndisso]:
                 if not self.rxn_search_exist(entry):
-                    res, searchcount = dissombff(self.reactants, entry, strnr, searchcount)
+                    res, searchcount, rc = dissombff(self.reactants, entry, strnr, searchcount)
                     output_D.update(res)
         return output_D, searchcount
 
-    @staticmethod
-    # @timeit("Separting SuparMol")
-    def followup_process_pathway(endxyz_info):
-        """
-        output_d[f"{reactionpath}_{count}"] = [{"reactants": [struc1, struc2],
-                                                    "unreacted": unreacted,
-                                                    "at_l": at_l,
-                                                    "simuhf": u,"scanwd":scanwd},  # reactants info
-
-
-                                                   {"atomic_charge": atcharge,
-                                                    "charge": charge,
-                                                    "nel": totnel,
-                                                    "uhf": u,
-                                                    "coordinate": endxyz,
-                                                    "ele_l": ele_l_end,
-                                                    "bo": bo,
-                                                    "atomic_connection": constrain_l
-                                                    "mb":mb},  # endxyz info
-
-                                                   {"type": "interA"}  # reaction info
-                                                   ]
-
-        :return: (products_info, refrxnid)
-        If the end structure already maps to an existing reaction/product entry,
-        returns ([], refrxnid).
-
-        products_info = [
-        features_p1 = {
-            "coordinate": self.coordinate,
-            "ele_l": self.ele_l,
-            "nel": int(sum([element[_] for _ in self.ele_l])) - self.c,
-            "multiplicity": self.m,
-            "charge": self.c,
-            "atcharge": read_atcharge(join(rootfolder, "xtb", "charges")),
-            "mb": self.mb,
-            "atomic_connection": constrain_l,
-            "Esp": energy,
-            "strucwd":rootfolder (abswd)
-        }, features_p2,....]
-        """
-        # test if this endxyz exists
-        c = endxyz_info["charge"]
-        m = endxyz_info["uhf"] + 1
-        mb = endxyz_info["mb"]
-        refrxnid = storage.allstruc.Psupra_to_rxnid.get((mb, c, m))
-        if refrxnid is not None:
-            return [],refrxnid
-        else:
-            bufferwd = storage.setting.searching_setting.general.bufferwd
-            products_info = process_fragment_recursive(endxyz_info, bufferwd)
-            return products_info,None
-
-    @staticmethod
-    def evalueate_path(reactants_info, products_info, reaction_info, endxyz_info,refrxnid=None, layer=0, linkoldnode=True):
-        from collections import Counter
-        reactants = reactants_info["reactants"]
-        unreactants = reactants_info["unreacted"]
-        simuhf = reactants_info["simuhf"]
-        atl = reactants_info["at_l"]
-        scanwd = reactants_info["scanwd"]
-        mbcut_length = storage.setting.searching_setting.general.mbcut_length
-
-        info_temp = {"reactants": reactants,
-                     "unreacted": unreactants,
-                     "at_l": atl,
-                     "sim_uhf": simuhf,
-                     "products": [],
-                     "scanwd": scanwd,
-                     # "E_rxn": E_rxn,
-                     # "bond_change": bond_change,
-                     # "therdy_allow": therdy_allow,
-                     "layer": layer,  # of which cycle step
-                     "type": reaction_info["type"]
-                     # "rxnid" =
-                     # reaction_exist= T/F
-                     # "ref_id"
-                     }
-        if refrxnid is not None:
-            refnodeid = rxnnetwork.rxn_idx_to_nodeid[refrxnid]
-            refnodeinfo = rxnnetwork.get_reaction_info(refnodeid)
-            info_temp["products"] = refnodeinfo["products"]
-            info_temp["E_rxn"] = refnodeinfo["E_rxn"]
-            info_temp["bond_change"] = refnodeinfo["bond_change"]
-            info_temp["therdy_allow"] = refnodeinfo["therdy_allow"]
-            info_temp["reaction_exist"] = True
-            info_temp["ref_id"] = refrxnid
-            newnode_index = rxnnetwork.add_newnode(info=info_temp, linkoldnode=linkoldnode)
-            info_temp["rxnid"]=newnode_index
-            return info_temp
-
-
-
-        reactants_items = [storage.allstruc.sid_to_strucitems[_] for _ in reactants]
-        unreactants_items = [storage.allstruc.sid_to_strucitems[_] for _ in unreactants]
-        product_items = [(" | ".join(item["mb"].split(" | ")[:mbcut_length]),
-                          item["charge"],
-                          item["multiplicity"]) for item in products_info]
-
-
-
-        search_rxn_key = rxnnetwork.normal_rxn_key_from_items(reactants_items, unreactants_items, product_items)
-        refrxnid = rxnnetwork.rxn_index.get(search_rxn_key)
-        if refrxnid is not None:
-            refnodeid = rxnnetwork.rxn_idx_to_nodeid[refrxnid]
-            refnodeinfo = rxnnetwork.get_reaction_info(refnodeid)
-            info_temp["reaction_exist"] = True
-            info_temp["ref_id"] = refrxnid
-            info_temp["E_rxn"] = refnodeinfo["E_rxn"]  # will be updated later
-            info_temp["bond_change"] = refnodeinfo["bond_change"]
-            info_temp["therdy_allow"] = refnodeinfo["therdy_allow"]
-            info_temp["products"] = refnodeinfo["products"]
-        else:
-            # new info
-            info_temp["reaction_exist"] = False
-            bond_change = False if Counter(reactants_items) == Counter(product_items) else True
-            info_temp["bond_change"] = bond_change
-            if not bond_change:
-                info_temp["E_rxn"] = 0
-                lastnode = rxnnetwork.get_lastnode_from_scanwd(scanwd)
-                edge_l = [lastnode]
-                newnode_index = rxnnetwork.add_newnode(info=info_temp, edge_l=edge_l, linkoldnode=linkoldnode)
-                info_temp["rxnid"] = newnode_index
-                info_temp["products"]=info_temp["reactants"]
-                return info_temp
-
-            else:
-                E_p = [Pfeatures["Esp"] for Pfeatures in products_info]
-                E_r = [storage.allstruc.get(i).energy.sp for i in reactants]
-                all_energies = E_p + E_r
-                if any(e is None or not np.isfinite(e) for e in all_energies):
-                    E_rxn = np.inf
-                else:
-                    E_rxn = sum(E_p) - sum(E_r)
-                E_rxn_kcal = E_rxn * 627.503 if not np.isinf(E_rxn) else np.inf
-                info_temp["E_rxn"] = E_rxn_kcal
-                # print(key,E_rxn_kcal)
-                if E_rxn_kcal > storage.setting.searching_setting.general.elim:
-                    info_temp["therdy_allow"] = False
-                    # info_temp["products"] = ["unknow"]
-                    # newnode_index = rxnnetwork.add_newnode(info=info_temp, linkoldnode=linkoldnode)
-                    # info_temp["rxnid"] = newnode_index
-                else:
-                    info_temp["therdy_allow"] = True
-        # update or add allstruc
-        products = []
-        for Pfeatures in products_info:
-            mb = Pfeatures["mb"]
-            if not "unknow" in mb:
-                P_item = (
-                    " | ".join(mb.split(" | ")[:mbcut_length]), Pfeatures["charge"], Pfeatures["multiplicity"])
-                ref_Pid = storage.allstruc.strucitems_to_sid.get(P_item)
-                if ref_Pid is not None:
-                    Esp_now = Pfeatures["Esp"]
-                    Esp_ref = storage.allstruc.get(ref_Pid).energy.sp
-                    if Esp_now < Esp_ref:
-                        storage.allstruc.update_current_structure_info(Pfeatures, ref_Pid)
-                    products.append(ref_Pid)
-                else:
-                    sid, s = storage.allstruc.placeholde_new_sid()
-                    storage.allstruc.register_new_sid(sid, s, Pfeatures, movefolder=True)
-                    products.append(sid)
-            else:
-                products.append("unknow")
-        info_temp["products"] = products
-        if refrxnid is not None:
-            newnode_index = rxnnetwork.add_newnode(info=info_temp, linkoldnode=linkoldnode, registerindex=False)
-        else:
-            newnode_index = rxnnetwork.add_newnode(info=info_temp, linkoldnode=linkoldnode)
-
-            # store endxyz info
-            mb = endxyz_info["mb"]
-            c = endxyz_info["charge"]
-            m = endxyz_info["uhf"] + 1
-            storage.allstruc.register_new_SupraMol(mb, c, m, newnode_index)
-        info_temp["rxnid"] = newnode_index
-        return info_temp
-
-    def workflow(self, prefix_rpid, step):
+    def workflow(self, prefix_rpid, step, debugtrigger=False):
         from datetime import datetime
         ReactivityPreparer(self.reactants).ensure_AFO_ready()
         explore_dl = self.explore_workflow(prefix_rpid)
         print_info = []
 
         start_time = datetime.now()
+        tseval = storage.setting.searching_setting.general.tseval
 
         for output_d in explore_dl:
             for item in output_d.values():
@@ -360,11 +450,42 @@ class SingleCycleSearch:
                 endxyz_info = item[1]
                 reaction_info = item[2]
 
-                products_info,refrxnid = self.followup_process_pathway(endxyz_info)
+                products_info, refrxnid = self.followup_process_pathway(endxyz_info)
+                if tseval:
+                    # check if R==P
+                    from collections import Counter
+                    reactants  =reactants_info["reactants"]
+                    reactants_items = [storage.allstruc.sid_to_strucitems[_] for _ in reactants]
+                    product_items = [(" | ".join(item["mb"].split(" | ")[:storage.setting.searching_setting.general.mbcut_length]),
+                                      item["charge"],
+                                      item["multiplicity"]) for item in products_info]
+                    bond_change = False if Counter(reactants_items) == Counter(product_items) else True
+                    if not bond_change:
+                        info_temp = {"reactants": reactants,
+                                     "at_l": reactants_info["at_l"],
+                                     "products": reactants,
+                                     "scanwd": reactants_info["scanwd"],
+                                     "delta_E_ts": None,
+                                     "bond_change": False
+                                     }
+                        print_info.append(info_temp)
+                        continue
+
+                    delta_E_ts = PathEval.TS_evaluate(reactants_info, endxyz_info,debugtrigger=debugtrigger)
+                    if delta_E_ts > storage.setting.searching_setting.general.elim:
+                        info_temp = {"reactants": reactants_info["reactants"],
+                                     "at_l": reactants_info["at_l"],
+                                     "products": ["?"],
+                                     "scanwd": reactants_info["scanwd"],
+                                     "delta_E_ts":delta_E_ts
+                                     }
+                        print_info.append(info_temp)
+                        continue
+
                 info_l = self.evalueate_path(reactants_info,
                                              products_info,
                                              reaction_info,
-                                             endxyz_info,refrxnid,
+                                             endxyz_info, refrxnid,
                                              layer=step + 1)
                 print_info.append(info_l)
 
@@ -384,7 +505,7 @@ class SingleCycleSearch:
         return print_info
 
 
-def ReactionSearch(reactants_ini, step=0):
+def ReactionSearch(reactants_ini, step=0,debugtrigger=False):
     # refproducts_ini = storage.allstruc.refproducts
     print(f"Start doing reaction exploartions with given structues: ", reactants_ini)
     ncycle = storage.setting.searching_setting.general.cycle
@@ -406,7 +527,7 @@ def ReactionSearch(reactants_ini, step=0):
                                                                      "products": [],
                                                                      "layer": 0})
             singlecycle = SingleCycleSearch(reactants_l)
-            print_info = singlecycle.workflow(prefix_rpid="0", step=step)
+            print_info = singlecycle.workflow(prefix_rpid="0", step=step, debugtrigger=debugtrigger)
             print_simulation_details(print_info, "0")
             # update reaction nexwork
             step += 1
@@ -423,14 +544,12 @@ def ReactionSearch(reactants_ini, step=0):
                 print("reactants for this node: ", reactants_l)
                 prefix_rpid = rxninfo["scanwd"]
                 singlecycle = SingleCycleSearch(reactants_l)
-                print_info = singlecycle.workflow(prefix_rpid=prefix_rpid, step=step)
+                print_info = singlecycle.workflow(prefix_rpid=prefix_rpid, step=step, debugtrigger=debugtrigger)
                 print_simulation_details(print_info, nodewd)
             step += 1
-
 
 
 def clean_up_bufferwd(degubtrigger, bufferwd):
     # clean up buffer_struc
     if not degubtrigger and exists(bufferwd):
-        import shutil
         shutil.rmtree(bufferwd, ignore_errors=True)

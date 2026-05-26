@@ -17,6 +17,7 @@ class ReactivityStrucInfo(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     afo: Optional[pd.DataFrame] = None
     bo:Optional[pd.DataFrame] = None
+    weakH:Optional[float] = None
 
 class EnergyStrucInfo(BaseModel):
     sp: Optional[float] = None

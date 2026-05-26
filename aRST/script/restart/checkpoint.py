@@ -4,6 +4,7 @@ from pathlib import Path
 from functools import wraps
 import aRST.script.initialization as storage
 from os.path import join,exists
+from tqdm import tqdm
 
 
 def load_pkl(filename):
@@ -35,7 +36,7 @@ def checkpoint_scan_search(dirname="checkpoint/explore"):
             pkl_file = join(check_dir,f"{scanwd}.pkl")
             old_results = load_pkl(pkl_file)
             if old_results is not None:
-                print(f"[restart] loaded {scanwd}")
+                # print(f"[restart] loaded {scanwd}", end="")
                 return old_results
             result = func(
                 self,
@@ -46,7 +47,7 @@ def checkpoint_scan_search(dirname="checkpoint/explore"):
             )
             if result is not None:
                 save_pkl_atomic(result, pkl_file)
-                print(f"[checkpoint] saved {scanwd}")
+                # print(f"[checkpoint] saved {scanwd}", end="")
 
             return result
 
@@ -66,7 +67,7 @@ def checkpoint_mbff_search(dirname="checkpoint/explore"):
             pkl_file = join(check_dir,f"{scanwd}.pkl")
             old_results = load_pkl(pkl_file)
             if old_results is not None:
-                print(f"[restart] loaded {scanwd}")
+                # print(f"[restart] loaded {scanwd}", end="")
                 return old_results
             result = func(
                 self,
@@ -74,7 +75,7 @@ def checkpoint_mbff_search(dirname="checkpoint/explore"):
             )
             if result is not None:
                 save_pkl_atomic(result, pkl_file)
-                print(f"[checkpoint] saved {scanwd}")
+                # print(f"[checkpoint] saved {scanwd}", end="")
 
             return result
 

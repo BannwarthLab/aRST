@@ -11,25 +11,26 @@ from aRST.script.head import print_react_l
 import copy
 
 
-def get_interA_react_l(reactants0):
+def get_interA_react_l(reactants0, writefile=True):
     generalsetting = storage.setting.searching_setting.general
     intersetting = storage.setting.searching_setting.inter
     react_l = SPR(reactants0, generalsetting.spr_mode).inter(
         equivalent_afogap_tol=generalsetting.equivalent_afogap_tol,
         exclude_elements=generalsetting.exclude_elements,
-        exclude_pairs=generalsetting.exclude_pairs if generalsetting.cycle==1 else None
+        exclude_pairs=generalsetting.exclude_pairs if generalsetting.cycle == 1 else None
     )
     cut = 2 if intersetting.concerted_pair else 1
     for item in react_l:
         pairs = item["atl"][:cut]
         item["atl"] = pairs
 
-    # print top 10 react_l
-    print_react_l(reactants0, react_l)
-    # write full react_l in file
-    with open(join(generalsetting.wd, "react_l"), "w") as f:
-        for item in react_l:
-            f.write(json.dumps(item) + "\n")
+    if writefile:
+        # print top 10 react_l
+        print_react_l(reactants0, react_l)
+        # write full react_l in file
+        with open(join(generalsetting.wd, "react_l"), "w") as f:
+            for item in react_l:
+                f.write(json.dumps(item) + "\n")
 
     atom_pairs = intersetting.atom_pair
     if atom_pairs:
@@ -116,28 +117,33 @@ def interxtbscan(reactants0, entry, reactionpath, count=0):
     }
     unreacted = sorted((x for x in reactants0 if x != struc1 and x != struc2), key=int, reverse=True)
 
+    rc = 1
     for u in uhf_l:
-        print(f"Simulating interA path {reactionpath}_{count}: R={reactants0}, atl={at_l}, uhf_sim={u} ...", end="")
+        # print(f"Simulating interA path {reactionpath}_{count}: R={reactants0}, atl={at_l}, uhf_sim={u} ...", end="")
         scan_wd = join(scanwd, f"{reactionpath}_{count}")
 
         reactantinfo = {"reactants": [struc1, struc2],
                         "unreacted": unreacted,
                         "at_l": at_l, "simuhf": u,
-                        "scanwd": f"{reactionpath}_{count}"}  # reactants info
-        results = SinglePathSearch(coordinate_merge,
-                                   ele_merged,
-                                   u, charge,scan_wd,
-                                   nat_coord1, [struc1, struc2]).run_one_scan_search(
+                        "scanwd": f"{reactionpath}_{count}",
+                        "coordinate": coordinate_merge,
+                        "ele_l": ele_merged
+                        }  # reactants info
+        results, status = SinglePathSearch(coordinate_merge,
+                                           ele_merged,
+                                           u, charge, scan_wd,
+                                           nat_coord1, [struc1, struc2]).run_one_scan_search(
             constrain_setting, "interA", reactantinfo, totnel
         )
+        if status == 0:
+            rc = 0
         if results:
-
             output_d[f"{reactionpath}_{count}"] = results
 
-        else:
-            print(f"failed.")
+        # else:
+        #     print(f"failed.")
         count += 1
-    return output_d, count
+    return output_d, count, rc
 
 
 def intermbff(reactants0, entry, reactionpath, count=0):
@@ -168,26 +174,32 @@ def intermbff(reactants0, entry, reactionpath, count=0):
     unreacted = sorted((x for x in reactants0 if x != struc1 and x != struc2), key=int, reverse=True)
     mbxyz0, ele_l0 = get_endxyz_from_mb(atom_connection, coordinate_merge, ele_merged, set_angles=False)
     mbxyz, mbele_l = get_endxyz_from_mb(atom_connection, mbxyz0, ele_l0, set_angles=True)
+    rc = 1
     for u in uhf_l:
-        print(f"Simulating interA path {reactionpath}_{count}: R={reactants0}, atl={at_l}, uhf_sim={u} ...", end="")
+        # print(f"Simulating interA path {reactionpath}_{count}: R={reactants0}, atl={at_l}, uhf_sim={u} ...", end="")
         scan_wd = join(scanwd, f"{reactionpath}_{count}")
         reactantinfo = {"reactants": [struc1, struc2],
                         "unreacted": unreacted,
                         "at_l": at_l, "simuhf": u,
-                        "scanwd": f"{reactionpath}_{count}"}  # reactants info
-        results = SinglePathSearch(mbxyz,
-                                   mbele_l,
-                                   u, charge,scan_wd,
-                                   nat_coord1,
-                                   [struc1, struc2]).run_xtbopt_for_mbff_search(atom_connection, push_l,
-                                                                                "interA", reactantinfo, totnel)
+                        "scanwd": f"{reactionpath}_{count}",
+                        "coordinate": coordinate_merge,
+                        "ele_l": ele_merged
+                        }  # reactants info
+        results, status = SinglePathSearch(mbxyz,
+                                           mbele_l,
+                                           u, charge, scan_wd,
+                                           nat_coord1,
+                                           [struc1, struc2]).run_xtbopt_for_mbff_search(atom_connection, push_l,
+                                                                                        "interA", reactantinfo, totnel)
 
+        if status == 0:
+            rc = 0
         if results:
             output_d[f"{reactionpath}_{count}"] = results
 
-            print(f"done.")
-
-        else:
-            print(f"failed.")
+        #     print(f"done.")
+        #
+        # else:
+        #     print(f"failed.")
         count += 1
-    return output_d, count
+    return output_d, count, rc

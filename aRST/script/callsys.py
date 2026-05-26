@@ -1,3 +1,4 @@
+import sys
 import traceback
 from os.path import join, exists
 import os
@@ -31,6 +32,7 @@ class CallORCA:
             "caltyp2": "RKS",  # This can be updated dynamically if needed
             "cpcm": orcasetting.cpcm,  # only use cpcm when opt
             "ncpu": orcasetting.ncpu,
+            "maxcore": orcasetting.maxcore,
         }
 
     def __init__(self, wd, command_d=None, custom_settings=None):
@@ -45,6 +47,7 @@ class CallORCA:
 
             command_d["caltyp2"] = "RKS" if command_d["m"] == 1 else "UKS"
             self.cmd = mydict(command_d)
+        self.ncpu = self.cmd.get("ncpu",1)
 
     def orcasubprocess(self, cmd_string, writeenergy=True, removegbw=True):
         out_path = f'{self.wd}/orca.out'
@@ -84,15 +87,17 @@ class CallORCA:
             command_string += f"{self.cmd.get_value('basis', '')} "
         command_string += f"{self.cmd.get_value('caltyp', '')} "
         command_string += f"{self.cmd.get_value('caltyp2', '')} "
-        if self.cmd.get_value('cpcm', '') and type == "opt":
-            command_string += f"CPCM({self.cmd.get_value('cpcm', '')}) \n"
-        else:
+        if type=="sp":
             command_string += f"\n"
+        elif self.cmd.get_value('cpcm', ''):
+            command_string += f"CPCM({self.cmd.get_value('cpcm', '')}) \n"
 
-        ncpu = self.cmd.get_value('ncpu', 1)
-        if isinstance(ncpu, int) and ncpu > 1:
+        if isinstance(self.ncpu, int) and self.ncpu > 1:
             if self.cmd.get_value('ncpu', 1):
-                command_string += f"%PAL NPROCS {int(ncpu)} END \n"
+                command_string += f"%PAL NPROCS {int(self.ncpu)} END \n"
+                command_string += f"%maxcore {self.cmd.get_value('maxcore'),1000} \n"
+
+
         c = self.cmd.get_value('charge')
         m = self.cmd.get_value('m')
         fn = self.cmd.get_value('fn')
@@ -143,6 +148,30 @@ class CallORCA:
                     parts = ln.split()
                     m = int(parts[3])
         return m
+    def call_nebts(self):
+        # write input
+        with open(f'{self.wd}/orca.inp', 'w') as f:
+            f.write(f"""
+!XTB NEB-TS ALPB({self.cmd.get_value('alpb')})
+%NEB
+ NEB_END_XYZFILE "product.xyz"
+END
+%PAL NPROCS {self.cmd.get_value('ncpu')} END
+%maxcore {self.cmd.get_value('maxcore')}
+*XYZFILE {self.cmd.get_value('charge')} {self.cmd.get_value('m')} reactant.xyz           
+            """)
+
+
+        cmd = f"{os.environ['ORCA_BIN']} orca.inp"
+
+        rc = self.orcasubprocess(cmd, removegbw=False)
+        # check converge coord.xyz
+        if not os.path.exists(join(self.wd,"orca_NEB-TS_converged.xyz")):
+            rc=1
+        return rc
+
+
+
 
 
 class CallCrest:
@@ -349,8 +378,17 @@ class CallxTB:
     def opt(self, writeenergy=True):
         cmd_string = self.generate_cmd_string(opt=True)
         rc = self.xtbsubprocess(cmd_string, writeenergy)
-        # if rc!=0:
-        #     rc = self.secondchance_opt()
+
+        # fallback: retry without ALPB if failed
+        if rc!=0 and self.cmd.get_value('alpb') is not None:
+            old_alpb = self.cmd.get_value('alpb')
+            self.cmd["alpb"] = None
+            cmd_string = self.generate_cmd_string(opt=True)
+            rc = self.xtbsubprocess(cmd_string, writeenergy)
+            if rc==0:
+                self.cmd["alpb"] = old_alpb
+                cmd_string = self.generate_cmd_string(opt=True)
+                rc = self.xtbsubprocess(cmd_string, writeenergy)
         return rc
 
     def afo(self):
@@ -824,3 +862,90 @@ class CallgXTB:
                     Esp = float(ln.split()[-1])
                     break
         return Esp
+
+
+class CallFFiTS:
+    @classmethod
+    def default_settings(cls, xtbsetting):
+        """Dynamically generates default settings based on the `setting` class."""
+        return {
+                "reactantfn": "reactant",
+                "productfn": "product",
+                "charge": 0,
+                "uhf": 0,
+                "alpb": xtbsetting.alpb,
+                "etemp": xtbsetting.struc_etemp,
+                }
+    def __init__(self, wd, command_d=None, custom_settings=None):
+        self.wd = wd
+        if command_d is not None:
+            self.cmd = mydict(command_d)
+        else:
+            import aRST.script.initialization as storage
+            command_d = self.default_settings(storage.setting.xtb_setting)
+            if custom_settings is not None:
+                command_d.update(custom_settings)
+
+            self.cmd = mydict(command_d)
+    def xtbsubprocess(self, cmd_string):
+        out_path = f'{self.wd}/xtb.out'
+        err_path = f'{self.wd}/xtb_err.out'
+        with open(out_path, 'w') as stdout_file, open(err_path, 'w') as stderr_file:
+            p = subprocess.Popen(cmd_string, stdout=stdout_file, stderr=stderr_file, shell=True)
+            p.wait()
+            rc = p.returncode
+        return rc
+
+    def write_input(self):
+        with open(join(self.wd, "input.toml"), "w") as f:
+            f.write(f"""
+[system]
+charge={self.cmd.get('charge')}
+multiplicity={self.cmd.get('uhf')}          
+[reactant.path]
+hessian_filename="rhessian"
+
+[product.path]
+hessian_filename="phessian"            
+            """)
+
+    @staticmethod
+    def remove_trailing_blank_lines(filepath):
+        with open(filepath, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        # remove trailing newlines at end of file
+        content = content.rstrip("\r\n")
+
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(content)
+
+    def do(self):
+        # do R hess
+        cmd_string  = f"{os.environ['XTB_BIN']} {self.cmd.get('reactantfn')} --hess -c {self.cmd.get('charge')} --uhf {self.cmd.get('uhf')} --alpb {self.cmd.get('alpb')} --etemp {self.cmd.get('etemp')}"
+        rc = 1
+        rc = self.xtbsubprocess(cmd_string)
+        if rc==0:
+            os.rename(join(self.wd,"hessian"), join(self.wd,"rhessian"))
+            # do P hess
+            cmd_string = f"{os.environ['XTB_BIN']} {self.cmd.get('productfn')} --hess -c {self.cmd.get('charge')} --uhf {self.cmd.get('uhf')} --alpb {self.cmd.get('alpb')} --etemp {self.cmd.get('etemp')}"
+            rc = self.xtbsubprocess(cmd_string)
+            if rc == 0:
+                os.rename(join(self.wd, "hessian"), join(self.wd, "phessian"))
+
+                # write input
+                self.write_input()
+
+                # # end-of-file error
+                # self.remove_trailing_blank_lines(join(self.wd,self.cmd.get('reactantfn')))
+                # self.remove_trailing_blank_lines(join(self.wd, self.cmd.get('productfn')))
+
+                # run ffits
+                out_path = f'{self.wd}/ffits.out'
+                err_path = f'{self.wd}/ffits_err.out'
+                cmd_string = f"ffits {self.cmd.get('reactantfn')} {self.cmd.get('productfn')} --config input.toml"
+                with open(out_path, 'w') as stdout_file, open(err_path, 'w') as stderr_file:
+                    p = subprocess.Popen(cmd_string, stdout=stdout_file, stderr=stderr_file, shell=True)
+                    p.wait()
+                    rc = p.returncode
+        return rc

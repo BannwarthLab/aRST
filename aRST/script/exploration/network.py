@@ -22,6 +22,8 @@ class ReactionNetwork:
 
                     cls._instance.searchpath_index = {}  # key: (sorted_Rids, atl), val=rxnid
                     cls._instance.rxn_index = {}  # key: (sorted_R_items,sorted_unreact_items, sorted_P_items), val=rxnid
+                    cls._instance.therdy_allowed_nodes = set() # record all therdy allowed nodeid
+                    cls._instance.therdy_allowed_struc = set() # record all therdy allowed generated strucres
         return cls._instance
 
     def add_newnode(self, info, edge_l=None, linkoldnode=True,registerindex=True):
@@ -56,6 +58,12 @@ class ReactionNetwork:
         path_key = self._normal_path_pair(reactants, at_l)
         self.searchpath_index[path_key] = node_idx
 
+        therdy_allow = False
+        if "therdy_allow" in info and info["therdy_allow"]:
+            therdy_allow  =True
+        if therdy_allow:
+            self.therdy_allowed_nodes.add(nodeid)
+
         if registerindex and not "unknow" in products:
             allstruc = storage.allstruc
             R_items = [allstruc.sid_to_strucitems[i] for i in reactants]
@@ -63,6 +71,9 @@ class ReactionNetwork:
             P_items = [allstruc.sid_to_strucitems[i] for i in products]
             rxn_key = self.normal_rxn_key_from_items(R_items,U_items,P_items)
             self.rxn_index[rxn_key] = node_idx
+            if therdy_allow:
+                self.therdy_allowed_struc.update(products)
+                self.therdy_allowed_struc.update(reactants)
 
         self.graph.add_node(nodeid, info=info)
 

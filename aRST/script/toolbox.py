@@ -4,7 +4,7 @@ import pandas as pd
 from os.path import exists
 from datetime import datetime
 from functools import wraps
-import aRST.script.initialization as storage
+import shutil
 
 
 class mydict(dict):
@@ -185,6 +185,10 @@ def create_folder(wd):
     return wd
 
 
+def del_dir(trigger,wd):
+    if trigger and exists(wd):
+        shutil.rmtree(wd, ignore_errors=True)
+
 def get_random_folder_name():
     import random
     import string
@@ -336,7 +340,9 @@ def write_strucout():
 def timeit(label=None):
     def decorator(func):
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args,mute_timeit=False, **kwargs):
+            if mute_timeit:
+                return func(*args, **kwargs)
             start_time = datetime.now()
 
             result = func(*args, **kwargs)

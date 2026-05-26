@@ -1,9 +1,10 @@
 import os
+import sys
 from os.path import exists, join
 import numpy as np
-from aRST.script.callsys import CallxTB, CallORCA, CallgXTB, CallMolBar
+from aRST.script.callsys import CallxTB, CallORCA, CallgXTB, CallMolBar,CallFFiTS
 import aRST.script.initialization as storage
-from aRST.script.toolbox import create_folder, read_coord, read_atcharge, write_xyz, read_bo, get_topo
+from aRST.script.toolbox import create_folder, read_coord, read_atcharge, write_xyz, read_bo, get_topo, del_dir,get_random_folder_name
 import threading
 from aRST.script import structure_class
 import networkx as nx
@@ -53,20 +54,17 @@ class Singlestruc:
             if proc == 0:
                 self.coordinate, self.ele_l = read_coord(join(comdir, "xtbopt.xyz"))
             else:
-                proc = CallxTB(comdir, custom_settings={"charge": self.c, "uhf": self.m - 1}).sp()
-                print(f'Warning: struc in {comdir} opt at xtb failed, try with unopt struc')
-                if proc == 0:
-                    return self.coordinate, self.ele_l
-                else:
-                    raise ValueError(F"struc in {comdir} SP at xtb failed!")
+                # structure is problematic, return Esp = np.inf
+                return self.coordinate, self.ele_l, proc
+
         else:
             raise ValueError(f"Unknown engine for opt: {engine}")
         # update the mb
         mb = CallMolBar(self.coordinate, self.ele_l).get_mb()
-        if self.mb!=mb:
+        if self.mb != mb:
             # print(f'Warning: Molbar code of struc in {comdir} changed after opt')
             self.mb = mb
-        return self.coordinate, self.ele_l
+        return self.coordinate, self.ele_l, proc
 
     def _run_sp(self, comdir, engine="gxtb"):
         self._prepare_workdir_and_write_coord(comdir)
@@ -135,32 +133,43 @@ class Singlestruc:
         ## opt
         dftopt = storage.setting.read.general.dftopt or storage.setting.orca_setting.dftopt
         if len(self.ele_l) > 1:
-            # gfn2 opt
+            # do gfn2 opt
             comdir = join(rootfolder, "xtb")
-            self._run_opt(comdir, engine="xtb")
-            if dftopt:
+            res = self._run_opt(comdir, engine="xtb")
+            proc_status = res[2]
+            if proc_status == 0 and dftopt:
+                # further DFT opt
                 comdir = join(rootfolder, "orca")
-                self._run_opt(comdir, engine="orca")
-        ## sp
-        ## gfn2 sp is necessary
-        if dftopt:
-            comdir = join(rootfolder, "xtb")
-            self._run_sp(comdir, engine="xtb")
-
-        if storage.setting.searching_setting.general.sp_method == "dft":
-            comdir = join(rootfolder, "orca")
-            if dftopt:
-                # read energy from opt proc
-                energy = CallORCA(comdir).get_energy_from_out()
+                res = self._run_opt(comdir, engine="orca")
+                proc_status = res[2]
+            if proc_status == 0:
+                # get sp prop
+                if storage.setting.searching_setting.general.sp_method == "dft":
+                    comdir = join(rootfolder, "orca")
+                    if not dftopt:
+                        res = self._run_sp(comdir, engine="orca")
+                        energy = res[2]
+                    else:
+                        energy = CallORCA(comdir).get_energy_from_out()
+                elif storage.setting.searching_setting.general.sp_method == "gxtb":
+                    comdir = join(rootfolder, "gxtb")
+                    energy = self._run_sp(comdir, engine="gxtb")
+                else:
+                    raise ValueError("sp_method keyword wrong")
             else:
-                energy = self._run_sp(comdir, engine="orca")
-        elif storage.setting.searching_setting.general.sp_method == "gxtb":
-            comdir = join(rootfolder, "gxtb")
-            energy = self._run_sp(comdir, engine="gxtb")
+                energy = np.inf
         else:
-            raise ValueError("sp_method keyword wrong")
-
-        # collect
+            # only do sp
+            if storage.setting.searching_setting.general.sp_method == "dft":
+                comdir = join(rootfolder, "orca")
+                res = self._run_sp(comdir, engine="orca")
+                energy = res[2]
+            elif storage.setting.searching_setting.general.sp_method == "gxtb":
+                comdir = join(rootfolder, "gxtb")
+                energy = self._run_sp(comdir, engine="gxtb")
+            else:
+                raise ValueError("sp_method keyword wrong")
+        # collect data
         if len(self.ele_l) > 1:
             bo = read_bo(join(rootfolder, "xtb", "wbo"))
             constrain_l = get_topo(self.coordinate, self.ele_l, bo)
@@ -236,13 +245,17 @@ class Singlestruc:
 
 class Supramolecule:
     # analyse the possible Supramolecule
-    def __init__(self, Supra_coordinate, Supra_ele_l, Supra_atcharge, Supra_topo_l, totc, totnel):
+    def __init__(self, Supra_coordinate, Supra_ele_l, Supra_atcharge, Supra_topo_l, totc, totnel,
+                 global_atomidx=None, ):
         self.Supra_coordinate = Supra_coordinate
         self.Supra_ele_l = Supra_ele_l
         self.Supra_atcharge = Supra_atcharge
         self.Supra_topo_l = Supra_topo_l
         self.totc = totc
         self.totnel = totnel
+        if global_atomidx is None:
+            global_atomidx = list(range(1, len(Supra_ele_l) + 1))
+        self.global_atomidx = global_atomidx
         self.Sgraph = StrucGraph(coordinate=Supra_coordinate, ele_l=Supra_ele_l, topo_l=Supra_topo_l).graph
 
         self.Fragments_coordinate_list = []
@@ -250,8 +263,8 @@ class Supramolecule:
         self.Fragments_c_list = []
         self.Fragments_atcharge_list = []
         self.Fragments_nel_list = []
-        self.Fragments_atomidx_list = []
         self.Fragments_topo_list = []
+        self.Fragments_global_atomidx_list = []
 
     def split(self):
         components = list(nx.connected_components(self.Sgraph))
@@ -262,6 +275,7 @@ class Supramolecule:
         frag_c_float_list = []
         frag_nel_list = []
         frag_topo_list = []
+        frag_global_atomidx_list = []
 
         # print("sum Supra_atcharge =", float(np.sum(self.Supra_atcharge)))
         # print("totc =", self.totc)
@@ -269,6 +283,10 @@ class Supramolecule:
 
             comp_sorted = sorted(comp)
             atom_idxs0 = [i - 1 for i in comp_sorted]
+            frag_global_atomidx = [
+                self.global_atomidx[i - 1]
+                for i in comp_sorted
+            ]
 
             # map supra global 1-based -> fragment local 1-based
             global_to_local = {g: l for l, g in enumerate(comp_sorted, start=1)}
@@ -296,6 +314,7 @@ class Supramolecule:
             frag_atcharge_list.append(frag_atcharge)
             frag_c_float_list.append(frag_c_float)
             frag_topo_list.append(tmp_topo_l)
+            frag_global_atomidx_list.append(frag_global_atomidx)
 
         float_charge_sum = float(sum(frag_c_float_list))
 
@@ -318,6 +337,7 @@ class Supramolecule:
         self.Fragments_c_list = frag_c_int_list
         self.Fragments_nel_list = frag_nel_list
         self.Fragments_topo_list = frag_topo_list
+        self.Fragments_global_atomidx_list = frag_global_atomidx_list
 
     def adjust_fragment_charge(self, frag_c_float_list):
         charge_l_flo = np.array(frag_c_float_list)
@@ -333,6 +353,116 @@ class Supramolecule:
         return list(int_charges)
 
         # split fragments from Supramolecule: based on strucGraph get the idx of each frag, coord, ele, atcharge all mapped from Supramolecule,for each fragm,  make sure tot_c = tot charge of all fragments, so as nel,
+
+class TSstructure_NEBTS:
+    """
+    input: reactant/aligned reactants as R; endxyz as P
+    => NEBTS (TS guess)
+    => g-xtb (E)
+    """
+
+    def __init__(self, Rcoordinate, Rele_l, Pcoordinate, Pele_l, c, m):
+        self.Rcoordinate = Rcoordinate
+        self.Rele_l = Rele_l
+        self.Pcoordinate = Pcoordinate
+        self.Pele_l = Pele_l
+        self.c = c
+        self.m = m
+
+        self.Tcoordinate = None
+        self.Tele_l = None
+        self.T_Esp = np.inf
+        self.ORCA_XTB_CMD ={
+            "alpb":storage.setting.xtb_setting.alpb,
+            "charge": self.c,
+            "m": self.m,
+            "ncpu": storage.setting.orca_setting.ncpu,
+            "maxcore": storage.setting.orca_setting.maxcore
+        }
+
+    def _get_TSguess(self, comdir):
+        os.chdir(comdir)
+        write_xyz(self.Rcoordinate, self.Rele_l, "reactant", c=self.c, m=self.m)
+        write_xyz(self.Pcoordinate, self.Pele_l, "product", c=self.c, m=self.m)
+        rc=CallORCA(comdir,command_d=self.ORCA_XTB_CMD).call_nebts()
+        if rc==0:
+            self.Tcoordinate, self.Tele_l = read_coord(join(comdir, "orca_NEB-TS_converged.xyz"))
+        return rc
+
+    def _get_TEsp(self,comdir):
+        proc = CallgXTB(comdir, custom_settings={"charge": self.c, "uhf": self.m - 1})
+        # write .charg and .uhf file
+        with open(".CHRG", "w") as file:
+            file.write(f"{self.c}\n")
+        with open(".UHF", "w") as file:
+            file.write(f"{self.m - 1}\n")
+        rc = proc.sp()
+        if rc == 0:
+            self.T_Esp = proc.get_Esp_from_out()
+        return self.T_Esp
+    def run(self,rootfolder,debugtrigger):
+        random_name = get_random_folder_name()
+        comdir = join(rootfolder, random_name)
+        create_folder(comdir)
+        rc = self._get_TSguess(comdir)
+        if rc!=0 and self.bareless(comdir):
+            self.T_Esp =0
+            rc=0
+            del_dir(True, comdir)
+            return rc, self.T_Esp
+        if rc ==0:
+            rc = self._get_TEsp(comdir)
+        del_dir(not debugtrigger,comdir)
+        return rc, self.T_Esp
+    @staticmethod
+    def bareless(comdir):
+        with open(join(comdir,"orca.out"),"r") as file:
+            for line in file.readlines():
+                if "No barrier was found." in line:
+                    return True
+        return False
+
+
+
+
+class TSstructure_ffits:
+    """
+    input: reactant/aligned reactants as R; endxyz as P
+    => FFits (TS guess)
+    => ORCA(xtb) (TS geom refinement)
+    => g-xtb (E)
+    """
+
+    def __init__(self, Rcoordinate, Rele_l, Pcoordinate, Pele_l, c, m):
+        self.Rcoordinate = Rcoordinate
+        self.Rele_l = Rele_l
+        self.Pcoordinate = Pcoordinate
+        self.Pele_l = Pele_l
+        self.c = c
+        self.m = m
+
+        self.Tcoordinate = None
+        self.Tele_l = None
+
+    def _get_TSguess(self,comdir):
+        # write reactant and prod in comdir
+        os.chdir(comdir)
+        write_xyz(self.Rcoordinate,self.Rele_l,"reactant",c=self.c,m=self.m)
+        write_xyz(self.Pcoordinate, self.Pele_l, "product", c=self.c, m=self.m)
+        rc = CallFFiTS(comdir,custom_settings={"charge": self.c, "uhf": self.m - 1})
+        if rc ==0:
+            self.Tcoordinate, self.Tele_l = read_coord(join(comdir,"optimized.xyz"))
+        return rc
+    # def _refine_TSguess(self,comdir):
+    #     rc = CallORCA(comdir,custom_settings={"charge": self.c,
+    #                                           "m": self.m,
+    #                                           "caltyp": "OPTTS",
+    #                                           "functional":"xtb2","cpcm":storage.setting)
+
+
+
+
+
 
 
 class StrucGraph:
@@ -379,7 +509,7 @@ class StrucGraph:
     def get_fragments(self):
         return list(nx.connected_components(self.graph))
 
-    def bond_exist(self,at_l):
+    def bond_exist(self, at_l):
         target = set(at_l)
         exists = any(set(item["atoms"]) == target for item in self.topo_l)
         return exists
@@ -406,7 +536,6 @@ class StrucGraph:
 
         except (nx.NetworkXNoPath, nx.NodeNotFound):
             return None, None
-
 
 
 class Allstruc:
@@ -480,30 +609,44 @@ class Allstruc:
         self.Psupra_to_rxnid[(mb_full, c, m)] = refid
         self.rxnid_to_Psupra[refid] = (mb_full, c, m)
 
-def optimize_fragment(coordinate, ele_l, charge, nel, mb, rootfolder):
-    from aRST.script.toolbox import get_random_folder_name
+
+def optimize_single_fragment(coordinate, ele_l, charge, nel, mb, rootfolder):
+
     import numpy as np
     from os.path import join
 
     m_l = [1, 3] if nel % 2 == 0 else [2]
     E_sp = np.inf
     best_features = None
+    best_comdir = None
     ideal = False
 
     for m in m_l:
-        random_name = get_random_folder_name()
-        comdir = join(rootfolder, random_name)
+        while True:
+            random_name = get_random_folder_name()
+            comdir = join(rootfolder, random_name)
 
+            # make sure this comdir is new
+            if not exists(comdir):
+                break
         tmpfeatures = Singlestruc(
             coordinate, ele_l, charge, m, mb
         ).process_workflow(rootfolder=comdir, ideal=ideal)
-
         if tmpfeatures["Esp"] < E_sp:
+            if best_comdir is not None:
+                del_dir(True, best_comdir)
             E_sp = tmpfeatures["Esp"]
             best_features = tmpfeatures
-
+            best_comdir = comdir
+        elif np.isinf(tmpfeatures["Esp"]) and best_features is None:
+            best_features = tmpfeatures
+            del_dir(True, comdir)
+        else:
+            del_dir(True, comdir)
     return best_features
-def process_fragment_recursive(supra_info, rootfolder, depth=0,maxdepth=2):
+
+
+def process_fragment_recursive(supra_info, rootfolder, depth=0, maxdepth=2):
     """
         Split first, then optimize each fragment, then recurse until each final
         processed object is a single-fragment structure.
@@ -521,6 +664,9 @@ def process_fragment_recursive(supra_info, rootfolder, depth=0,maxdepth=2):
     nel = supra_info["nel"]
     atcharge = supra_info["atcharge"]
     atomic_connection = supra_info["atomic_connection"]
+    global_atomidx = supra_info.get("global_atomidx")
+    if global_atomidx is None:
+        global_atomidx = list(range(1, len(ele_l) + 1))
     mb = supra_info.get("mb")
     if mb is None:
         mb = get_molbar_from_coordinates(coordinate, ele_l)
@@ -531,19 +677,21 @@ def process_fragment_recursive(supra_info, rootfolder, depth=0,maxdepth=2):
         Supra_atcharge=atcharge,
         Supra_topo_l=atomic_connection,
         totnel=nel,
-        totc=charge
+        totc=charge,
+        global_atomidx=global_atomidx,
     )
     sup.split()
 
     if len(sup.Fragments_coordinate_list) > 1 and depth < maxdepth:
         out = []
-        for sub_coord, sub_ele, sub_c, sub_nel, sub_topo_l, sub_atcharge in zip(
+        for sub_coord, sub_ele, sub_c, sub_nel, sub_topo_l, sub_atcharge, sub_global_atomidx, in zip(
                 sup.Fragments_coordinate_list,
                 sup.Fragments_ele_l_list,
                 sup.Fragments_c_list,
                 sup.Fragments_nel_list,
                 sup.Fragments_topo_list,
                 sup.Fragments_atcharge_list,
+                sup.Fragments_global_atomidx_list
         ):
             out.extend(process_fragment_recursive(
                 {
@@ -553,6 +701,7 @@ def process_fragment_recursive(supra_info, rootfolder, depth=0,maxdepth=2):
                     "nel": sub_nel,
                     "atcharge": sub_atcharge,
                     "atomic_connection": sub_topo_l,
+                    "global_atomidx": sub_global_atomidx
                 },
                 rootfolder,
                 depth=depth + 1,
@@ -560,14 +709,17 @@ def process_fragment_recursive(supra_info, rootfolder, depth=0,maxdepth=2):
             ))
         return out
     # for the single-structure
-    opt_info = optimize_fragment(coordinate, ele_l, charge, nel, mb, rootfolder)
-
+    opt_info = optimize_single_fragment(coordinate, ele_l, charge, nel, mb, rootfolder)
     opt_coord = opt_info["coordinate"]
     opt_ele_l = opt_info["ele_l"]
     opt_charge = opt_info["charge"]
     opt_nel = opt_info["nel"]
     opt_atcharge = opt_info["atcharge"]
     opt_topo = opt_info["atomic_connection"]
+    opt_info["global_atomidx"] = global_atomidx
+    if np.isinf(opt_info["Esp"]):
+        # error structure
+        return [opt_info]
 
     post_sup = Supramolecule(
         Supra_coordinate=opt_coord,
@@ -576,18 +728,20 @@ def process_fragment_recursive(supra_info, rootfolder, depth=0,maxdepth=2):
         Supra_topo_l=opt_topo,
         totnel=opt_nel,
         totc=opt_charge,
+        global_atomidx=global_atomidx
     )
     post_sup.split()
 
     if len(post_sup.Fragments_coordinate_list) > 1 and depth < maxdepth:
         out = []
-        for sub_coord, sub_ele, sub_c, sub_nel, sub_topo_l, sub_atcharge in zip(
+        for sub_coord, sub_ele, sub_c, sub_nel, sub_topo_l, sub_atcharge, sub_global_atomidx in zip(
                 post_sup.Fragments_coordinate_list,
                 post_sup.Fragments_ele_l_list,
                 post_sup.Fragments_c_list,
                 post_sup.Fragments_nel_list,
                 post_sup.Fragments_topo_list,
                 post_sup.Fragments_atcharge_list,
+                post_sup.Fragments_global_atomidx_list
         ):
             out.extend(process_fragment_recursive(
                 {
@@ -597,6 +751,7 @@ def process_fragment_recursive(supra_info, rootfolder, depth=0,maxdepth=2):
                     "nel": sub_nel,
                     "atcharge": sub_atcharge,
                     "atomic_connection": sub_topo_l,
+                    "global_atomidx": sub_global_atomidx
                 },
                 rootfolder,
                 depth=depth + 1,
@@ -605,3 +760,41 @@ def process_fragment_recursive(supra_info, rootfolder, depth=0,maxdepth=2):
         return out
 
     return [opt_info]
+
+
+def map_fragments_topo_l_back_to_Supramol(products_info):
+    map_topo_l = []
+    for Pfeatures in products_info:
+        local_topo_l = Pfeatures["atomic_connection"]
+        global_atomidx = Pfeatures["global_atomidx"]
+        for item in local_topo_l:
+            local_a, local_b = item["atoms"]
+
+            global_a = global_atomidx[local_a - 1]
+            global_b = global_atomidx[local_b - 1]
+
+            new_item = dict(item)
+            new_item["atoms"] = sorted([global_a, global_b])
+
+            map_topo_l.append(new_item)
+    return map_topo_l
+
+
+def check_target_bond_change(at_l, map_topo_l, rxn_type):
+    bond_set = {
+        tuple(sorted(item["atoms"]))
+        for item in map_topo_l
+    }
+
+    # convert 0-based -> 1-based
+    target_bonds = {
+        tuple(sorted([a + 1, b + 1]))
+        for a, b in at_l
+    }
+
+    is_formation = rxn_type in ["interA", "intraA"]
+
+    if is_formation:
+        return all(pair in bond_set for pair in target_bonds)
+    else:
+        return all(pair not in bond_set for pair in target_bonds)

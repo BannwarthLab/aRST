@@ -1,9 +1,9 @@
 import os
 import pandas as pd
 import numpy as np
-from aRST.script.toolbox import create_folder, write_xyz,read_bo,read_afo_csv,timeit
+from aRST.script.toolbox import create_folder, write_xyz, read_bo, read_afo_csv, timeit
 from os.path import join, exists, dirname
-from aRST.script.callsys import CallxTB, CallORCA, CallTerachem, CallsTDA, CallMultiwfn,CallgXTB
+from aRST.script.callsys import CallxTB, CallORCA, CallTerachem, CallsTDA, CallMultiwfn, CallgXTB
 import aRST.script.initialization as storage
 import shutil
 
@@ -33,8 +33,10 @@ class ReactivityPreparer:
     def ensure_AFO_ready(self, afosubwd=None):
         self.prepare_AFO(afosubwd=afosubwd)
 
+    def ensure_weakH_ready(self):
+        self.prepare_weakH_list()
 
-    def prepare_AFO(self, afosubwd=None,force=False):
+    def prepare_AFO(self, afosubwd=None, force=False):
         for sid in self.sid_list:
             if not force and self.check_featrues(sid):
                 continue
@@ -42,7 +44,7 @@ class ReactivityPreparer:
             s_generalentry = storage.allstruc.get(sid).general
             s_reactivityentry = storage.allstruc.get(sid).reactivity
             c = s_generalentry.charge
-            ele_l=s_generalentry.ele_l
+            ele_l = s_generalentry.ele_l
 
             if len(ele_l) == 1 and ele_l[0].strip().upper() == "H":
                 mbo = None
@@ -87,6 +89,41 @@ class ReactivityPreparer:
                     break
             s_reactivityentry.bo = mbo
 
+    def prepare_weakH_list(self):
+        for sid in self.sid_list:
+            s = storage.allstruc.get(sid)
+            weakH = s.reactivity.weakH
+            if weakH is not None:
+                continue
+
+            ele_l = s.general.ele_l
+            allH_idx = [i for i, ele in enumerate(ele_l) if ele.lower() == "h"]
+
+            if len(allH_idx)==len(ele_l): # only 1 H atom
+                s.reactivity.weakH = allH_idx
+                continue
+
+            topo_l = s.general.atomic_connection
+            weakHl = []
+
+            for Hidx in allH_idx:
+                Hidx_1 = Hidx + 1
+                mbo = next(
+                    (
+                        item["mbo"]
+                        for item in topo_l
+                        if Hidx_1 in item["atoms"]
+                    ),
+                    None
+                )
+
+                if mbo is not None and mbo < 0.9:
+                    weakHl.append(Hidx)
+
+
+            s.reactivity.weakH = weakHl
+        return
+
 
 class getAFO:
     def __init__(self, strucid=0, coordinate=None, ele_l=None
@@ -103,7 +140,7 @@ class getAFO:
             self.c = c
             self.m = m
         self.struc = str(strucid)
-        self.strucwd=storage.setting.searching_setting.general.strucwd
+        self.strucwd = storage.setting.searching_setting.general.strucwd
 
     def get_from_xtb(self, subfolder=None):
         afowd = create_folder(join(self.strucwd, self.struc, "xtb", "afo")) \
@@ -112,11 +149,11 @@ class getAFO:
         if not exists(join(afowd, "ml_feature.csv")):
             if 'XTBML_BIN' in os.environ and os.environ['XTBML_BIN']:
                 # modified xtb exiest
-                write_xyz(self.coordinate, self.ele_l, "coord",c=self.c,m=self.m)
+                write_xyz(self.coordinate, self.ele_l, "coord", c=self.c, m=self.m)
                 rc = CallxTB(afowd, custom_settings={"charge": self.c, "uhf": self.m - 1}).afo()
             else:
                 # use normal xtb version to generate molden file
-                write_xyz(self.coordinate, self.ele_l, "coord",c=self.c,m=self.m)
+                write_xyz(self.coordinate, self.ele_l, "coord", c=self.c, m=self.m)
                 rc = CallxTB(afowd, custom_settings={"charge": self.c, "uhf": self.m - 1}).afo_molden()
                 if rc == 0:
                     rc = CallsTDA(afowd, "molden.input").callml(0)
@@ -124,12 +161,13 @@ class getAFO:
                     rc = 1
 
         return afowd, rc
+
     def get_from_gxtb_molden(self, subfolder=None):
         afowd = create_folder(join(self.strucwd, self.struc, "xtb", "afo")) \
             if not subfolder else create_folder(join(self.strucwd, self.struc, subfolder, "xtb", "afo"))
         rc = 0
         if not exists(join(afowd, "ml_feature.csv")):
-            write_xyz(self.coordinate, self.ele_l, "coord",c=self.c,m=self.m)
+            write_xyz(self.coordinate, self.ele_l, "coord", c=self.c, m=self.m)
             rc = CallgXTB(afowd, custom_settings={"charge": self.c, "uhf": self.m - 1}).afo_molden()
             if rc == 0:
                 rc = CallsTDA(afowd, "molden.input").callml(0)
@@ -138,8 +176,6 @@ class getAFO:
 
         return afowd, rc
 
-
-
     def get_from_tc(self, subfolder=None):
         afowd = join(self.strucwd, self.struc, "stda") \
             if not subfolder else create_folder(join(self.strucwd, self.struc, subfolder, "stda"))
@@ -147,7 +183,7 @@ class getAFO:
         rc = 0
         if not exists(join(afowd, "ml_feature.csv")):
             tcwd = create_folder(join(self.strucwd, self.struc, "tc"))
-            write_xyz(self.coordinate, self.ele_l, "coord",c=self.c,m=self.m)
+            write_xyz(self.coordinate, self.ele_l, "coord", c=self.c, m=self.m)
             inputcmd_d = {"coordfn": "coord",
                           "c": self.c,
                           "m": self.m,
@@ -174,12 +210,13 @@ class getAFO:
             orcawd = create_folder(
                 join(self.strucwd, self.struc, "orcaml")) if not subfolder else create_folder(
                 join(self.strucwd, self.struc, subfolder, "orcaml"))
-            write_xyz(self.coordinate, self.ele_l, "coord",c=self.c,m=self.m)
+            write_xyz(self.coordinate, self.ele_l, "coord", c=self.c, m=self.m)
             staus = CallORCA(orcawd,
                              custom_settings={"charge": self.c, "m": self.m,
                                               "functional": storage.setting.searching_setting.reactivity.afo_orca_functional,
                                               "basis": storage.setting.searching_setting.reactivity.afo_orca_basis,
-                                              "cpcm": storage.setting.searching_setting.reactivity.afo_orca_cpcm, }).call(type="sp",
+                                              "cpcm": storage.setting.searching_setting.reactivity.afo_orca_cpcm, }).call(
+                type="sp",
                 removegbw=False)
 
             import subprocess

@@ -11,23 +11,24 @@ from aRST.script.exploration.structure import StrucGraph
 import copy
 
 
-def get_intraD_react_l(reactants0, gaplim=5):
+def get_intraD_react_l(reactants0, gaplim=5, writefile=True):
     general_setting = storage.setting.searching_setting.general
     disso_setting = storage.setting.searching_setting.disso
     react_l = SDP(reactants0,
                   exclude_elements=general_setting.exclude_elements,
-                  exclude_pairs=general_setting.exclude_pairs if general_setting.cycle==1 else None
+                  exclude_pairs=general_setting.exclude_pairs if general_setting.cycle == 1 else None
                   ).build_react_l(tol=1e-5)
     cut = 2 if disso_setting.concerted_pair else 1
     for item in react_l:
         pairs = item["atl"][:cut]
         item["atl"] = pairs
 
-    print_react_l(reactants0, react_l)
-    # write full react_l in file
-    with open(join(general_setting.wd, "react_l"), "w") as f:
-        for item in react_l:
-            f.write(json.dumps(item) + "\n")
+    if writefile:
+        print_react_l(reactants0, react_l)
+        # write full react_l in file
+        with open(join(general_setting.wd, "react_l"), "w") as f:
+            for item in react_l:
+                f.write(json.dumps(item) + "\n")
     atom_pairs = disso_setting.atom_pair
     if atom_pairs:
         # overwrite react_l with user's input
@@ -47,7 +48,7 @@ def get_intraD_react_l(reactants0, gaplim=5):
 
 
 def check_scan_uhf_D(entry):
-    struc = entry["reactants"]
+    struc = entry["reactants"][0]
     nel = storage.allstruc.get(struc).general.nel
     if nel % 2 == 0:
         return [0, 2]
@@ -57,7 +58,7 @@ def check_scan_uhf_D(entry):
 
 def determine_pulling_distance(entry):
     disso_setting = storage.setting.searching_setting.disso
-    struc = entry["reactants"]
+    struc = entry["reactants"][0]
     s_general = storage.allstruc.get(struc).general
     coordinate = s_general.coordinate
     ele_l = s_general.ele_l
@@ -127,7 +128,7 @@ def dissoxtbscan(reactants0, entry, reactionpath, count=0):
     output_d = {}
     uhf_l = check_scan_uhf_D(entry)
 
-    struc = entry["reactants"]
+    struc = entry["reactants"][0]
     s_general = storage.allstruc.get(struc).general
     coordinate = s_general.coordinate
     ele_l = s_general.ele_l
@@ -152,26 +153,33 @@ def dissoxtbscan(reactants0, entry, reactionpath, count=0):
         }
     }
     unreacted = sorted((x for x in reactants0 if x != struc), key=int, reverse=True)
+    rc = 1
     for u in uhf_l:
-        print(f"Simulating disso path {reactionpath}_{count}: R={reactants0}, atl={at_l}, uhf_sim={u} ...", end="")
+        # print(f"Simulating disso path {reactionpath}_{count}: R={reactants0}, atl={at_l}, uhf_sim={u} ...", end="")
         scan_wd = join(scanwd, f"{reactionpath}_{count}")
         reactantinfo = {"reactants": [struc],
                         "unreacted": unreacted,
                         "at_l": at_l, "simuhf": u,
-                        "scanwd": f"{reactionpath}_{count}"}  # reactants info
+                        "scanwd": f"{reactionpath}_{count}",
+                        "coordinate": coordinate,
+                        "ele_l": ele_l
+                        }  # reactants info
 
-        results = SinglePathSearch(coordinate,
-                                   ele_l,
-                                   u, charge, scan_wd,
-                                   reactants=[struc]).run_one_scan_search(constrain_setting, "dissoD", reactantinfo,
-                                                                          nel)
+        results, status = SinglePathSearch(coordinate,
+                                           ele_l,
+                                           u, charge, scan_wd,
+                                           reactants=[struc]).run_one_scan_search(constrain_setting, "dissoD",
+                                                                                  reactantinfo,
+                                                                                  nel)
+        if status == 0:
+            rc = 0
         if results:
             output_d[f"{reactionpath}_{count}"] = results
 
-        else:
-            print(f"failed.")
+        # else:
+        #     print(f"failed.")
         count += 1
-    return output_d, count
+    return output_d, count, rc
 
 
 def dissombff(reactants0, entry, reactionpath, count=0):
@@ -179,7 +187,7 @@ def dissombff(reactants0, entry, reactionpath, count=0):
     output_d = {}
     uhf_l = check_scan_uhf_D(entry)
 
-    struc = entry["reactants"]
+    struc = entry["reactants"][0]
     s_general = storage.allstruc.get(struc).general
     coordinate = s_general.coordinate
     ele_l = s_general.ele_l
@@ -205,25 +213,31 @@ def dissombff(reactants0, entry, reactionpath, count=0):
     mbxyz0, ele_l0 = get_endxyz_from_mb(atom_connection, coordinate, ele_l, set_angles=False)
     mbxyz, mbele_l = get_endxyz_from_mb(atom_connection, mbxyz0, ele_l0, set_angles=True)
 
+    rc = 1
     for u in uhf_l:
-        print(f"Simulating disso path {reactionpath}_{count}: R={reactants0}, atl={at_l}, uhf_sim={u} ...", end="")
+        # print(f"Simulating disso path {reactionpath}_{count}: R={reactants0}, atl={at_l}, uhf_sim={u} ...", end="")
         scan_wd = join(scanwd, f"{reactionpath}_{count}")
         reactantinfo = {"reactants": [struc],
                         "unreacted": unreacted,
                         "at_l": at_l, "simuhf": u,
-                        "scanwd": f"{reactionpath}_{count}"}  # reactants info
-        results = SinglePathSearch(mbxyz,
-                                   mbele_l,
-                                   u, charge, scan_wd,
-                                   reactants=[struc]).run_xtbopt_for_mbff_search(atom_connection, push_l,
-                                                                                 "dissoD", reactantinfo, nel)
+                        "scanwd": f"{reactionpath}_{count}",
+                        "coordinate": coordinate,
+                        "ele_l": ele_l
+                        }  # reactants info
+        results, status = SinglePathSearch(mbxyz,
+                                           mbele_l,
+                                           u, charge, scan_wd,
+                                           reactants=[struc]).run_xtbopt_for_mbff_search(atom_connection, push_l,
+                                                                                         "dissoD", reactantinfo, nel)
 
+        if status == 0:
+            rc = 0
         if results:
             output_d[f"{reactionpath}_{count}"] = results
 
-            print(f"done.")
+            # print(f"done.")
 
-        else:
-            print(f"failed.")
+        # else:
+        # print(f"failed.")
         count += 1
-    return output_d, count
+    return output_d, count, rc

@@ -114,6 +114,8 @@ class GeneralSearchingSetting(MyBaseModel):
     cycle: int = 1
     sp_method: Literal["dft", "gxtb"] = "dft"
     elim: int = 300
+    tslim: int=100
+    tseval:bool = False
     equivalent_afogap_tol: float = 0.01
     spr_mode: Literal[0, 1, 2] = 0
     scan_mode: Literal[0, 1] = 0
@@ -231,6 +233,7 @@ class ORCASetting(MyBaseModel):
     dftopt: bool = False
     cpcm: str = "ch2cl2"
     ncpu: int = 1
+    maxcore: int=1000
 
 
 class InputModel(MyBaseModel):

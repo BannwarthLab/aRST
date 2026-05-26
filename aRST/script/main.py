@@ -8,6 +8,7 @@ from aRST.script.head import *
 from argparse import ArgumentParser
 import aRST.script.initialization as init
 from aRST.script.initialization import Setting
+from datetime import datetime
 
 
 
@@ -88,22 +89,24 @@ def main():
 
     if args.explore:
         from aRST.script.exploration.reactionsearch import ReactionSearch
-        from datetime import datetime
+
         print_theo_setting()
         start_time = datetime.now()
         try:
             # prepare the input reactant
             reactants_ini = init.register_init_input_reactants(init.setting, init.allstruc)
             ReactionSearch(reactants_ini)
-            from aRST.script.toolbox import write_rxnout,write_strucout
-            write_rxnout()
-            write_strucout()
+
         except Exception as e:
             print(f"Error in main(): {e}", flush=True)
             traceback.print_exc()
         except SystemExit as e:
             print(f"SystemExit: {e}", flush=True)
             traceback.print_exc()
+        finally:
+            from aRST.script.toolbox import write_rxnout, write_strucout
+            write_rxnout()
+            write_strucout()
         end_time = datetime.now()
         running_time = end_time - start_time
         total_seconds = running_time.total_seconds()
@@ -124,8 +127,28 @@ def main():
         reactants_ini = init.register_init_input_reactants(init.setting, init.allstruc)
         aligning_two_structures(reactants=reactants_ini)
     elif args.nanoreactor:
-        from aRST.script.nanoreactor.build_reaction import pseudo_nanoreactor_inter
-        pseudo_nanoreactor_inter()
+        print_theo_setting()
+        start_time = datetime.now()
+        try:
+            from aRST.script.nanoreactor.worflow import Cancer
+            reactants_ini = init.register_init_input_reactants(init.setting, init.allstruc)
+            Cancer(reactants_ini,debugtrigger=args.debug)
+        except Exception as e:
+            print(f"Error in main(): {e}", flush=True)
+            traceback.print_exc()
+        except SystemExit as e:
+            print(f"SystemExit: {e}", flush=True)
+            traceback.print_exc()
+        finally:
+            from aRST.script.toolbox import write_rxnout, write_strucout
+            write_rxnout()
+            write_strucout()
+        end_time = datetime.now()
+        running_time = end_time - start_time
+        total_seconds = running_time.total_seconds()
+        print()
+        print(f"***** Job finished in {int(total_seconds // 3600)} hour "
+              f"{int((total_seconds % 3600) // 60)} mins {total_seconds % 60:.2f} sec *****", flush=True)
 
 
 

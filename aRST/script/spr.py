@@ -380,7 +380,7 @@ class SPR:
 
         tmp_react = sorted(merge_react_l(final_react, identical_atom_d, gap_tol=equivalent_afogap_tol),
                            key=lambda x: x['gap'])
-        # del all connected bond
+        # del all connected bond & change to reactants in len(1)
         allbonds = SDP(self.reactants, exclude_elements=exclude_elements, exclude_pairs=exclude_pairs).allbonds
         final_react = []
         for item in tmp_react:
@@ -392,6 +392,7 @@ class SPR:
                     if item2["atl"] == atl or len(set(atl)) == 1:
                         trigger = False
             if trigger:
+                item["reactants"] = [item["reactants"][0]]
                 final_react.append(item)
         return final_react
 
@@ -474,27 +475,39 @@ class SDP:
         self.allbonds = sorted(allbonds, key=lambda x: x["mbo"])
 
     def build_react_l(self, tol=0.01):
-        # refine react_l
         react_l = []
+        groups_by_struc = {}
+
         for item in self.allbonds:
-            struc = item["reactants"]
+            struc = int(item["reactants"])
             at1, at2 = item["atl"]
             mbo = item["mbo"]
-            if not react_l:
-                react_l.append(item)
-                react_l[0]["atl"] = [[at1, at2]]
-            else:
-                # loop over react_l if degenerate dissociation pair
-                degenerate = False
-                for item2 in react_l:
-                    if int(item2["reactants"]) == int(struc) and abs(mbo - item2["mbo"]) < tol:
-                        degenerate = True
-                        if not any([at1 in _ for _ in item2["atl"]]) and not any(
-                                [at2 in _ for _ in item2["atl"]]):
-                            item2["atl"].append([at1, at2])
-                            break
-                if not degenerate:
-                    react_l.append(item)
-                    react_l[-1]["atl"] = [[at1, at2]]
+
+            candidates = groups_by_struc.setdefault(struc, [])
+
+            matched = False
+
+            for group in candidates:
+                if abs(mbo - group["mbo"]) < tol:
+                    matched = True
+                    used_atoms = group["_used_atoms"]
+
+                    if at1 not in used_atoms and at2 not in used_atoms:
+                        group["atl"].append([at1, at2])
+                        used_atoms.update((at1, at2))
+
+                    break
+
+            if not matched:
+                new_item = item.copy()
+                new_item["atl"] = [[at1, at2]]
+                new_item["_used_atoms"] = {at1, at2}
+
+                candidates.append(new_item)
+                react_l.append(new_item)
+
+        for item in react_l:
+            item["reactants"] = [item["reactants"]]
+            item.pop("_used_atoms", None)
 
         return sorted(react_l, key=lambda x: x["mbo"])

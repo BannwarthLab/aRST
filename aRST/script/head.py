@@ -1,6 +1,7 @@
 import datetime
 from typing import Any, Dict, List
 
+import numpy as np
 
 TOTAL_WIDTH = 100
 DEFAULT_BORDER_WIDTH = 90
@@ -103,7 +104,7 @@ def print_theo_setting() -> None:
 
     setting = storage.setting
 
-    width = 64   # inner box width (without outer centering)
+    width = 64  # inner box width (without outer centering)
     side_padding = (TOTAL_WIDTH - width) // 2
     side = " " * side_padding
 
@@ -186,13 +187,13 @@ def print_theo_setting() -> None:
         afomethod = f"{reactivity.afo_orca_functional} {reactivity.afo_orca_basis}"
         kv("Method", afomethod)
         kv("Solvation", f"CPCM({reactivity.afo_orca_cpcm})"
-           if reactivity.afo_orca_cpcm else "None")
+        if reactivity.afo_orca_cpcm else "None")
 
     elif reactivity.MO_method == "terachem":
         afomethod = f"{reactivity.afo_tc_functional} {reactivity.afo_tc_basis}"
         kv("Method", afomethod)
         kv("Solvation", f"eps={reactivity.afo_tc_epsilon}"
-           if reactivity.afo_tc_epsilon else "None")
+        if reactivity.afo_tc_epsilon else "None")
 
     kv("AFO Gap tolerance", f"{search.general.equivalent_afogap_tol} eV")
 
@@ -220,12 +221,6 @@ def print_theo_setting() -> None:
     print()
 
 
-
-
-
-
-
-
 def print_jobhead(jobhead: str) -> None:
     _centered_banner("*", "* {} *".format(jobhead), width=TOTAL_WIDTH)
 
@@ -246,11 +241,11 @@ def print_simulation_details(info_l: List[Dict[str, Any]], node_name: str) -> No
     col_note = 18
 
     header = (
-        side
-        + "{:^{w1}} {:^{w2}} {:^{w3}} {:^{w4}} {:^{w5}} {:^{w6}} {:^{w7}} {:^{w8}}".format(
-            "#", "RXNID", "Scan_wd", "R", "Atom Pair", "P", "ΔE (kcal/mol)", "Note",
-            w1=col_i, w2=col_rxn, w3=col_sw, w4=col_r, w5=col_ap, w6=col_p, w7=col_e, w8=col_note
-        )
+            side
+            + "{:^{w1}} {:^{w2}} {:^{w3}} {:^{w4}} {:^{w5}} {:^{w6}} {:^{w7}} {:^{w8}}".format(
+        "#", "RXNID", "Scan_wd", "R", "Atom Pair", "P", "ΔE (kcal/mol)", "Note",
+        w1=col_i, w2=col_rxn, w3=col_sw, w4=col_r, w5=col_ap, w6=col_p, w7=col_e, w8=col_note
+    )
     )
 
     print(side + "-" * DEFAULT_BORDER_WIDTH)
@@ -262,23 +257,34 @@ def print_simulation_details(info_l: List[Dict[str, Any]], node_name: str) -> No
         products = item.get("products")
         scanwd = item.get("scanwd")
         atom_pairs = item.get("at_l")
-        bond_change = bool(item.get("bond_change"))
-        therm_allow = bool(item.get("therdy_allow"))
+        bond_change = bool(item.get("bond_change", True))
+        therm_allow = bool(item.get("therdy_allow", True))
         e_rxn = item.get("E_rxn", 0.0)
-        reaction_exist = bool(item.get("reaction_exist"))
+        reaction_exist = bool(item.get("reaction_exist", False))
         rxnid = item.get("rxnid") if bond_change else "-"
 
-        comment = ""
-        if not bond_change:
-            comment = "R=P"
-        elif not therm_allow:
-            comment = "energetic unfavorable"
+        if len(products)==1 and products[0]=="-":
+            comment = "not desire bond change"
         else:
-            ref_id = item.get("ref_id")
-            if reaction_exist :
-                comment = "RXN same to {}".format(ref_id)
-            elif not reaction_exist:
-                comment = "New RXN"
+            # TS barrier
+            delta_E_ts = item.get("delta_E_ts")
+            comment = ""
+            if delta_E_ts is not None:
+                if np.isinf(delta_E_ts):
+                    comment = "TS search fails"
+                else:
+                    comment = f"ΔE‡={delta_E_ts:.1f}"
+            else:
+                if not bond_change:
+                    comment = "R=P"
+                elif not therm_allow:
+                    comment = "ΔE unfavorable"
+                else:
+                    ref_id = item.get("ref_id")
+                    if reaction_exist:
+                        comment = "RXN same to {}".format(ref_id)
+                    elif not reaction_exist:
+                        comment = "New RXN"
 
         line = (
             "{:^{w1}} {:^{w2}} {:^{w3}} {:^{w4}} {:^{w5}} {:^{w6}} {:^{w7}.2f} {:<{w8}}".format(
@@ -296,10 +302,10 @@ def print_simulation_details(info_l: List[Dict[str, Any]], node_name: str) -> No
 def print_react_l(reactants: Any, react_l: List[Dict[str, Any]]) -> None:
     totw = TOTAL_WIDTH
     border_width = 80
-    col1 = 10   # Ranking
-    col2 = 15   # Struc combi
-    col3 = 35   # Atom pair
-    col4 = 15   # AFO gap / MBO / eMBO
+    col1 = 10  # Ranking
+    col2 = 15  # Struc combi
+    col3 = 35  # Atom pair
+    col4 = 15  # AFO gap / MBO / eMBO
 
     side_padding = (totw - border_width) // 2
     side = " " * side_padding

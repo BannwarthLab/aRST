@@ -97,6 +97,7 @@ class SinglePathSearch:
                          custom_settings={"charge": self.charge, "uhf": self.u,
                                           "etemp": storage.setting.xtb_setting.scan_etemp}).scan(constrain_setting)
         # receive results
+        results = None
         if status == 0:
             endxyz, ele_l_end = read_coord(join(self.comdir, "xtbopt.xyz"))
             bo = read_bo(join(self.comdir, "wbo"))
@@ -151,7 +152,8 @@ class SinglePathSearch:
                  "method": "scan",
                  }  # reaction info
             ]
-            return results
+
+        return results,status
 
     @checkpoint_mbff_search(dirname="checkpoint/explore")
     def run_xtbopt_for_mbff_search(self, atom_connection, push_l, rxn_type, reactantinfo, nel):
@@ -170,6 +172,7 @@ class SinglePathSearch:
                                           }).constrained_opt(
             newbond=atom_connection[-len(push_l):])
 
+        results = None
         if status == 0:
             endxyz, ele_l_end = read_coord(join(self.comdir, "xtbopt.xyz"))
             bo = read_bo(join(self.comdir, "wbo"))
@@ -209,4 +212,4 @@ class SinglePathSearch:
                  "method": "mbff",
                  }  # reaction info
             ]
-            return results
+        return results,status
