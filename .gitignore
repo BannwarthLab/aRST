@@ -24,3 +24,5 @@ logo_2.png
 stda/
 vis/
 aRST/script/.env
+
+aRST/script/visual/generate_plot.py

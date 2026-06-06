@@ -95,7 +95,7 @@ class CallORCA:
         if isinstance(self.ncpu, int) and self.ncpu > 1:
             if self.cmd.get_value('ncpu', 1):
                 command_string += f"%PAL NPROCS {int(self.ncpu)} END \n"
-                command_string += f"%maxcore {self.cmd.get_value('maxcore'), 1000} \n"
+                command_string += f"%maxcore {self.cmd.get_value('maxcore', 1000)} \n"
 
         c = self.cmd.get_value('charge')
         m = self.cmd.get_value('m')
