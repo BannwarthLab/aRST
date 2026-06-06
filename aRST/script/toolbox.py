@@ -79,6 +79,11 @@ def read_coord(coordpath):
     ele_l = coord.iloc[:, 0].to_numpy()
     return coordinate, ele_l
 
+def add_noisy_to_coord(coordinate,scale=1e-3):
+    # prevernt opt error results by perfert symmetry
+    coordinate += np.random.normal(scale=scale, size=coordinate.shape)
+    return coordinate
+
 
 def get_topo(coordinate, ele_l, bo):
     # check if single atom:
@@ -119,6 +124,17 @@ def get_topo_covaradii(coordinate, ele_l, scale=1.2):
             })
 
     return topo_l
+
+
+
+def calc_rxn_energy(product_vals, reactant_vals):
+    HARTREE_TO_KCAL = 627.503
+    vals = product_vals + reactant_vals
+
+    if any(v is None or not np.isfinite(v) for v in vals):
+        return np.inf
+
+    return (sum(product_vals) - sum(reactant_vals)) * HARTREE_TO_KCAL
 
 
 def get_cm(xyffile):

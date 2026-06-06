@@ -116,6 +116,7 @@ class GeneralSearchingSetting(MyBaseModel):
     elim: int = 300
     tslim: int=100
     tseval:bool = False
+    evalmode:Literal["e", "g"] = "e"
     equivalent_afogap_tol: float = 0.01
     spr_mode: Literal[0, 1, 2] = 0
     scan_mode: Literal[0, 1] = 0

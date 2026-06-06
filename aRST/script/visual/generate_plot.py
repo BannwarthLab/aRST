@@ -9,9 +9,10 @@ from rdkit.Chem import AllChem
 
 wd = "/home/ychen/aRST/test/tmp"
 reactants = [0, 1, 2, 3]
-list_1 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11]
-list_2 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14]
-list_3 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 23, 24, 25, 26, 27, 32, 33, 35, 36, 37]
+list_1 = [8,9]
+list_2 = [4,5,6,7,10,11]
+list_3 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 23, 26, 44, 72]
+# list_3 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 25, 32, 33, 34, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 71, 72, 73, 77, 80, 81, 82, 83, 84, 85, 87, 88, 89, 90, 92, 93, 94, 95, 97, 101, 104, 105, 106, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 121, 122, 123, 124, 125, 126, 127, 128, 130, 131, 132, 133, 134, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 151, 152, 154, 155, 156, 157, 158, 159, 160, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174]
 
 
 def get_Erxn(reaction_data, target_sid):
@@ -36,9 +37,9 @@ def get_Erxn(reaction_data, target_sid):
 
     return matches, lowest
 
-
-# struc_list = list_1
-struc_list = [_ for _ in list_3 if _ not in list_1 and _ not in list_2]
+struc_list0 = reactants
+struc_list = list_2
+# struc_list = [_ for _ in list_1 if _ not in reactants] # and _ not in list_2
 
 
 print(struc_list)
@@ -103,4 +104,4 @@ img = Draw.MolsToGridImage(
     useSVG=False
 )
 
-img.save(join(wd, "layer2.png"))
+img.save(join(wd, "layer3.png"))

@@ -225,78 +225,225 @@ def print_jobhead(jobhead: str) -> None:
     _centered_banner("*", "* {} *".format(jobhead), width=TOTAL_WIDTH)
 
 
-def print_simulation_details(info_l: List[Dict[str, Any]], node_name: str) -> None:
-    side_padding = (TOTAL_WIDTH - DEFAULT_BORDER_WIDTH) // 2
-    side = " " * side_padding
-
+def print_simulation_details(info_l: List[Dict[str, Any]], node_name: str, evalmode="g", tseval=False) -> None:
     _centered_banner("*", "* Exploration Summary of Node {} *".format(node_name), width=TOTAL_WIDTH)
 
-    col_i = 5
+    col_i = 4
     col_rxn = 6
     col_sw = 10
-    col_r = 8
+    col_r = 10
     col_ap = 14
-    col_p = 8
-    col_e = 14
-    col_note = 18
+    col_p = 12
+    col_ts = 10
+    col_erxn = 10
+    col_note = 20
+
+    side_padding = (TOTAL_WIDTH - 96) // 2
+    side = " " * side_padding
 
     header = (
             side
-            + "{:^{w1}} {:^{w2}} {:^{w3}} {:^{w4}} {:^{w5}} {:^{w6}} {:^{w7}} {:^{w8}}".format(
-        "#", "RXNID", "Scan_wd", "R", "Atom Pair", "P", "ΔE (kcal/mol)", "Note",
-        w1=col_i, w2=col_rxn, w3=col_sw, w4=col_r, w5=col_ap, w6=col_p, w7=col_e, w8=col_note
+            + "{:^{w1}} {:^{w2}} {:^{w3}} {:^{w4}} {:^{w5}} {:^{w6}} {:^{w7}} {:^{w8}} {:^{w9}}".format(
+        "#", "RXNID", "Scan_wd", "R", "Atom Pair", "P", "ΔE‡", "ΔE", "Note",
+        w1=col_i, w2=col_rxn, w3=col_sw, w4=col_r, w5=col_ap, w6=col_p, w7=col_ts, w8=col_erxn, w9=col_note
     )
     )
+    if evalmode != "g":
+        msg = "ΔE = Esp_gas(P)-Esp_gas(R)"
+        if tseval:
+            msg += ", ΔE‡ = Esp_gas(TS)-Esp_gas(R)"
+    else:
+        msg = "ΔE = G(P)-G(R)"
+        if tseval:
+            msg += ", ΔE‡ = G(TS)-G(R)"
+        msg += ", G(i) = Esp_gas(i)+Gtrv(i)+Gsolv_corr(i)"
 
-    print(side + "-" * DEFAULT_BORDER_WIDTH)
+    msg += ", unit given in kcal/mol."
+
+    print(side + msg)
+    print(side + "-" * 96)
     print(header)
-    print(side + "-" * DEFAULT_BORDER_WIDTH)
+    print(side + "-" * 96)
 
+    energy_key = "E_rxn" if evalmode != "g" else "G_rxn"
+    TS_key = "dE_ts" if evalmode != "g" else "dG_ts"
+
+    def safe_float(val):
+        return float(val) if isinstance(val, (int, float)) else val
     for i, item in enumerate(info_l):
         reactants = item.get("reactants")
         products = item.get("products")
         scanwd = item.get("scanwd")
         atom_pairs = item.get("at_l")
-        bond_change = bool(item.get("bond_change", True))
+        bond_change = bool(item.get("bond_change", False))
         therm_allow = bool(item.get("therdy_allow", True))
-        e_rxn = item.get("E_rxn", 0.0)
+        rxnid = item.get("rxnid", "-")
+        ref_id = item.get("ref_id", "-")
         reaction_exist = bool(item.get("reaction_exist", False))
-        rxnid = item.get("rxnid") if bond_change else "-"
 
-        if len(products)==1 and products[0]=="-":
-            comment = "not desire bond change"
-        else:
-            # TS barrier
-            delta_E_ts = item.get("delta_E_ts")
-            comment = ""
-            if delta_E_ts is not None:
-                if np.isinf(delta_E_ts):
-                    comment = "TS search fails"
-                else:
-                    comment = f"ΔE‡={delta_E_ts:.1f}"
-            else:
-                if not bond_change:
-                    comment = "R=P"
-                elif not therm_allow:
-                    comment = "ΔE unfavorable"
-                else:
-                    ref_id = item.get("ref_id")
-                    if reaction_exist:
-                        comment = "RXN same to {}".format(ref_id)
-                    elif not reaction_exist:
-                        comment = "New RXN"
+        E_rxn = item.get(energy_key, "-")
+        Ets_rxn = item.get(TS_key, "-")
+
+
+        E_rxn = f"{E_rxn:.1f}" if isinstance(E_rxn, (int, float)) else str(E_rxn)
+        Ets_rxn = f"{Ets_rxn:.1f}" if isinstance(Ets_rxn, (int, float)) else str(Ets_rxn)
+        comment = item.get("note", "")
 
         line = (
-            "{:^{w1}} {:^{w2}} {:^{w3}} {:^{w4}} {:^{w5}} {:^{w6}} {:^{w7}.2f} {:<{w8}}".format(
+            "{:^{w1}} {:^{w2}} {:^{w3}} {:^{w4}} {:^{w5}} {:^{w6}} {:^{w7}} {:^{w8}} {:<{w9}}".format(
                 i, str(rxnid), str(scanwd), str(reactants), str(atom_pairs),
-                str(products), float(e_rxn),
+                str(products), safe_float(Ets_rxn),safe_float(E_rxn),
                 str(comment),
-                w1=col_i, w2=col_rxn, w3=col_sw, w4=col_r, w5=col_ap, w6=col_p, w7=col_e, w8=col_note
+                w1=col_i, w2=col_rxn, w3=col_sw, w4=col_r, w5=col_ap, w6=col_p, w7=col_ts, w8=col_erxn, w9=col_note
             )
         )
         print(side + line + side)
 
     print(side + "-" * DEFAULT_BORDER_WIDTH)
+
+def print_population_summary(
+    population: Dict[int, float],
+    abundance: Dict[int, float],
+    removed_info: List[Dict[str, Any]],
+    step: int,
+    tau: float,
+    top_n: int = 10,
+) -> None:
+    _centered_banner(
+        "*",
+        "* Population / Abundance Summary of Layer {} *".format(step),
+        width=TOTAL_WIDTH,
+    )
+
+    col_i = 4
+    col_sid = 10
+    col_abd = 14
+    col_pop = 14
+    col_reason = 40
+
+    survivor_table_width = col_i + col_sid + col_abd + col_pop + 4
+    removed_table_width = col_i + col_sid + col_abd + col_pop + col_reason + 5
+    table_width = max(survivor_table_width, removed_table_width)
+
+    side_padding = max((TOTAL_WIDTH - table_width) // 2, 0)
+    side = " " * side_padding
+
+    print(side + f"tau = {tau:.6e}")
+    print(side + f"survivor number = {len(abundance)}")
+    print(side + f"removed species number = {len(removed_info)}")
+    print(side + "-" * table_width)
+
+    # ============================================================
+    # Surviving species, only show top 10
+    # ============================================================
+    print(side + f"Top {min(top_n, len(abundance))} surviving species:")
+    print(side + "-" * survivor_table_width)
+
+    survivor_header = "{:^{w1}} {:^{w2}} {:^{w3}} {:^{w4}}".format(
+        "#",
+        "SpeciesID",
+        "Abundance",
+        "Population",
+        w1=col_i,
+        w2=col_sid,
+        w3=col_abd,
+        w4=col_pop,
+    )
+
+    print(side + survivor_header)
+    print(side + "-" * survivor_table_width)
+
+    top_survivors = sorted(
+        abundance.items(),
+        key=lambda x: x[1],
+        reverse=True,
+    )
+
+    for i, (sid, abd) in enumerate(top_survivors[:top_n]):
+        pop = population.get(sid, 0.0)
+
+        line = "{:^{w1}} {:^{w2}} {:^{w3}} {:^{w4}}".format(
+            i,
+            str(sid),
+            f"{abd:.1%}",
+            f"{pop:.4e}",
+            w1=col_i,
+            w2=col_sid,
+            w3=col_abd,
+            w4=col_pop,
+        )
+
+        print(side + line)
+
+    print(side + "-" * survivor_table_width)
+
+    # Complete surviving species list
+    survivor_ids = [
+        sid for sid, _ in top_survivors
+    ]
+
+    print(side + "Complete surviving species list:")
+    print(side + str(survivor_ids))
+    print(side + "-" * table_width)
+
+    # ============================================================
+    # Removed species
+    # ============================================================
+    print(side + "Removed species:")
+    print(side + "-" * removed_table_width)
+
+    removed_header = "{:^{w1}} {:^{w2}} {:^{w3}} {:^{w4}} {:<{w5}}".format(
+        "#",
+        "SpeciesID",
+        "Abundance",
+        "Population",
+        "Reason",
+        w1=col_i,
+        w2=col_sid,
+        w3=col_abd,
+        w4=col_pop,
+        w5=col_reason,
+    )
+
+    print(side + removed_header)
+    print(side + "-" * removed_table_width)
+
+    if not removed_info:
+        print(side + "No species removed.")
+    else:
+        for i, item in enumerate(removed_info):
+            sid = item.get("sid", item.get("species", item.get("nodeid", "-")))
+
+            abd = item.get("abundance", None)
+            pop = item.get("population", population.get(sid, 0.0))
+            reason = item.get("reason", item.get("note", "-"))
+
+            if isinstance(abd, (int, float)):
+                abd_str = f"{abd:.1%}"
+            else:
+                abd_str = "-"
+
+            if isinstance(pop, (int, float)):
+                pop_str = f"{pop:.4e}"
+            else:
+                pop_str = str(pop)
+
+            line = "{:^{w1}} {:^{w2}} {:^{w3}} {:^{w4}} {:<{w5}}".format(
+                i,
+                str(sid),
+                abd_str,
+                pop_str,
+                str(reason),
+                w1=col_i,
+                w2=col_sid,
+                w3=col_abd,
+                w4=col_pop,
+                w5=col_reason,
+            )
+
+            print(side + line)
+
+    print(side + "-" * table_width)
 
 
 def print_react_l(reactants: Any, react_l: List[Dict[str, Any]]) -> None:

@@ -8,6 +8,8 @@ from aRST.script.do_scan import get_endxyz_from_mb, build_push_l
 from aRST.script.exploration.pathsearch import SinglePathSearch
 import aRST.script.initialization as storage
 from aRST.script.head import print_react_l
+from aRST.script.toolbox import create_folder,write_xyz
+from aRST.script.callsys import CallMolBar
 import copy
 
 
@@ -166,6 +168,7 @@ def intermbff(reactants0, entry, reactionpath, count=0):
             item["atoms"][at] += nat_coord1
 
     atom_connection = atom_connection1 + add_atom_connection2
+    aligned_mb =  CallMolBar(coordinate_merge, ele_merged).get_mb()
     for item in push_l:
         at1, at2 = int(item[0]), int(item[1])
         value = np.round(float(item[3]), 2)
@@ -178,12 +181,15 @@ def intermbff(reactants0, entry, reactionpath, count=0):
     for u in uhf_l:
         # print(f"Simulating interA path {reactionpath}_{count}: R={reactants0}, atl={at_l}, uhf_sim={u} ...", end="")
         scan_wd = join(scanwd, f"{reactionpath}_{count}")
+        create_folder(scan_wd)
+        write_xyz(coordinate_merge, ele_merged, "coord")
         reactantinfo = {"reactants": [struc1, struc2],
                         "unreacted": unreacted,
                         "at_l": at_l, "simuhf": u,
                         "scanwd": f"{reactionpath}_{count}",
                         "coordinate": coordinate_merge,
-                        "ele_l": ele_merged
+                        "ele_l": ele_merged,
+                        "mb":aligned_mb
                         }  # reactants info
         results, status = SinglePathSearch(mbxyz,
                                            mbele_l,

@@ -8,6 +8,7 @@ import aRST.script.initialization as storage
 from aRST.script.head import print_react_l
 from aRST.script.geom import Coord
 from aRST.script.exploration.structure import StrucGraph
+from aRST.script.toolbox import create_folder,write_xyz
 import copy
 
 
@@ -217,12 +218,15 @@ def dissombff(reactants0, entry, reactionpath, count=0):
     for u in uhf_l:
         # print(f"Simulating disso path {reactionpath}_{count}: R={reactants0}, atl={at_l}, uhf_sim={u} ...", end="")
         scan_wd = join(scanwd, f"{reactionpath}_{count}")
+        create_folder(scan_wd)
+        write_xyz(coordinate, ele_l, "coord")
         reactantinfo = {"reactants": [struc],
                         "unreacted": unreacted,
                         "at_l": at_l, "simuhf": u,
                         "scanwd": f"{reactionpath}_{count}",
                         "coordinate": coordinate,
-                        "ele_l": ele_l
+                        "ele_l": ele_l,
+                        "mb":s.general.mb
                         }  # reactants info
         results, status = SinglePathSearch(mbxyz,
                                            mbele_l,

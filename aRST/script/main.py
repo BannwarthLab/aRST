@@ -1,7 +1,4 @@
 #!/usr/bin/python3.9
-# import warnings
-# warnings.simplefilter("ignore", UserWarning)
-# warnings.simplefilter("ignore", RuntimeWarning)
 import sys
 import traceback
 from aRST.script.head import *

@@ -1,10 +1,12 @@
 import os
 import sys
+import warnings
 from os.path import exists, join
 import numpy as np
-from aRST.script.callsys import CallxTB, CallORCA, CallgXTB, CallMolBar,CallFFiTS
+from aRST.script.callsys import CallxTB, CallORCA, CallgXTB, CallMolBar, CallFFiTS
 import aRST.script.initialization as storage
-from aRST.script.toolbox import create_folder, read_coord, read_atcharge, write_xyz, read_bo, get_topo, del_dir,get_random_folder_name
+from aRST.script.toolbox import create_folder, read_coord, read_atcharge, write_xyz, read_bo, get_topo, del_dir, \
+    get_random_folder_name, add_noisy_to_coord
 import threading
 from aRST.script import structure_class
 import networkx as nx
@@ -40,52 +42,86 @@ class Singlestruc:
             os.chdir(comdir)
         write_xyz(self.coordinate, self.ele_l, "coord", c=self.c, m=self.m)
 
-    def _run_opt(self, comdir, engine="xtb"):
-        self._prepare_workdir_and_write_coord(comdir)
+    def _run_opt(self, coordinate_in, comdir, engine="xtb"):
+        create_folder(comdir)
+        write_xyz(coordinate_in, self.ele_l, "coord", c=self.c, m=self.m)
         if engine == "orca":
-            proc = CallORCA(comdir, custom_settings={"charge": self.c, "m": self.m, "caltyp": "SP OPT"}).call(
+            rc = CallORCA(comdir, custom_settings={"charge": self.c, "m": self.m, "caltyp": "SP OPT"}).call(
                 type="opt")
-            if proc == 0:
-                self.coordinate, self.ele_l = read_coord(join(comdir, "orca.xyz"))
+            if rc == 0:
+                coordinate_out, self.ele_l = read_coord(join(comdir, "orca.xyz"))
             else:
+                coordinate_out = coordinate_in
                 print(f'Warning: struc in {comdir} opt at ORCA failed, continue with unopt struc')
         elif engine == "xtb":
-            proc = CallxTB(comdir, custom_settings={"charge": self.c, "uhf": self.m - 1}).opt()
-            if proc == 0:
-                self.coordinate, self.ele_l = read_coord(join(comdir, "xtbopt.xyz"))
+            rc = CallxTB(comdir, custom_settings={"charge": self.c, "uhf": self.m - 1}).opt()
+            if rc == 0:
+                coordinate_out, self.ele_l = read_coord(join(comdir, "xtbopt.xyz"))
             else:
-                # structure is problematic, return Esp = np.inf
-                return self.coordinate, self.ele_l, proc
-
+                coordinate_out = coordinate_in
+                print(f'Warning: struc in {comdir} opt at xtb failed, continue with unopt struc')
         else:
             raise ValueError(f"Unknown engine for opt: {engine}")
         # update the mb
-        mb = CallMolBar(self.coordinate, self.ele_l).get_mb()
-        if self.mb != mb:
-            # print(f'Warning: Molbar code of struc in {comdir} changed after opt')
-            self.mb = mb
-        return self.coordinate, self.ele_l, proc
+        if rc==0:
+            mb = CallMolBar(coordinate_out, self.ele_l).get_mb()
+            if self.mb != mb:
+                # print(f'Warning: Molbar code of struc in {comdir} changed after opt')
+                self.mb = mb
+        return coordinate_out, self.ele_l, rc
 
-    def _run_sp(self, comdir, engine="gxtb"):
+    def _run_trv(self, comdir):
+        self._prepare_workdir_and_write_coord(comdir)
+        proc = CallORCA(comdir, custom_settings={
+            "alpb": storage.setting.xtb_setting.alpb,
+            "charge": self.c,
+            "m": self.m,
+        })
+        Gtrv = np.inf
+        rc = proc.call_trv()
+        if rc == 0:
+            Gtrv = proc.get_Gtrv_from_out()
+        return Gtrv, rc
+
+    def _run_solv_corr(self, comdir):
+        self._prepare_workdir_and_write_coord(comdir)
+        proc = CallxTB(comdir, custom_settings={"charge": self.c,
+                                                "uhf": self.m - 1,
+                                                })
+        rc_gas, rc_solv = proc.solv_correct()
+        Gsolv_corr = np.inf
+        if rc_solv == 0 and rc_gas == 0:
+            Gsolv_corr = proc.get_Gsolv_corr_from_out()
+            rc = 0
+        else:
+            rc = 1
+        return Gsolv_corr, rc
+
+    def _run_sp(self, comdir, engine="gxtb", phase="gas"):
+        # gas E_sp
         self._prepare_workdir_and_write_coord(comdir)
         if engine == "gxtb":
-            proc = CallgXTB(comdir, custom_settings={"charge": self.c, "uhf": self.m - 1})
+            proc = CallgXTB(comdir, custom_settings={"charge": self.c,
+                                                     "uhf": self.m - 1})
             # write .charg and .uhf file
             with open(".CHRG", "w") as file:
                 file.write(f"{self.c}\n")
             with open(".UHF", "w") as file:
                 file.write(f"{self.m - 1}\n")
-            status = proc.sp()
-            if status == 0:
+            rc = proc.sp()
+            if rc == 0:
                 energy = proc.get_Esp_from_out()
             else:
                 energy = np.inf
                 print(f'Warning: struc in {comdir} sp at gxtb failed, continue anyhow')
 
         elif engine == "orca":
-            proc = CallORCA(comdir, custom_settings={"charge": self.c, "m": self.m, "caltyp": "SP"})
-            staus = proc.call(type="sp")
-            if staus == 0:
+            proc = CallORCA(comdir, custom_settings={"charge": self.c,
+                                                     "m": self.m,
+                                                     "caltyp": "SP",
+                                                     "cpcm": None if phase == "gas" else storage.setting.orca_setting.cpcm})
+            rc = proc.call(type="sp")
+            if rc == 0:
                 energy = proc.get_energy_from_out()
             else:
                 energy = np.inf
@@ -95,7 +131,7 @@ class Singlestruc:
         if energy is None:
             energy = np.inf
             print(f'Warning: struc in {comdir} sp prop fails, structure energy will be set as inf')
-        return energy
+        return energy, rc
 
     def _idealize(self, topo_l):
         from molbar.idealize import idealize_structure_from_coordinates
@@ -120,7 +156,8 @@ class Singlestruc:
             self.ele_l = ele_l
         return coordinate, ele_l
 
-    def process_workflow(self, rootfolder, ideal=True):
+    def process_workflow(self, rootfolder, ideal=True, opt=True, debugmode=False):
+
         # ideal->opt/sp -> collect res
 
         from aRST.script.toolbox import get_topo_covaradii
@@ -130,45 +167,53 @@ class Singlestruc:
             if nx.is_connected(G):
                 self._idealize(topo_l_simple)
 
-        ## opt
-        dftopt = storage.setting.read.general.dftopt or storage.setting.orca_setting.dftopt
-        if len(self.ele_l) > 1:
-            # do gfn2 opt
-            comdir = join(rootfolder, "xtb")
-            res = self._run_opt(comdir, engine="xtb")
-            proc_status = res[2]
-            if proc_status == 0 and dftopt:
-                # further DFT opt
-                comdir = join(rootfolder, "orca")
-                res = self._run_opt(comdir, engine="orca")
-                proc_status = res[2]
-            if proc_status == 0:
-                # get sp prop
-                if storage.setting.searching_setting.general.sp_method == "dft":
-                    comdir = join(rootfolder, "orca")
-                    if not dftopt:
-                        res = self._run_sp(comdir, engine="orca")
-                        energy = res[2]
-                    else:
-                        energy = CallORCA(comdir).get_energy_from_out()
-                elif storage.setting.searching_setting.general.sp_method == "gxtb":
-                    comdir = join(rootfolder, "gxtb")
-                    energy = self._run_sp(comdir, engine="gxtb")
-                else:
-                    raise ValueError("sp_method keyword wrong")
-            else:
-                energy = np.inf
+        ## opt (defalut with solvation model)
+        rc_opt = 0
+        if opt:
+            # add a tiny noisy to coordinante first
+            coordinate_in = add_noisy_to_coord(self.coordinate,scale=1e-3)
+            dftopt = storage.setting.read.general.dftopt or storage.setting.orca_setting.dftopt
+            if len(self.ele_l) > 1:
+                # do gfn2 opt
+                comdir = join(rootfolder, "xtb")
+                # coordinate_in, coordinate_out, comdir, engine="xtb"
+                res = self._run_opt(coordinate_in,comdir, engine="xtb")
+                rc_opt = res[2]
+                if rc_opt==0:
+                    coordinate_out = res[0]
+                    if dftopt:
+                        # further DFT opt
+                        coordinate_in = coordinate_out
+                        comdir = join(rootfolder, "orca_opt")
+                        res = self._run_opt(coordinate_in, comdir, engine="orca")
+                        rc_opt = res[2]
+                        coordinate_out = res[0] if rc_opt==0 else coordinate_in
+                    if rc_opt==0:
+                        self.coordinate = coordinate_out
+
+        ## sp at gas phase
+        if storage.setting.searching_setting.general.sp_method == "dft":
+            comdir = join(rootfolder, "orca_sp")
+            Esp_gas, rc_sp = self._run_sp(comdir, engine="orca", phase="gas")
+        elif storage.setting.searching_setting.general.sp_method == "gxtb":
+            comdir = join(rootfolder, "gxtb")
+            Esp_gas, rc_sp = self._run_sp(comdir, engine="gxtb", phase="gas")
         else:
-            # only do sp
-            if storage.setting.searching_setting.general.sp_method == "dft":
-                comdir = join(rootfolder, "orca")
-                res = self._run_sp(comdir, engine="orca")
-                energy = res[2]
-            elif storage.setting.searching_setting.general.sp_method == "gxtb":
-                comdir = join(rootfolder, "gxtb")
-                energy = self._run_sp(comdir, engine="gxtb")
-            else:
-                raise ValueError("sp_method keyword wrong")
+            raise ValueError("sp_method keyword wrong")
+
+        ## hess and solv calc when eval mode is free gibbs energy
+        Gtrv = np.inf
+        Gsolv_corr = np.inf
+        rc_trv, rc_solv = 0, 0
+        if storage.setting.searching_setting.general.evalmode == "g":
+            ### hess calc
+            comdir = join(rootfolder, "orca_hess")
+            Gtrv, rc_trv = self._run_trv(comdir)
+
+            ### solv
+            comdir = join(rootfolder, "solv_corr")
+            Gsolv_corr, rc_solv = self._run_solv_corr(comdir)  # E_solv - E_gas
+
         # collect data
         if len(self.ele_l) > 1:
             bo = read_bo(join(rootfolder, "xtb", "wbo"))
@@ -186,26 +231,32 @@ class Singlestruc:
             "atcharge": atcharge,
             "mb": self.mb,
             "atomic_connection": constrain_l,
-            "Esp": energy,
+            "Esp_gas": Esp_gas,
+            "Gtrv": Gtrv,
+            "Gsolv_corr": Gsolv_corr,
+            "G": np.inf if any(np.isinf(x) for x in [Esp_gas, Gtrv, Gsolv_corr]) else Gtrv - Gsolv_corr + Esp_gas,
             "strucwd": rootfolder
         }
+        # if debugmode and any(x == 1 for x in [rc_opt, rc_sp, rc_trv, rc_solv]):
+        # else:
+        #     del_dir(not debugmode, rootfolder)
+
         return features
 
     @staticmethod
     def read_features_from_struc_folder(rootfolder, charge, m):
         # update coord and ele_l: dftopt>gxtb>xtb
-        coordinate, ele_l, nel, atcharge, Esp, constrain_l, mb = (None,) * 7
 
-        if exists(join(rootfolder, "orca", "orca.xyz")):
-            coordinate, ele_l = read_coord(join(rootfolder, "orca", "orca.xyz"))
+        if exists(join(rootfolder, "orca_opt", "orca.xyz")):
+            coordinate, ele_l = read_coord(join(rootfolder, "orca_opt", "orca.xyz"))
 
 
         elif exists(join(rootfolder, "xtb", "xtbopt.xyz")):
             coordinate, ele_l = read_coord(join(rootfolder, "xtb", "xtbopt.xyz"))
 
 
-        elif exists(join(rootfolder, "orca", "coord.xyz")):  # dft sp
-            coordinate, ele_l = read_coord(join(rootfolder, "orca", "coord.xyz"))
+        elif exists(join(rootfolder, "orca_sp", "coord.xyz")):  # dft sp
+            coordinate, ele_l = read_coord(join(rootfolder, "orca_opt", "coord.xyz"))
 
 
         elif exists(join(rootfolder, "gxtb", "coord.xyz")):  # gxtb sp
@@ -216,11 +267,18 @@ class Singlestruc:
             return {}, False
 
         if storage.setting.searching_setting.general.sp_method == "dft":
-            Esp = CallORCA(join(rootfolder, "orca")).get_energy_from_out()
+            Esp_gas = CallORCA(join(rootfolder, "orca_sp")).get_energy_from_out()
             if m is None:
-                m = CallORCA(join(rootfolder, "orca")).get_m()
+                m = CallORCA(join(rootfolder, "orca_sp")).get_m()
         else:
-            Esp = CallgXTB(join(rootfolder, "gxtb")).get_Esp_from_out()
+            Esp_gas = CallgXTB(join(rootfolder, "gxtb")).get_Esp_from_out()
+
+        Gtrv = np.inf
+        Gsolv_corr = np.inf
+        if storage.setting.searching_setting.general.evalmode == "g":
+            Gtrv = CallORCA(join(rootfolder, "orca_hess")).get_Gtrv_from_out()
+            Gsolv_corr = CallxTB(join(rootfolder, "solv_corr")).get_Gsolv_corr_from_out()
+
         bo = read_bo(join(rootfolder, "xtb", "wbo"))
         constrain_l = get_topo(coordinate, ele_l, bo)
         atcharge = read_atcharge(join(rootfolder, "xtb", "charges"))
@@ -231,10 +289,13 @@ class Singlestruc:
             "nel": int(sum([element[_] for _ in ele_l])) - charge,
             "multiplicity": m,
             "charge": charge,
-            "atcharge": read_atcharge(join(rootfolder, "xtb", "charges")),
+            "atcharge": atcharge,
             "mb": mb,
             "atomic_connection": constrain_l,
-            "Esp": Esp,
+            "Esp_gas": Esp_gas,
+            "Gtrv": Gtrv,
+            "Gsolv_corr": Gsolv_corr,
+            "G": np.inf if any(np.isinf(x) for x in [Esp_gas, Gtrv, Gsolv_corr]) else Gtrv - Gsolv_corr + Esp_gas,
             "strucwd": rootfolder
         }
         if any(v is None for v in features.values()):
@@ -354,13 +415,8 @@ class Supramolecule:
 
         # split fragments from Supramolecule: based on strucGraph get the idx of each frag, coord, ele, atcharge all mapped from Supramolecule,for each fragm,  make sure tot_c = tot charge of all fragments, so as nel,
 
-class TSstructure_NEBTS:
-    """
-    input: reactant/aligned reactants as R; endxyz as P
-    => NEBTS (TS guess)
-    => g-xtb (E)
-    """
 
+class TS_setting:
     def __init__(self, Rcoordinate, Rele_l, Pcoordinate, Pele_l, c, m):
         self.Rcoordinate = Rcoordinate
         self.Rele_l = Rele_l
@@ -371,61 +427,71 @@ class TSstructure_NEBTS:
 
         self.Tcoordinate = None
         self.Tele_l = None
-        self.T_Esp = np.inf
-        self.ORCA_XTB_CMD ={
-            "alpb":storage.setting.xtb_setting.alpb,
-            "charge": self.c,
-            "m": self.m,
-            "ncpu": storage.setting.orca_setting.ncpu,
-            "maxcore": storage.setting.orca_setting.maxcore
-        }
+        self.features = None
+
+
+class TSstructure_NEBTS(TS_setting):
+    """
+    input: reactant/aligned reactants as R; endxyz as P
+    => NEBTS (TS guess)
+    => g-xtb (E)
+    """
 
     def _get_TSguess(self, comdir):
         os.chdir(comdir)
         write_xyz(self.Rcoordinate, self.Rele_l, "reactant", c=self.c, m=self.m)
         write_xyz(self.Pcoordinate, self.Pele_l, "product", c=self.c, m=self.m)
-        rc=CallORCA(comdir,command_d=self.ORCA_XTB_CMD).call_nebts()
-        if rc==0:
+        rc = CallORCA(comdir, custom_settings={
+            "alpb": storage.setting.xtb_setting.alpb,
+            "charge": self.c,
+            "m": self.m, }).call_nebts()
+        if rc == 0:
             self.Tcoordinate, self.Tele_l = read_coord(join(comdir, "orca_NEB-TS_converged.xyz"))
         return rc
 
-    def _get_TEsp(self,comdir):
-        proc = CallgXTB(comdir, custom_settings={"charge": self.c, "uhf": self.m - 1})
-        # write .charg and .uhf file
-        with open(".CHRG", "w") as file:
-            file.write(f"{self.c}\n")
-        with open(".UHF", "w") as file:
-            file.write(f"{self.m - 1}\n")
-        rc = proc.sp()
-        if rc == 0:
-            self.T_Esp = proc.get_Esp_from_out()
-        return self.T_Esp
-    def run(self,rootfolder,debugtrigger):
+    def run(self, rootfolder, debugtrigger):
         random_name = get_random_folder_name()
         comdir = join(rootfolder, random_name)
         create_folder(comdir)
         rc = self._get_TSguess(comdir)
-        if rc!=0 and self.bareless(comdir):
-            self.T_Esp =0
-            rc=0
-            del_dir(True, comdir)
-            return rc, self.T_Esp
-        if rc ==0:
-            rc = self._get_TEsp(comdir)
-        del_dir(not debugtrigger,comdir)
-        return rc, self.T_Esp
+        if rc != 0 and self.barrierless(comdir):
+            rc = 0
+            self.features = {
+                "Esp_gas": 0,
+                "Gtrv": 0,
+                "Gsolv_corr": 0,
+                "G": 0,
+                "barrierless": True
+            }
+            del_dir(not debugtrigger, rootfolder)
+            return rc
+        elif rc == 0:
+            comdir = join(rootfolder, random_name)
+            create_folder(comdir)
+            self.features = Singlestruc(self.Tcoordinate, self.Tele_l,
+                                        self.c, self.m).process_workflow(comdir, opt=False, debugmode=debugtrigger)
+            self.features["barrierless"] = False
+        else:
+            self.features = {
+                "Esp_gas": np.inf,
+                "G": np.inf,
+                "Gtrv": np.inf,
+                "Gsolv_corr": np.inf,
+                "barrierless": False
+            }
+        del_dir(not debugtrigger, rootfolder)
+        return rc
+
     @staticmethod
-    def bareless(comdir):
-        with open(join(comdir,"orca.out"),"r") as file:
+    def barrierless(comdir):
+        with open(join(comdir, "orca.out"), "r") as file:
             for line in file.readlines():
                 if "No barrier was found." in line:
                     return True
         return False
 
 
-
-
-class TSstructure_ffits:
+class TSstructure_ffits(TS_setting):
     """
     input: reactant/aligned reactants as R; endxyz as P
     => FFits (TS guess)
@@ -433,36 +499,52 @@ class TSstructure_ffits:
     => g-xtb (E)
     """
 
-    def __init__(self, Rcoordinate, Rele_l, Pcoordinate, Pele_l, c, m):
-        self.Rcoordinate = Rcoordinate
-        self.Rele_l = Rele_l
-        self.Pcoordinate = Pcoordinate
-        self.Pele_l = Pele_l
-        self.c = c
-        self.m = m
-
-        self.Tcoordinate = None
-        self.Tele_l = None
-
-    def _get_TSguess(self,comdir):
+    def _get_TSguess(self, comdir):
         # write reactant and prod in comdir
         os.chdir(comdir)
-        write_xyz(self.Rcoordinate,self.Rele_l,"reactant",c=self.c,m=self.m)
+        write_xyz(self.Rcoordinate, self.Rele_l, "reactant", c=self.c, m=self.m)
         write_xyz(self.Pcoordinate, self.Pele_l, "product", c=self.c, m=self.m)
-        rc = CallFFiTS(comdir,custom_settings={"charge": self.c, "uhf": self.m - 1})
-        if rc ==0:
-            self.Tcoordinate, self.Tele_l = read_coord(join(comdir,"optimized.xyz"))
+        rc = CallFFiTS(comdir, custom_settings={"charge": self.c, "uhf": self.m - 1})
+        if rc == 0:
+            self.Tcoordinate, self.Tele_l = read_coord(join(comdir, "optimized.xyz"))
         return rc
-    # def _refine_TSguess(self,comdir):
-    #     rc = CallORCA(comdir,custom_settings={"charge": self.c,
-    #                                           "m": self.m,
-    #                                           "caltyp": "OPTTS",
-    #                                           "functional":"xtb2","cpcm":storage.setting)
 
+    def _refine_TSguess(self, comdir):
+        os.chdir(comdir)
+        write_xyz(self.Tcoordinate, self.Tele_l, "coord", c=self.c, m=self.m)
+        proc = CallORCA(comdir, custom_settings={"charge": self.c, "m": self.m})
+        rc = proc.call_optts()
+        if rc == 0 and not proc.has_single_imaginary_mode():
+            rc = 1
+        return rc
 
-
-
-
+    def run(self, rootfolder, debugtrigger=False):
+        random_name = get_random_folder_name()
+        comdir = join(rootfolder, random_name, "ffits")
+        create_folder(comdir)
+        rc = self._get_TSguess(comdir)
+        if rc == 0:
+            comdir = join(rootfolder, random_name, "optts")
+            create_folder(comdir)
+            rc = self._refine_TSguess(comdir)
+            if rc == 0:
+                self.Tcoordinate, self.Tele_l = read_coord(join(comdir, "orca.xyz"))
+                comdir = join(rootfolder, random_name)
+                create_folder(comdir)
+                self.features = Singlestruc(self.Tcoordinate, self.Tele_l,
+                                            self.c, self.m).process_workflow(comdir, opt=False, debugmode=debugtrigger)
+            else:
+                self.features = {
+                    "Esp_gas": np.inf,
+                    "G": np.inf
+                }
+        else:
+            self.features = {
+                "Esp_gas": np.inf,
+                "G": np.inf
+            }
+        del_dir(not debugtrigger, rootfolder)
+        return rc
 
 
 class StrucGraph:
@@ -486,13 +568,13 @@ class StrucGraph:
             )
 
         # add bonds/topology as edges
-        # with topology: self.topo_l is func(get_topo_covaradii); otherwise acc. mbo>0.3
+        # with topology: self.topo_l is func(get_topo_covaradii); otherwise acc. mbo>0.5
         for item in self.topo_l:
             at1, at2 = item["atoms"]
 
             mbo = item.get("mbo")
 
-            if mbo is not None and mbo < 0.3:
+            if mbo is not None and mbo < 0.5:
                 continue
 
             attrs = {"distance": item["value"]}
@@ -548,8 +630,8 @@ class Allstruc:
         self.sid_to_strucitems = {}  # key = sid; val = (mb_cut,c,m)
 
         # record all supra P guess structure
-        self.Psupra_to_rxnid = {}  # key = (mb_FULL,c,m); val = rxnid
-        self.rxnid_to_Psupra = {}
+        self.Psupra_to_scanwd = {}  # key = (mb_FULL,c,m); val = scanwd
+        self.scanwd_to_Psupra = {}
 
     def get(self, sid):
         return self.data.get(sid)
@@ -566,7 +648,10 @@ class Allstruc:
         for k, v in features.items():
             if hasattr(s.general, k):
                 setattr(s.general, k, v)
-        s.energy.sp = features["Esp"]
+        s.energy.Esp_gas = features["Esp_gas"]
+        s.energy.G = features["G"]
+        s.energy.Gsolv_corr = features["Gsolv_corr"]
+        s.energy.Gtrv = features["Gtrv"]
         mb = features["mb"]
         c = features["charge"]
         m = features["multiplicity"]
@@ -580,7 +665,7 @@ class Allstruc:
 
         if movefolder:
             if not exists(features.get("strucwd")):
-                raise ValueError(f"strucwd for {sid} not exist")
+                raise ValueError(f"strucwd for {features.get('strucwd')} not exist")
             tmpwd = features["strucwd"]
             tarwd = join(storage.setting.searching_setting.general.strucwd, str(sid))
             if exists(tarwd):
@@ -605,13 +690,12 @@ class Allstruc:
         except:
             pass
 
-    def register_new_SupraMol(self, mb_full, c, m, refid):
-        self.Psupra_to_rxnid[(mb_full, c, m)] = refid
-        self.rxnid_to_Psupra[refid] = (mb_full, c, m)
+    def register_new_SupraMol(self, mb_full, c, m, scanwd):
+        self.Psupra_to_scanwd[(mb_full, c, m)] = scanwd
+        self.scanwd_to_Psupra[scanwd] = (mb_full, c, m)
 
 
-def optimize_single_fragment(coordinate, ele_l, charge, nel, mb, rootfolder):
-
+def optimize_single_fragment(coordinate, ele_l, charge, nel, mb, rootfolder, debugmode=False):
     import numpy as np
     from os.path import join
 
@@ -622,31 +706,26 @@ def optimize_single_fragment(coordinate, ele_l, charge, nel, mb, rootfolder):
     ideal = False
 
     for m in m_l:
-        while True:
-            random_name = get_random_folder_name()
-            comdir = join(rootfolder, random_name)
+        random_name = get_random_folder_name()
+        comdir = join(rootfolder, random_name)
 
-            # make sure this comdir is new
-            if not exists(comdir):
-                break
         tmpfeatures = Singlestruc(
             coordinate, ele_l, charge, m, mb
-        ).process_workflow(rootfolder=comdir, ideal=ideal)
-        if tmpfeatures["Esp"] < E_sp:
+        ).process_workflow(rootfolder=comdir, ideal=ideal, debugmode=debugmode)
+        if tmpfeatures["Esp_gas"] < E_sp:
             if best_comdir is not None:
                 del_dir(True, best_comdir)
-            E_sp = tmpfeatures["Esp"]
+            E_sp = tmpfeatures["Esp_gas"]
             best_features = tmpfeatures
             best_comdir = comdir
-        elif np.isinf(tmpfeatures["Esp"]) and best_features is None:
+        elif np.isinf(tmpfeatures["Esp_gas"]) and best_features is None:
             best_features = tmpfeatures
-            del_dir(True, comdir)
-        else:
-            del_dir(True, comdir)
+
+        # del_dir(not debugmode, rootfolder)
     return best_features
 
 
-def process_fragment_recursive(supra_info, rootfolder, depth=0, maxdepth=2):
+def process_fragment_recursive(supra_info, rootfolder, depth=0, maxdepth=2, debugmode=False):
     """
         Split first, then optimize each fragment, then recurse until each final
         processed object is a single-fragment structure.
@@ -705,11 +784,11 @@ def process_fragment_recursive(supra_info, rootfolder, depth=0, maxdepth=2):
                 },
                 rootfolder,
                 depth=depth + 1,
-                maxdepth=maxdepth,
+                maxdepth=maxdepth, debugmode=debugmode
             ))
         return out
     # for the single-structure
-    opt_info = optimize_single_fragment(coordinate, ele_l, charge, nel, mb, rootfolder)
+    opt_info = optimize_single_fragment(coordinate, ele_l, charge, nel, mb, rootfolder, debugmode=debugmode)
     opt_coord = opt_info["coordinate"]
     opt_ele_l = opt_info["ele_l"]
     opt_charge = opt_info["charge"]
@@ -717,7 +796,7 @@ def process_fragment_recursive(supra_info, rootfolder, depth=0, maxdepth=2):
     opt_atcharge = opt_info["atcharge"]
     opt_topo = opt_info["atomic_connection"]
     opt_info["global_atomidx"] = global_atomidx
-    if np.isinf(opt_info["Esp"]):
+    if np.isinf(opt_info["Esp_gas"]):
         # error structure
         return [opt_info]
 
@@ -755,7 +834,7 @@ def process_fragment_recursive(supra_info, rootfolder, depth=0, maxdepth=2):
                 },
                 rootfolder,
                 depth=depth + 1,
-                maxdepth=maxdepth,
+                maxdepth=maxdepth, debugmode=debugmode
             ))
         return out
 

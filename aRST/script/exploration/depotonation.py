@@ -21,7 +21,7 @@ def updating_reacntans(reactants,job="depotonation"):
                 continue
 
         s = storage.allstruc.get(struc)
-        E0 = s.energy.sp
+        E0 = s.energy.Esp_gas
         coordinate = s.general.coordinate
         ele_l = s.general.ele_l
         m = s.general.multiplicity

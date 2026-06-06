@@ -6,6 +6,11 @@ from collections import Counter
 
 
 class ReactionNetwork:
+    """"
+    Each reactionpath(scanwd) is a node;
+
+
+    """
     _instance = None
     _lock = threading.Lock()
 
@@ -17,76 +22,35 @@ class ReactionNetwork:
                     cls._instance.graph = nx.DiGraph()
                     cls._instance._next_index = 0
 
-                    cls._instance.rxn_idx_to_nodeid = {}
-                    cls._instance.nodeid_to_rxn_idx = {}
+                    cls._instance.scanwd_to_rxn_idx = {}
+                    cls._instance.rxn_idx_to_scanwd = {} # only record first scanwd
 
                     cls._instance.searchpath_index = {}  # key: (sorted_Rids, atl), val=rxnid
                     cls._instance.rxn_index = {}  # key: (sorted_R_items,sorted_unreact_items, sorted_P_items), val=rxnid
-                    cls._instance.therdy_allowed_nodes = set() # record all therdy allowed nodeid
-                    cls._instance.therdy_allowed_struc = set() # record all therdy allowed generated strucres
+                    # cls._instance.therdy_allowed_nodes = set() # record all therdy allowed nodeid
+                    # cls._instance.therdy_allowed_struc = set() # record all therdy allowed generated strucres
         return cls._instance
 
-    def add_newnode(self, info, edge_l=None, linkoldnode=True,registerindex=True):
+
+    def add_newnode(self, info,giverxnid=True):
         """Adds a reaction as a node and connects reactants to products.
-        network[random_nodeid] =
-        {info=, searchtrial=(R_sids, atl_idx), rxn=(sorted_R_items, sorted_P_items) where items=(mbcut,c,m)}
 
-        info = {"reactants": reactants_sids,
-                "unreacted": unreactants_sids,
-                "at_l": atl_idx,
-                "sim_uhf":sim_uhf,
-                "products": products,
-                "scanwd": key,
-                "E_rxn": E_rxn,
-                "bond_change": bond_change,
-                "therdy_allow": therdy_allow,
-                "layer":layer, # of which cycle step
-                "reaction_exist":true or false
-                "rxnid": exist if reaction_exist==0 or 1 (rxn exists)
-                }"""
-        nodeid = (str(uuid.uuid4().hex[:4]))
-        node_idx = self._next_index
-        self._next_index += 1
+        """
+        scanwd = info.get("scanwd")
+        if giverxnid:
+            rxnid = info.get("rxnid")
+            if rxnid is None:
+                rxnid = self._next_index
+                self._next_index += 1
+            self.scanwd_to_rxn_idx[scanwd] = rxnid
+            if self.rxn_idx_to_scanwd.get(rxnid) is None:
+                self.rxn_idx_to_scanwd[rxnid] = scanwd
 
-        self.nodeid_to_rxn_idx[nodeid] = node_idx
-        self.rxn_idx_to_nodeid[node_idx] = nodeid
+        self.graph.add_node(scanwd, info=info)
 
-        reactants = info["reactants"]
-        products = info["products"]
-        unreact = info["unreacted"]
-        at_l = info["at_l"]
-        path_key = self._normal_path_pair(reactants, at_l)
-        self.searchpath_index[path_key] = node_idx
+        return
 
-        therdy_allow = False
-        if "therdy_allow" in info and info["therdy_allow"]:
-            therdy_allow  =True
-        if therdy_allow:
-            self.therdy_allowed_nodes.add(nodeid)
 
-        if registerindex and not "unknow" in products:
-            allstruc = storage.allstruc
-            R_items = [allstruc.sid_to_strucitems[i] for i in reactants]
-            U_items = [allstruc.sid_to_strucitems[i] for i in unreact]
-            P_items = [allstruc.sid_to_strucitems[i] for i in products]
-            rxn_key = self.normal_rxn_key_from_items(R_items,U_items,P_items)
-            self.rxn_index[rxn_key] = node_idx
-            if therdy_allow:
-                self.therdy_allowed_struc.update(products)
-                self.therdy_allowed_struc.update(reactants)
-
-        self.graph.add_node(nodeid, info=info)
-
-        # link to last node
-        if linkoldnode:
-            if int(info["layer"]) != 0:
-                lastnode = self.get_lastnode_from_node(nodeid)
-                if lastnode:
-                    self.graph.add_edge(lastnode, nodeid)
-                if edge_l:
-                    for targetnode in edge_l:
-                        self.graph.add_edge(nodeid, targetnode)
-        return node_idx
 
     @staticmethod
     def _normal_rxn_key(items):
@@ -168,8 +132,17 @@ class ReactionNetwork:
     def get_allowed_layer_nodes(self, layer):
         allowed_nodes = []
         allowed_conbi = []  # (R,U,P)
+        badP = [None,"?","unknow","-"]
         for node in self.graph.nodes:
             info = self.get_reaction_info(node)
+            products = info["products"]
+            if not products:
+                continue
+
+            if any(x in badP for x in products):
+                continue
+
+
             # check layer
             if info["layer"] != layer:
                 continue
@@ -181,7 +154,7 @@ class ReactionNetwork:
                 continue
             # check if duplicated reactions
             reactants = info["reactants"]
-            products = info["products"]
+
             unreact = info["unreacted"]
             unit = (tuple(reactants), tuple(unreact), tuple(products))
             if unit in allowed_conbi:
@@ -191,40 +164,59 @@ class ReactionNetwork:
             allowed_conbi.append(unit)
         return allowed_nodes
 
-    def get_reaction_info(self, node):
-        """Returns the info stored for a given reaction node."""
-        if node in self.graph:
-            return self.graph.nodes[node].get("info", None)
+    def get_reaction_info(self, scanwd):
+        """Returns the info stored for a given reaction node (scanwd)."""
+        if scanwd in self.graph:
+            return self.graph.nodes[scanwd].get("info", None)
         return None
 
     def self_check(self, print_item_tobeupdated=None):
         import aRST.script.initialization as storage
+        from aRST.script.toolbox import calc_rxn_energy
         # update the info E_rxn since new pathway may find enenrgic lower p structure
+        rxnid_checked = []
         for node in self.graph.nodes:
-            if self.graph.nodes[node].get("layer") == 0:
+            info = self.get_reaction_info(node)
+            layer = info.get("layer")
+
+            if layer is None or layer==0:
                 continue
 
-            info = self.get_reaction_info(node)
-            products = info["products"]
-            if "unknow" in products:
+            rxnid = info.get("rxnid")
+            if rxnid is None:
                 continue
-            if "reaction_exist" not in info.keys() or not info["reaction_exist"]:
-                reactants = info["reactants"]
-                E_r = [storage.allstruc.get(_).energy.sp for _ in reactants]
-                E_p = [storage.allstruc.get(_).energy.sp for _ in products]
-                E_rxn = sum(E_p) - sum(E_r)
-                E_rxn_kcal = E_rxn * 627.503
-                info["E_rxn"] = E_rxn_kcal
+
+            products = info["products"]
+            if any(x in [None, "?", "-", "unknow"] for x in products):
+                continue
+
+
+            if rxnid in rxnid_checked:
+                # already recalc
+                ref_scanwd = self.rxn_idx_to_scanwd[rxnid]
+                info["E_rxn"] = self.get_reaction_info(ref_scanwd)["E_rxn"]
+                info["G_rxn"] = self.get_reaction_info(ref_scanwd)["G_rxn"]
             else:
-                # has a refid or already recalc
-                refnode = self.rxn_idx_to_nodeid[info["ref_id"]]
-                info["E_rxn"] = self.get_reaction_info(refnode)["E_rxn"]
+                rxnid_checked.append(rxnid)
+
+                reactants = info["reactants"]
+                E_r = [storage.allstruc.get(_).energy.Esp_gas for _ in reactants]
+                E_p = [storage.allstruc.get(_).energy.Esp_gas for _ in products]
+                E_rxn_kcal = calc_rxn_energy(E_p, E_r)
+                info["E_rxn"] = E_rxn_kcal
+
+                G_r = [storage.allstruc.get(_).energy.G for _ in reactants]
+                G_p = [storage.allstruc.get(_).energy.G for _ in products]
+                G_rxn_kcal = calc_rxn_energy(G_p, G_r)
+                info["G_rxn"] = G_rxn_kcal
+
         if print_item_tobeupdated:
-            data = [item for item in print_item_tobeupdated if "rxnid" in item]
+            data = [item for item in print_item_tobeupdated if isinstance(item.get("rxnid","-"),int)]
             for item in data:
                 rxnid = item["rxnid"]
-                nodeid = self.rxn_idx_to_nodeid[rxnid]
-                item["E_rxn"] = self.get_reaction_info(nodeid)["E_rxn"]
+                ref_scanwd= self.rxn_idx_to_scanwd[rxnid]
+                item["G_rxn"] = self.get_reaction_info(ref_scanwd)["G_rxn"]
+                item["E_rxn"] = self.get_reaction_info(ref_scanwd)["E_rxn"]
             return print_item_tobeupdated
 
 rxnnetwork = ReactionNetwork()

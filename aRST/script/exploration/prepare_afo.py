@@ -150,16 +150,15 @@ class getAFO:
             if 'XTBML_BIN' in os.environ and os.environ['XTBML_BIN']:
                 # modified xtb exiest
                 write_xyz(self.coordinate, self.ele_l, "coord", c=self.c, m=self.m)
-                rc = CallxTB(afowd, custom_settings={"charge": self.c, "uhf": self.m - 1}).afo()
+                rc = CallxTB(afowd, custom_settings={"charge": self.c, "uhf": self.m - 1},mlversion=True).afo()
             else:
                 # use normal xtb version to generate molden file
                 write_xyz(self.coordinate, self.ele_l, "coord", c=self.c, m=self.m)
-                rc = CallxTB(afowd, custom_settings={"charge": self.c, "uhf": self.m - 1}).afo_molden()
+                rc = CallxTB(afowd, custom_settings={"charge": self.c, "uhf": self.m - 1}).molden()
                 if rc == 0:
                     rc = CallsTDA(afowd, "molden.input").callml(0)
                 else:
                     rc = 1
-
         return afowd, rc
 
     def get_from_gxtb_molden(self, subfolder=None):

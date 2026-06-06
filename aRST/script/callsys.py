@@ -5,8 +5,8 @@ import os
 import shutil
 import subprocess
 import re
-from aRST.script.toolbox import mydict,read_coord
-
+from aRST.script.toolbox import mydict, read_coord
+import numpy as np
 
 
 def remove_file(old_path, new_path):
@@ -47,7 +47,7 @@ class CallORCA:
 
             command_d["caltyp2"] = "RKS" if command_d["m"] == 1 else "UKS"
             self.cmd = mydict(command_d)
-        self.ncpu = self.cmd.get("ncpu",1)
+        self.ncpu = self.cmd.get("ncpu", 1)
 
     def orcasubprocess(self, cmd_string, writeenergy=True, removegbw=True):
         out_path = f'{self.wd}/orca.out'
@@ -87,7 +87,7 @@ class CallORCA:
             command_string += f"{self.cmd.get_value('basis', '')} "
         command_string += f"{self.cmd.get_value('caltyp', '')} "
         command_string += f"{self.cmd.get_value('caltyp2', '')} "
-        if type=="sp":
+        if type == "sp":
             command_string += f"\n"
         elif self.cmd.get_value('cpcm', ''):
             command_string += f"CPCM({self.cmd.get_value('cpcm', '')}) \n"
@@ -95,8 +95,7 @@ class CallORCA:
         if isinstance(self.ncpu, int) and self.ncpu > 1:
             if self.cmd.get_value('ncpu', 1):
                 command_string += f"%PAL NPROCS {int(self.ncpu)} END \n"
-                command_string += f"%maxcore {self.cmd.get_value('maxcore'),1000} \n"
-
+                command_string += f"%maxcore {self.cmd.get_value('maxcore'), 1000} \n"
 
         c = self.cmd.get_value('charge')
         m = self.cmd.get_value('m')
@@ -124,7 +123,6 @@ class CallORCA:
         return coordinate, ele_l
 
     def get_energy_from_out(self, out="orca.out"):
-        import numpy as np
         Esp = np.inf
         if exists(join(self.wd, "ENERGY")):
             with open(join(self.wd, "ENERGY"), 'r') as file:
@@ -138,6 +136,17 @@ class CallORCA:
                     break
         return Esp
 
+    def get_Gtrv_from_out(self, out="orca.out"):
+        G_trv = np.inf
+        if exists(join(self.wd, out)):
+            with open(join(self.wd, out), 'r') as file:
+                lines = file.readlines()
+            for ln in reversed(lines):
+                if "G-E(el)" in ln:
+                    G_trv = float(ln.split()[-4])
+                    return G_trv
+        return G_trv
+
     def get_m(self, file="orca.inp"):
         m = None
         if exists(join(self.wd, file)):
@@ -148,6 +157,7 @@ class CallORCA:
                     parts = ln.split()
                     m = int(parts[3])
         return m
+
     def call_nebts(self):
         # write input
         with open(f'{self.wd}/orca.inp', 'w') as f:
@@ -161,15 +171,60 @@ END
 *XYZFILE {self.cmd.get_value('charge')} {self.cmd.get_value('m')} reactant.xyz           
             """)
 
-
         cmd = f"{os.environ['ORCA_BIN']} orca.inp"
 
         rc = self.orcasubprocess(cmd, removegbw=False)
         # check converge coord.xyz
-        if not os.path.exists(join(self.wd,"orca_NEB-TS_converged.xyz")):
-            rc=1
+        if not os.path.exists(join(self.wd, "orca_NEB-TS_converged.xyz")):
+            rc = 1
         return rc
 
+    def call_trv(self):
+        with open(f'{self.wd}/orca.inp', 'w') as f:
+            f.write(f"""
+!XTB FREQ ALPB({self.cmd.get_value('alpb')})
+%PAL NPROCS {self.cmd.get_value('ncpu')} END
+%maxcore {self.cmd.get_value('maxcore')}
+*XYZFILE {self.cmd.get_value('charge')} {self.cmd.get_value('m')} {self.cmd.get_value('fn')}.xyz
+""")
+        cmd = f"{os.environ['ORCA_BIN']} orca.inp"
+
+        rc = self.orcasubprocess(cmd, removegbw=False)
+
+        return rc
+    def call_optts(self):
+        with open(f'{self.wd}/orca.inp', 'w') as f:
+            f.write(f"""
+!XTB optts FREQ ALPB({self.cmd.get_value('alpb')})
+%PAL NPROCS {self.cmd.get_value('ncpu')} END
+%maxcore {self.cmd.get_value('maxcore')}
+*XYZFILE {self.cmd.get_value('charge')} {self.cmd.get_value('m')} coord.xyz
+""")
+        cmd = f"{os.environ['ORCA_BIN']} orca.inp"
+
+        rc = self.orcasubprocess(cmd, removegbw=False)
+
+        return rc
+    @staticmethod
+    def has_single_imaginary_mode(out="orca.out"):
+        with open(out, "r") as f:
+            text = f.read()
+
+        # isolate vibrational frequency block
+        match = re.search(
+            r"VIBRATIONAL FREQUENCIES(.*?)(?:NORMAL MODES|THERMOCHEMISTRY|$)",
+            text,
+            re.S,
+        )
+
+        if match is None:
+            return False
+
+        vib_block = match.group(1)
+
+        n_imag = vib_block.count("***imaginary mode***")
+
+        return n_imag == 1
 
 
 
@@ -206,7 +261,7 @@ class CallCrest:
             p = subprocess.Popen(cmd_string, stdout=stdout_file, stderr=stderr_file, shell=True)
             p.wait()
             rc = p.returncode
-        if rc==0 and os.path.exists(err_path) and os.path.getsize(err_path) == 0:
+        if rc == 0 and os.path.exists(err_path) and os.path.getsize(err_path) == 0:
             os.remove(err_path)
         return rc
 
@@ -258,14 +313,14 @@ class CallCrest:
                 end = lines.index(line) - 3
                 trigger = False
                 break
-        deltaE_l = []
+        dE_l = []
         for line in lines[startline + 1:end]:
-            nstruc, deltaE, Etot = line.split()
-            deltaE_l.append(float(deltaE))
-        if min(deltaE_l) > 0:
+            nstruc, dE, Etot = line.split()
+            dE_l.append(float(dE))
+        if min(dE_l) > 0:
             coordinate, ele_l = None, None
         else:
-            nstruc = deltaE_l.index(min(deltaE_l))
+            nstruc = dE_l.index(min(dE_l))
             ensemblewd = f'{self.wd}/deprotonated.xyz' if job == "depotonation" else f'{self.wd}/protonated.xyz'
             coordinate_l = []
             ele_ls = []
@@ -309,7 +364,7 @@ class CallxTB:
                 "etemp": xtbsetting.struc_etemp,
                 }
 
-    def __init__(self, wd, command_d=None, custom_settings=None):
+    def __init__(self, wd, command_d=None, custom_settings=None, mlversion=False):
         self.wd = wd
         if command_d is not None:
             self.cmd = mydict(command_d)
@@ -320,6 +375,11 @@ class CallxTB:
                 command_d.update(custom_settings)
 
             self.cmd = mydict(command_d)
+        base = f"{self.cmd.get_value('coordfn')}.xyz --{self.cmd.get_value('method')}  -c {self.cmd.get_value('charge')} --uhf {self.cmd.get_value('uhf')} --etemp {self.cmd.get_value('etemp')}"
+        if not mlversion:
+            self.cmd_string_base = f"{os.environ['XTB_BIN']} {base} "
+        else:
+            self.cmd_string_base = f"{os.environ['XTBML_BIN']} {base} "
 
     def xtbsubprocess(self, cmd_string, writeenergy=False):
         out_path = f'{self.wd}/xtb.out'
@@ -341,126 +401,66 @@ class CallxTB:
                             break
         return rc
 
-    def generate_cmd_string(self, opt=False, xtbmlversion=False, bar1M=False):
-        if xtbmlversion:
-            cmd_string = os.environ['XTBML_BIN'] + " "
-        else:
-            cmd_string = os.environ['XTB_BIN'] + " "
-        coordfn = self.cmd.get_value("coordfn")
-        if coordfn is None:
-            raise Exception(f"coord in {self.wd} can't find right coordfn name")
-        cmd_string += f"{coordfn}.xyz "
-        if opt:
-            optlevel = self.cmd.get_value("optlevel")
-            cmd_string += f"--opt {optlevel} " if optlevel else "--opt "
 
-        cmd_string += f"--{self.cmd.get_value('method')} " \
-            if self.cmd.get_value('method') else ""
-        cmd_string += f"-c {self.cmd.get_value('charge')} " \
-            if self.cmd.get_value('charge') else ""
-        cmd_string += f"--uhf {self.cmd.get_value('uhf')} " \
-            if self.cmd.get_value('uhf') else ""
-        cmd_string += f"--etemp {self.cmd.get_value('etemp')} " \
-            if self.cmd.get_value('etemp') else ""
-        cmd_string += f"--alpb {self.cmd.get_value('alpb')} " \
-            if self.cmd.get_value('alpb') else ""
-        if bar1M and self.cmd.get_value('alpb'):
-            cmd_string += "bar1M "
-        cmd_string += f"{self.cmd.get_value('extracmd')} " \
-            if self.cmd.get_value('extracmd') else ""
-        return cmd_string
-
-    def sp(self, writeenergy=True):
-        cmd_string = self.generate_cmd_string(opt=False)
-        rc = self.xtbsubprocess(cmd_string, writeenergy)
+    def sp_gas(self):
+        cmd_string = f"{self.cmd_string_base}"
+        rc = self.xtbsubprocess(cmd_string)
         return rc
 
-    def opt(self, writeenergy=True):
-        cmd_string = self.generate_cmd_string(opt=True)
-        rc = self.xtbsubprocess(cmd_string, writeenergy)
+    def sp_alpb(self):
+        cmd_string = f"{self.cmd_string_base}"
+
+        cmd_string +=f"--alpb {self.cmd.get_value('alpb')} "
+        rc = self.xtbsubprocess(cmd_string)
+        return rc
+
+    def opt(self):
+        cmd_string = f"{self.cmd_string_base}--opt "
+        cmd_string += f"{self.cmd.get_value('optlevel')} " if self.cmd.get_value('optlevel') else ""
+        cmd_string += f"--alpb {self.cmd.get_value('alpb')} "
+        rc = self.xtbsubprocess(cmd_string)
 
         # fallback: retry without ALPB if failed
-        if rc!=0 and self.cmd.get_value('alpb') is not None:
-            old_alpb = self.cmd.get_value('alpb')
-            self.cmd["alpb"] = None
-            cmd_string = self.generate_cmd_string(opt=True)
-            rc = self.xtbsubprocess(cmd_string, writeenergy)
-            if rc==0:
-                self.cmd["alpb"] = old_alpb
-                cmd_string = self.generate_cmd_string(opt=True)
-                rc = self.xtbsubprocess(cmd_string, writeenergy)
+        if rc != 0 and self.cmd.get_value('alpb') is not None:
+            cmd_string_gas = f"{self.cmd_string_base}--opt "
+            cmd_string_gas += f"{self.cmd.get_value('optlevel')} " if self.cmd.get_value('optlevel') else ""
+            rc = self.xtbsubprocess(cmd_string_gas)
+            if rc == 0:
+                rc = self.xtbsubprocess(cmd_string)
         return rc
 
     def afo(self):
-        cmd_string = self.generate_cmd_string(opt=False, xtbmlversion=True)
-        cmd_string += "--ml_feature "
+        cmd_string = f"{self.cmd_string_base}--ml_feature "
         p = subprocess.Popen(cmd_string, stdout=open(f'{self.wd}/xtb.out', 'w'), stderr=subprocess.PIPE, shell=True)
         p.wait()
         rc = p.returncode
         return rc
 
-    def afo_molden(self):
-        cmd_string = self.generate_cmd_string(opt=False, xtbmlversion=True)
-        cmd_string += "--molden "
+    def molden(self):
+        cmd_string = f"{self.cmd_string_base}--molden "
         p = subprocess.Popen(cmd_string, stdout=open(f'{self.wd}/xtb.out', 'w'), stderr=subprocess.PIPE, shell=True)
         p.wait()
         rc = p.returncode
         return rc
 
-    def trv(self):
-        cmd1 = self.generate_cmd_string()
-        cmd1 += "--ohess "
-        p1 = subprocess.Popen(cmd1, stdout=open(f'{self.wd}/freq.out', 'w'), stderr=subprocess.PIPE, shell=True)
-        p1.wait()
-        rc = p1.returncode
-        if rc == 0:
-            cmd2 = f'{os.environ["TRVT_BIN"]} --io xtb --rotthr 50 '
-            cmd2 += f'--fxyz xtbopt.xyz' if os.path.exists(
-                join(self.wd, "xtbopt.xyz")) else f'--fxyz {self.cmd.get_value("coordfn")}.xyz '
-            cmd2 += f" --temp {self.cmd.get_value('etemp')} " \
-                if self.cmd.get_value('etemp') else ""
-            cmd2 += f' --fvib freq.out > thermo.out'
-            p2 = subprocess.Popen(cmd2, shell=True)
-            p2.wait()
-            rc2 = p2.returncode
-            # if rc2 != 0:
-            # raise Exception("TRVthermo calculation failed in",self.wd)
-        else:
-            rc2 = 1
-            # raise Exception("TRV ohess calculation failed in ",self.wd)
-        return rc2
+    def solv_correct(self):
 
-    def solv(self):
-        cmd2 = self.generate_cmd_string(bar1M=True)
-        p2 = subprocess.Popen(cmd2, stdout=open(f'{self.wd}/solv.out', 'w'), stderr=subprocess.PIPE, shell=True)
-        p2.wait()
-        with open(f'solv.out', 'r') as f:
-            lines = f.readlines()
-            for line in reversed(lines):
-                if 'TOTAL ENERGY' in line:
-                    esolv = float(re.findall(r'\-?\d+\.?\d*', line)[0])
-                    break
-        rc2 = p2.returncode
+        ## gas
+        cmd_string_gas = f"{self.cmd_string_base}"
+        cmd_string_gas +=f"--grad "
+        p = subprocess.Popen(cmd_string_gas, stdout=open(f'{self.wd}/gas.out', 'w'), stderr=subprocess.PIPE, shell=True)
+        p.wait()
+        rc_gas = p.returncode
 
-        oldvalue = self.cmd.get_value("alpb")
-        self.cmd.set_value("alpb", False)
-        cmd1 = self.generate_cmd_string()
-        self.cmd.set_value("alpb", oldvalue)
+        ## solv
+        cmd_string_solv = f"{self.cmd_string_base}"
+        cmd_string_solv += f"--alpb {self.cmd.get_value('alpb')} bar1M "
+        cmd_string_solv += f"--grad "
+        p = subprocess.Popen(cmd_string_solv, stdout=open(f'{self.wd}/solv.out', 'w'), stderr=subprocess.PIPE, shell=True)
+        p.wait()
+        rc_solv = p.returncode
+        return rc_gas,rc_solv
 
-        p1 = subprocess.Popen(cmd1, stdout=open(f'{self.wd}/gas.out', 'w'), stderr=subprocess.PIPE, shell=True)
-        p1.wait()
-        rc1 = p1.returncode
-        with open(f'{self.wd}/gas.out', 'r') as f:
-            lines = f.readlines()
-            for line in reversed(lines):
-                if 'TOTAL ENERGY' in line:
-                    egas = float(re.findall(r'\-?\d+\.?\d*', line)[0])
-                    break
-        if rc1 == 0 and rc2 == 0:
-            with open(f'{self.wd}/GSOLV', 'w') as f2:
-                f2.write(str(esolv - egas))
-
-        return rc2
 
     def scan(self, setting_d):
         # write inp
@@ -482,10 +482,12 @@ class CallxTB:
                         % (int(at1), int(at2), d0, d0, d_end, setting_d["scan"]["step"]))
             f.write("$end")
 
-        cmd = self.generate_cmd_string(opt=True)
-        cmd += "--input scan.inp "
+        cmd_string = f"{self.cmd_string_base}--opt "
+        cmd_string += f"{self.cmd.get_value('optlevel')} " if self.cmd.get_value('optlevel') else ""
+        cmd_string += f"--alpb {self.cmd.get_value('alpb')} "
+        cmd_string += f"--input scan.inp "
 
-        p = subprocess.Popen(cmd, stdout=open(f'{self.wd}/xtb.out', 'w'), stderr=subprocess.PIPE, shell=True)
+        p = subprocess.Popen(cmd_string, stdout=open(f'{self.wd}/xtb.out', 'w'), stderr=subprocess.PIPE, shell=True)
         p.wait()
         rc = p.returncode
         if rc != 0 and (os.path.exists(f'{self.wd}/xtbscan.log') and os.path.exists(f'{self.wd}/xtbopt.xyz')):
@@ -502,28 +504,18 @@ class CallxTB:
                 f.write('distance: %d,%d,%.2f\n'
                         % (at1, at2, value))
             f.write("$end")
-        cmd = self.generate_cmd_string(opt=True)
-        cmd += "--input scan.inp "
-        p = subprocess.Popen(cmd, stdout=open(f'{self.wd}/xtb.out', 'w'), stderr=subprocess.PIPE, shell=True)
+
+        cmd_string = f"{self.cmd_string_base}--opt "
+        cmd_string += f"{self.cmd.get_value('optlevel')} " if self.cmd.get_value('optlevel') else ""
+        cmd_string += f"--alpb {self.cmd.get_value('alpb')} "
+        cmd_string += f"--input scan.inp "
+        p = subprocess.Popen(cmd_string, stdout=open(f'{self.wd}/xtb.out', 'w'), stderr=subprocess.PIPE, shell=True)
         p.wait()
         rc = p.returncode
         if rc != 0 and os.path.exists(f'{self.wd}/xtbopt.xyz'):
             rc = 0
         return rc
 
-    def secondchance_opt(self):
-        cmd_string = "xtb "
-        coordfn = self.cmd.get_value("coordfn")
-        cmd_string += f"{coordfn}.xyz "
-        cmd_string += "--opt "
-
-        cmd_string += f"-c {self.cmd.get_value('charge')} " \
-            if self.cmd.get_value('charge') else ""
-        cmd_string += f"--uhf {self.cmd.get_value('uhf')} " \
-            if self.cmd.get_value('uhf') else ""
-
-        rc = self.xtbsubprocess(cmd_string, True)
-        return rc
 
     def short_md(self, constrained_bonds=False):
         # constrained_bonds = push_l in the scanning
@@ -544,13 +536,10 @@ class CallxTB:
                     f"dump={self.cmd.get_value('mddump', 50)}"  # save geom every 50 fs
                     )
             # xtb coord.xyz --input md.inp --md
-        cmd_string = f"xtb {self.cmd.get_value('coordfn')}.xyz --input md.inp --md "
-        cmd_string += f"-c {self.cmd.get_value('charge')} " \
-            if self.cmd.get_value('charge') else ""
-        cmd_string += f"--uhf {self.cmd.get_value('uhf')} " \
-            if self.cmd.get_value('uhf') else ""
-        cmd_string += f"--alpb {self.cmd.get_value('alpb')} " \
-            if self.cmd.get_value('alpb') else ""
+
+        cmd_string = f"{self.cmd_string_base}--input md.inp --md "
+        cmd_string += f"--alpb {self.cmd.get_value('alpb')} "
+        cmd_string += f"--input scan.inp "
         p = subprocess.Popen(cmd_string, stdout=open(f'{self.wd}/xtbmd.out', 'w'), stderr=subprocess.PIPE, shell=True)
         p.wait()
         rc = p.returncode
@@ -612,11 +601,6 @@ class CallxTB:
         emin = clean_energies[lowest_idx]
         return coordinate_emin, ele_l_emin, emin
 
-    def get_moldeninput(self):
-        cmd = self.generate_cmd_string()
-        cmd += "--molden "
-        rc = self.xtbsubprocess(cmd)
-        return rc
 
     def get_charge_from_out(self, out="xtb.out"):
         c = None
@@ -632,37 +616,28 @@ class CallxTB:
 
     def get_Esp_from_out(self, out="xtb.out"):
         # unit in eh
-        import numpy as np
         Esp = np.inf
-        if exists(join(self.wd, "ENERGY")):
-            with open(join(self.wd, "ENERGY"), 'r') as file:
-                Esp = float(file.readlines()[0])
 
-        elif exists(join(self.wd, out)):
+        if exists(join(self.wd, out)):
             with open(join(self.wd, out), 'r') as file:
                 lines = file.readlines()
 
             for ln in reversed(lines):
-                if "total energy" in ln:
-                    Esp = float(ln.split()[4])
+                if 'TOTAL ENERGY' in ln:
+                    Esp = float(ln.split()[-3])
                     break
         return Esp
 
-    def get_Etrv(self, out="GTRV"):
-        # unit in eh
-        Etrv = None
-        if exists(join(self.wd, out)):
-            with open(join(self.wd, out), 'r') as file:
-                Etrv = float(file.readlines()[0])
-        return Etrv
 
-    def get_Esolv(self, out="GSOLV"):
-        # unit in eh
-        Esolv = None
-        if exists(join(self.wd, out)):
-            with open(join(self.wd, out), 'r') as file:
-                Esolv = float(file.readlines()[0])
-        return Esolv
+    def get_Gsolv_corr_from_out(self,solvout="solv.out",gasout="gas.out"):
+        # return E_solv-E_gas
+        E_solv = self.get_Esp_from_out(out=solvout)
+        E_gas = self.get_Esp_from_out(out=gasout)
+        if any(np.isinf(x) for x in [E_gas, E_solv]):
+            Gsolv_corr = np.inf
+        else:
+            Gsolv_corr = E_solv-E_gas
+        return Gsolv_corr
 
 
 
@@ -795,6 +770,7 @@ class CallgXTB:
                 command_d.update(custom_settings)
 
             self.cmd = mydict(command_d)
+
     def gxtbsubprocess(self, cmd_string):
         out_path = f'{self.wd}/gxtb.out'
         err_path = f'{self.wd}/gxtb_err.out'
@@ -802,10 +778,9 @@ class CallgXTB:
             p = subprocess.Popen(cmd_string, stdout=stdout_file, stderr=stderr_file, shell=True)
             p.wait()
             rc = p.returncode
-            if rc==0 and os.path.exists(err_path) and os.path.getsize(err_path) == 0:
+            if rc == 0 and os.path.exists(err_path) and os.path.getsize(err_path) == 0:
                 os.remove(err_path)
         return rc
-
 
     def generate_gXTBcmd_string(self):
         cmd_string = os.environ['GXTB_BIN'] + " -c "
@@ -815,7 +790,7 @@ class CallgXTB:
         cmd_string += f"{coordfn}.xyz "
         return cmd_string
 
-    def sp(self, writeenergy=False):
+    def sp(self):
         # write .CHRG and .UHF file
         if self.cmd.get_value('charge') != 0:
             with open(join(self.wd, ".CHRG"), 'w') as file:
@@ -849,11 +824,7 @@ class CallgXTB:
         if exists(join(self.wd, "NOT_CONVERGED")):
             return Esp
 
-        if exists(join(self.wd, "energy")):
-            with open(join(self.wd, "energy"), 'r') as file:
-                Esp = float(file.readlines()[1].split()[1])
-
-        elif exists(join(self.wd, out)):
+        if exists(join(self.wd, out)):
             with open(join(self.wd, out), 'r') as file:
                 lines = file.readlines()
 
@@ -869,13 +840,14 @@ class CallFFiTS:
     def default_settings(cls, xtbsetting):
         """Dynamically generates default settings based on the `setting` class."""
         return {
-                "reactantfn": "reactant",
-                "productfn": "product",
-                "charge": 0,
-                "uhf": 0,
-                "alpb": xtbsetting.alpb,
-                "etemp": xtbsetting.struc_etemp,
-                }
+            "reactantfn": "reactant",
+            "productfn": "product",
+            "charge": 0,
+            "uhf": 0,
+            "alpb": xtbsetting.alpb,
+            "etemp": xtbsetting.struc_etemp,
+        }
+
     def __init__(self, wd, command_d=None, custom_settings=None):
         self.wd = wd
         if command_d is not None:
@@ -887,6 +859,7 @@ class CallFFiTS:
                 command_d.update(custom_settings)
 
             self.cmd = mydict(command_d)
+
     def xtbsubprocess(self, cmd_string):
         out_path = f'{self.wd}/xtb.out'
         err_path = f'{self.wd}/xtb_err.out'
@@ -922,13 +895,12 @@ hessian_filename="phessian"
 
     def do(self):
         # do R hess
-        cmd_string  = f"{os.environ['XTB_BIN']} {self.cmd.get('reactantfn')} --hess -c {self.cmd.get('charge')} --uhf {self.cmd.get('uhf')} --alpb {self.cmd.get('alpb')} --etemp {self.cmd.get('etemp')}"
-        rc = 1
+        cmd_string = f"{os.environ['XTB_BIN']} {self.cmd.get('reactantfn')}.xyz --hess -c {self.cmd.get('charge')} --uhf {self.cmd.get('uhf')} --alpb {self.cmd.get('alpb')} --etemp {self.cmd.get('etemp')}"
         rc = self.xtbsubprocess(cmd_string)
-        if rc==0:
-            os.rename(join(self.wd,"hessian"), join(self.wd,"rhessian"))
+        if rc == 0:
+            os.rename(join(self.wd, "hessian"), join(self.wd, "rhessian"))
             # do P hess
-            cmd_string = f"{os.environ['XTB_BIN']} {self.cmd.get('productfn')} --hess -c {self.cmd.get('charge')} --uhf {self.cmd.get('uhf')} --alpb {self.cmd.get('alpb')} --etemp {self.cmd.get('etemp')}"
+            cmd_string = f"{os.environ['XTB_BIN']} {self.cmd.get('productfn')}.xyz --hess -c {self.cmd.get('charge')} --uhf {self.cmd.get('uhf')} --alpb {self.cmd.get('alpb')} --etemp {self.cmd.get('etemp')}"
             rc = self.xtbsubprocess(cmd_string)
             if rc == 0:
                 os.rename(join(self.wd, "hessian"), join(self.wd, "phessian"))

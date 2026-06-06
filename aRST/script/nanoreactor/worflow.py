@@ -1,17 +1,17 @@
 import sys
-
 from aRST.script.exploration.interA import *
 from aRST.script.exploration.intraA import *
 from aRST.script.exploration.intraD import *
-from aRST.script.head import print_simulation_details
+from aRST.script.head import print_simulation_details,print_population_summary
 from aRST.script.exploration.network import rxnnetwork
 from aRST.script.exploration.prepare_afo import ReactivityPreparer
 from aRST.script.toolbox import del_dir
-from aRST.script.exploration.reactionsearch import PathEval
+from aRST.script.exploration.reactionsearch import PathEval,EntryFilter
+from aRST.script.nanoreactor.model import update_population, normalize_population, accumulate_layer_flux
 from itertools import combinations_with_replacement, chain, repeat
 
 
-class SingleLayerSearch(PathEval):
+class SingleLayerSearch():
     def __init__(self, allreactants):
         self.allreactants = allreactants
         self.prepare_reacticity()
@@ -27,14 +27,15 @@ class SingleLayerSearch(PathEval):
             ReactivityPreparer([structue]).ensure_AFO_ready(mute_timeit=True)
             ReactivityPreparer([structue]).ensure_weakH_ready()
 
-    def _get_tosim_entry_list(self, react_l, num, rxntype):
+    @staticmethod
+    def _get_tosim_entry_list(react_l, num, rxntype):
         if rxntype == "dissoD":
             return [entry for entry in react_l[:num]
-                    if not self.rxn_search_exist(entry)
+                    if not EntryFilter.rxn_search_exist(entry)
                     ]
         else:
             return [entry for entry in react_l[:num]
-                    if not self.rxn_search_exist(entry) and self.allow_H_involved_rxn(entry)
+                    if not EntryFilter.rxn_search_exist(entry) and EntryFilter.allow_H_involved_rxn(entry)
                     ]
 
     def _get_all_interA_tosim_list(self):
@@ -120,6 +121,13 @@ def Cancer(reactants_ini, step=0, debugtrigger=False):
     batch_size = 50
 
     tseval = storage.setting.searching_setting.general.tseval
+    evalmode = storage.setting.searching_setting.general.evalmode
+
+    # initial population
+    population = {sid: 1.0 for sid in reactants_all}
+    abundance = normalize_population(population)
+    temp = storage.setting.xtb_setting.struc_etemp
+
     while step < ncycle:
         print(f"begin layer {step}:")
         print()
@@ -143,7 +151,6 @@ def Cancer(reactants_ini, step=0, debugtrigger=False):
                                                                 scanmode=scanmode)
             init_rxnguess.update(init_rxnguess_local)
 
-
             if init_rxnguess_local:
                 layersearch.print_progress(i, rc, failscanwd=init_rxnguess_local[2].get("scanwd") if rc != 0 else None)
 
@@ -156,55 +163,37 @@ def Cancer(reactants_ini, step=0, debugtrigger=False):
                 reactants_info = item[0]
                 endxyz_info = item[1]
                 reaction_info = item[2]
-
-                products_info, refrxnid = PathEval.followup_process_pathway(endxyz_info)
-                if tseval:
-                    # check if R==P
-                    from collections import Counter
-                    reactants  =reactants_info["reactants"]
-                    reactants_items = [storage.allstruc.sid_to_strucitems[_] for _ in reactants]
-                    product_items = [(" | ".join(item["mb"].split(" | ")[:storage.setting.searching_setting.general.mbcut_length]),
-                                      item["charge"],
-                                      item["multiplicity"]) for item in products_info]
-                    bond_change = False if Counter(reactants_items) == Counter(product_items) else True
-                    if not bond_change:
-                        info_temp = {"reactants": reactants,
-                                     "at_l": reactants_info["at_l"],
-                                     "products": reactants,
-                                     "scanwd": reactants_info["scanwd"],
-                                     "delta_E_ts": None,
-                                     "bond_change":False
-                                     }
-                        print_info.append(info_temp)
-                        continue
-
-                    delta_E_ts = PathEval.TS_evaluate(reactants_info, endxyz_info,debugtrigger=debugtrigger)
-                    if delta_E_ts > storage.setting.searching_setting.general.elim:
-                        info_temp = {"reactants": reactants_info["reactants"],
-                                     "at_l": reactants_info["at_l"],
-                                     "products": ["?"],
-                                     "scanwd": reactants_info["scanwd"],
-                                     "delta_E_ts":delta_E_ts
-                                     }
-                        print_info.append(info_temp)
-                        continue
-                info = PathEval.evalueate_path(reactants_info,
-                                                 products_info,
-                                                 reaction_info,
-                                                 endxyz_info, refrxnid,
-                                                 layer=step + 1, linkoldnode=False, delscanwd=not debugtrigger)
-                print_info.append(info)
+                rxninfo = PathEval(reactants_info, endxyz_info, reaction_info, debugtrigger).run()
+                print_info.append(rxninfo)
             del_dir(not debugtrigger, storage.setting.searching_setting.general.bufferwd)
             del_dir(not debugtrigger, storage.setting.searching_setting.general.scanwd)
 
         print_info = rxnnetwork.self_check(print_info)
-        print_simulation_details(print_info, str(step))
+        print_simulation_details(print_info, str(step), tseval=tseval,evalmode=evalmode)
 
-        # screen reactants for next layer: all thermodynamic allowed generated structures
-        reactants_all = list(rxnnetwork.therdy_allowed_struc)
-        print("reamaining structure list: ", reactants_all, "number=", len(reactants_all))
+        production_flux, consumption_flux, path_fluxes = accumulate_layer_flux(
+            print_info,
+            abundance=abundance,
+            temp=temp,evalmode=evalmode,elim=storage.setting.searching_setting.general.elim
+        )
 
-        # # clean up buffer folder
-        # clean_up_bufferwd(False, storage.setting.searching_setting.general.bufferwd)
+        population, abundance, tau, removed_info = update_population(
+            population,
+            production_flux,
+            consumption_flux, keep_top=20, rel_cut=1e-3, max_consumed_fraction=0.50
+        )
+
+        reactants_all = list(abundance.keys())
+
+        print_population_summary(
+            population=population,
+            abundance=abundance,
+            removed_info=removed_info,
+            step=step,
+            tau=tau,
+            top_n=10,
+        )
 
         step += 1
+        # # clean up buffer folder
+        # clean_up_bufferwd(False, storage.setting.searching_setting.general.bufferwd)

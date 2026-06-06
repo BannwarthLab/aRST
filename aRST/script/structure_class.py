@@ -20,8 +20,10 @@ class ReactivityStrucInfo(BaseModel):
     weakH:Optional[float] = None
 
 class EnergyStrucInfo(BaseModel):
-    sp: Optional[float] = None
-
+    Esp_gas: Optional[float] = None
+    G:Optional[float] = None
+    Gtrv:Optional[float] = None
+    Gsolv_corr:Optional[float] = None
 
 class StrucInfo(BaseModel):
     general: GeneralStrucInfo = GeneralStrucInfo()
