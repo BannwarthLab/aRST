@@ -44,7 +44,6 @@ def get_interA_react_l(reactants0, writefile=True):
                     "gap": 0,
                     "force_combination": True}]
         if len(atom_pairs) > 1:
-
             intersetting.concerted_pair = True
             for atom_pair in atom_pairs[1:]:
                 at_combi_list = react_l[0]["atl"]
@@ -175,8 +174,9 @@ def intermbff(reactants0, entry, reactionpath, count=0):
         atom_connection.append({"atoms": [at1, at2], "value": value})
 
     unreacted = sorted((x for x in reactants0 if x != struc1 and x != struc2), key=int, reverse=True)
-    mbxyz0, ele_l0 = get_endxyz_from_mb(atom_connection, coordinate_merge, ele_merged, set_angles=False)
-    mbxyz, mbele_l = get_endxyz_from_mb(atom_connection, mbxyz0, ele_l0, set_angles=True)
+    # mbxyz0, ele_l0 = get_endxyz_from_mb(atom_connection, coordinate_merge, ele_merged, set_angles=False)
+    mbxyz, mbele_l = get_endxyz_from_mb(atom_connection, coordinate_merge, ele_merged, set_angles=True)
+    # mbxyz, mbele_l = get_endxyz_from_mb(atom_connection, mbxyz0, ele_l0, set_angles=True)
     rc = 1
     for u in uhf_l:
         # print(f"Simulating interA path {reactionpath}_{count}: R={reactants0}, atl={at_l}, uhf_sim={u} ...", end="")
