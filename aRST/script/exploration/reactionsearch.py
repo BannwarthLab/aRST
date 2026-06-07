@@ -158,6 +158,7 @@ class PathEval:
         self.coordinate = reactants_info["coordinate"]
         self.ele_l = reactants_info["ele_l"]
         self.products = []
+        self.push_pair = reaction_info["push_pair"]
 
         self.rxninfo = {
             "reactants": self.reactants,
@@ -235,16 +236,10 @@ class PathEval:
 
         return self.rxninfo
 
-    def check_target_bond_change(self, products_info):
-        # reactants = reactants_info["reactants"]
-        # atl = reactants_info["at_l"]
+    def check_target_topo_change(self, products_info):
         map_topo_l = map_fragments_topo_l_back_to_Supramol(products_info)
-        if self.rxninfo["type"] == "interA":
-            struc1, struc2 = self.reactants
-            nat1 = len(storage.allstruc.get(struc1).general.ele_l)
-            maped_atl = [[a, b + nat1] for a, b in self.at_l]
-        else:
-            maped_atl = self.at_l
+        push_pair = self.push_pair
+        maped_atl = [[item[0],item[1]] for item in push_pair]
         target_change = check_target_bond_change(maped_atl, map_topo_l, self.rxninfo["type"])
         return target_change
 
@@ -341,7 +336,7 @@ class PathEval:
             return self.rxninfo
 
         ### check if desired at_l bond changed
-        target_change = self.check_target_bond_change(products_info)
+        target_change = self.check_target_topo_change(products_info,)
         self.rxninfo["target_change"] = target_change
         if not target_change:
             self.rxninfo["products"] = ['-']

@@ -867,7 +867,7 @@ def check_target_bond_change(at_l, map_topo_l, rxn_type):
 
     # convert 0-based -> 1-based
     target_bonds = {
-        tuple(sorted([a + 1, b + 1]))
+        tuple(sorted([a, b]))
         for a, b in at_l
     }
 

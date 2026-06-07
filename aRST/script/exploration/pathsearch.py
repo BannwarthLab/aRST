@@ -150,6 +150,7 @@ class SinglePathSearch:
                  "mb": endxyz_mb},  # endxyz info
                 {"type": rxn_type,
                  "method": "scan",
+                 "push_pair":constrain_setting["scan"]["distance"]
                  }  # reaction info
             ]
 
@@ -210,6 +211,7 @@ class SinglePathSearch:
                  "mb": endxyz_mb},  # endxyz info
                 {"type": rxn_type,
                  "method": "mbff",
+                 "push_pair": push_l
                  }  # reaction info
             ]
         return results,status
