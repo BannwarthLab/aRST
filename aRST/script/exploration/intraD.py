@@ -163,7 +163,8 @@ def dissoxtbscan(reactants0, entry, reactionpath, count=0):
                         "at_l": at_l, "simuhf": u,
                         "scanwd": f"{reactionpath}_{count}",
                         "coordinate": coordinate,
-                        "ele_l": ele_l
+                        "ele_l": ele_l,
+                        "mb": s.general.mb
                         }  # reactants info
 
         results, status = SinglePathSearch(coordinate,

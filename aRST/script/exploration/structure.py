@@ -6,7 +6,7 @@ import numpy as np
 from aRST.script.callsys import CallxTB, CallORCA, CallgXTB, CallMolBar, CallFFiTS
 import aRST.script.initialization as storage
 from aRST.script.toolbox import create_folder, read_coord, read_atcharge, write_xyz, read_bo, get_topo, del_dir, \
-    get_random_folder_name, add_noisy_to_coord
+    get_random_folder_name
 import threading
 from aRST.script import structure_class
 import networkx as nx
@@ -30,10 +30,7 @@ class Singlestruc:
         strucitems_to_sid = storage.allstruc.strucitems_to_sid
         mb_cut = " | ".join(self.mb.split(" | ")[:storage.setting.searching_setting.general.mbcut_length])
         sid = strucitems_to_sid.get((mb_cut, self.c, self.m))
-        if sid:
-            return True, sid
-        else:
-            return False, None
+        return sid is not None,sid
 
     def _prepare_workdir_and_write_coord(self, comdir):
         if not exists(comdir):
@@ -159,7 +156,6 @@ class Singlestruc:
     def process_workflow(self, rootfolder, ideal=True, opt=True, debugmode=False):
 
         # ideal->opt/sp -> collect res
-
         from aRST.script.toolbox import get_topo_covaradii
         if len(self.ele_l) > 1 and ideal:
             topo_l_simple = get_topo_covaradii(self.coordinate, self.ele_l)
@@ -170,8 +166,7 @@ class Singlestruc:
         ## opt (defalut with solvation model)
         rc_opt = 0
         if opt:
-            # add a tiny noisy to coordinante first
-            coordinate_in = add_noisy_to_coord(self.coordinate,scale=1e-3)
+            coordinate_in = self.coordinate
             dftopt = storage.setting.read.general.dftopt or storage.setting.orca_setting.dftopt
             if len(self.ele_l) > 1:
                 # do gfn2 opt
@@ -463,9 +458,10 @@ class TSstructure_NEBTS(TS_setting):
                 "G": 0,
                 "barrierless": True
             }
-            del_dir(not debugtrigger, rootfolder)
+            del_dir(not debugtrigger, comdir)
             return rc
         elif rc == 0:
+            random_name = get_random_folder_name()
             comdir = join(rootfolder, random_name)
             create_folder(comdir)
             self.features = Singlestruc(self.Tcoordinate, self.Tele_l,
@@ -479,7 +475,7 @@ class TSstructure_NEBTS(TS_setting):
                 "Gsolv_corr": np.inf,
                 "barrierless": False
             }
-        del_dir(not debugtrigger, rootfolder)
+        del_dir(not debugtrigger, comdir)
         return rc
 
     @staticmethod
@@ -543,7 +539,7 @@ class TSstructure_ffits(TS_setting):
                 "Esp_gas": np.inf,
                 "G": np.inf
             }
-        del_dir(not debugtrigger, rootfolder)
+        del_dir(not debugtrigger, comdir)
         return rc
 
 

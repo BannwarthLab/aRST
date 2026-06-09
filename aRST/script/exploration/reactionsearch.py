@@ -1,3 +1,4 @@
+import sys
 from os.path import exists
 from aRST.script.exploration.interA import *
 from aRST.script.exploration.intraA import *
@@ -84,24 +85,25 @@ class PathEval:
     2.         MB item check     ─── R = P ───> terminal eval and register a rxn entry in network
                       │          ─── exist in supar_endxyz record ───> terminal eval and register entry with known info
                       │ new
-    3.     (optional) TS eval    ─── fail ───> terminal eval and register a rxn entry in network
-                      │
-                      │ pass
-       3A. barierless          3B. low-energy              3C. high-energy ───> terminal eval and register
-               │                       │
-               │                       │
-     Pseudobarrier=5 kcal/mol          │
-               │───────────────────────│
+                      │───
                           │
-    4.       Separate endxyz and process(opt+features) each indepented fragment
+    3.       Separate endxyz and process(opt+features) each indepented fragment
                           │
                           │
-    5.              MB item check ─── R = P ───> terminal eval and register a rxn entry in network
+    4.              MB item check ─── R = P ───> terminal eval and register a rxn entry in network
                           │
                           │       ─── at_l bond term not change ───> terminal eval and register a rxn entry in network
                           │
                           │       ─── rxn exist ───> terminal eval and register entry with known info
                           │
+    5.        (optional) TS eval    ─── fail ───> terminal eval and register a rxn entry in network
+                      │
+                      │ pass
+       5A. barierless          5B. low-energy              5C. high-energy ───> terminal eval and register
+               │                       │
+               │                       │
+     Pseudobarrier=5 kcal/mol          │
+               │───────────────────────│
                           │
     6.  assign strucreID to new P and update features to exist P (may have lower energy), register rxn enrtry
                           │
@@ -267,9 +269,8 @@ class PathEval:
         endxyz_mb = " | ".join(self.endxyz_info["mb"].split(" | ")[:self.mbcut_length])
         if reactants_mb == endxyz_mb:
             self.update_rxnif_as_RequalP()
-            rxnnetwork.add_newnode(self.rxninfo)
+            self.rxninfo = rxnnetwork.add_newnode(self.rxninfo)
             return self.rxninfo
-
         reactants_items = [storage.allstruc.sid_to_strucitems[_] for _ in self.reactants]
         unreactants_items = [storage.allstruc.sid_to_strucitems[_] for _ in self.unreacted]
 
@@ -285,66 +286,48 @@ class PathEval:
             self.rxninfo["products"] = products
 
             search_rxn_key = rxnnetwork.normal_rxn_key_from_items(reactants_items, unreactants_items, product_items)
-            ref_rxnidx = rxnnetwork.rxn_index.get(search_rxn_key)
+            ref_scanwd = rxnnetwork.rxn_record.get(search_rxn_key)
             # get exist refid with known (sorted_R_items,sorted_unreact_items, sorted_P_items)
-            if ref_rxnidx is not None:
-                ref_scanwd = rxnnetwork.rxn_idx_to_scanwd[ref_rxnidx]
+            if ref_scanwd is not None:
                 self.update_info_with_ref_scanwd(ref_scanwd)
                 self.rxninfo["note"] = "rxn exists"
-                rxnnetwork.add_newnode(self.rxninfo)
-                return self.rxninfo
-        # defalut processing
-        ## (optional) TS eval
-        if self.tseval:
-            TS_info = self.run_TS_eval()
-            if TS_info["rc"] == 0:
-                for key in TS_info:
-                    if key in self.rxninfo:
-                        self.rxninfo[key] = TS_info[key]
-                if TS_info[self.ts_energy_key] > self.elim:
-                    self.rxninfo["products"] = ["?"]
-                    self.rxninfo["note"] = "high-energy TS"
-                    rxnnetwork.add_newnode(self.rxninfo, giverxnid=False)
-                    return self.rxninfo
-            else:
-                self.rxninfo["products"] = ["?"]
-                self.rxninfo["note"] = "TS search fails"
-                rxnnetwork.add_newnode(self.rxninfo, giverxnid=False)
+                self.rxninfo = rxnnetwork.add_newnode(self.rxninfo)
                 return self.rxninfo
 
-        ## Separate endxyz and process(opt+features) each indepented fragment
+        # Separate endxyz and process(opt+features) each indepented fragment
         products_info = self.Splitting_supraMol(debugmode=self.debugmode)
         product_items = [(" | ".join(item["mb"].split(" | ")[:self.mbcut_length]),
                           item["charge"],
                           item["multiplicity"]) for item in products_info]
-
-        ### check if rxn exist
+        ## check if rxn exist
         search_rxn_key = rxnnetwork.normal_rxn_key_from_items(reactants_items, unreactants_items, product_items)
-        ref_rxnidx = rxnnetwork.rxn_index.get(search_rxn_key)
-        if ref_rxnidx is not None:
-            ref_scanwd = rxnnetwork.rxn_idx_to_scanwd[ref_rxnidx]
+        ref_scanwd = rxnnetwork.rxn_record.get(search_rxn_key)
+        if ref_scanwd is not None:
             self.update_info_with_ref_scanwd(ref_scanwd)
             self.rxninfo["note"] = "rxn exists"
-            rxnnetwork.add_newnode(self.rxninfo)
+            self.rxninfo = rxnnetwork.add_newnode(self.rxninfo)
             return self.rxninfo
+        # add search key to record
+        rxnnetwork.rxn_record[search_rxn_key] = self.rxninfo["scanwd"]
 
-        ### check if R=P
+        ## check if R=P
         bond_change = False if Counter(reactants_items) == Counter(product_items) else True
         self.rxninfo["bond_change"] = bond_change
         if not bond_change:
-            rxnnetwork.add_newnode(self.rxninfo)
+            self.update_rxnif_as_RequalP()
+            self.rxninfo = rxnnetwork.add_newnode(self.rxninfo)
             return self.rxninfo
 
-        ### check if desired at_l bond changed
-        target_change = self.check_target_topo_change(products_info,)
+        ## check if desired at_l bond changed
+        target_change = self.check_target_topo_change(products_info, )
         self.rxninfo["target_change"] = target_change
         if not target_change:
             self.rxninfo["products"] = ['-']
             self.rxninfo["note"] = "unexpect bond-change"
-            rxnnetwork.add_newnode(self.rxninfo)
+            self.rxninfo = rxnnetwork.add_newnode(self.rxninfo)
             return self.rxninfo
 
-        ### new rxn
+        ## new rxn
         E_p = [Pfeatures["Esp_gas"] for Pfeatures in products_info]
         E_r = [storage.allstruc.get(i).energy.Esp_gas for i in self.reactants]
         E_rxn_kcal = calc_rxn_energy(E_p, E_r)
@@ -359,6 +342,25 @@ class PathEval:
         else:
             self.rxninfo["therdy_allow"] = False if E_rxn_kcal > self.elim else True
         self.rxninfo["note"] = "high-energy P" if not self.rxninfo["therdy_allow"] else "new rxn"
+
+        ## (optional) TS eval
+        if self.tseval and self.rxninfo["therdy_allow"]:
+            TS_info = self.run_TS_eval()
+            if TS_info["rc"] == 0:
+                for key in TS_info:
+                    if key in self.rxninfo:
+                        self.rxninfo[key] = TS_info[key]
+                if TS_info[self.ts_energy_key] > self.elim:
+                    # self.rxninfo["products"] = ["?"]
+                    self.rxninfo["note"] = "high-energy TS"
+                    # rxnnetwork.add_newnode(self.rxninfo, giverxnid=False)
+                    # return self.rxninfo
+            else:
+                self.rxninfo["note"] = "TS search fails"
+                # self.rxninfo["products"] = ["?"]
+                #         self.rxninfo["note"] = "TS search fails"
+                #         rxnnetwork.add_newnode(self.rxninfo, giverxnid=False)
+                #         return self.rxninfo
 
         # update or add new P
         products = []
@@ -387,7 +389,7 @@ class PathEval:
                 products.append("unknow")
                 self.rxninfo["note"] = "MolBar fails"
         self.rxninfo["products"] = products
-        rxnnetwork.add_newnode(self.rxninfo)
+        self.rxninfo = rxnnetwork.add_newnode(self.rxninfo)
         return self.rxninfo
 
     def run_TS_eval(self):
@@ -413,6 +415,11 @@ class PathEval:
 
         ## P-side
         Pcoordinate_init = self.endxyz_info["coordinate"]
+        # # if use mbff, add a bit noisy in coord
+        # scanmode = storage.setting.searching_setting.general.scan_mode
+        # if scanmode==1:
+        #     from aRST.script.toolbox import add_noisy_to_coord
+        #     Pcoordinate_init = add_noisy_to_coord(Pcoordinate_init, scale=1e-3)
         Pele_l = self.endxyz_info["ele_l"]
         # relax P
         random_name = get_random_folder_name()
@@ -731,9 +738,4 @@ def ReactionSearch(reactants_ini, step=0, debugtrigger=False):
                 print_info = singlecycle.workflow(prefix_rpid=prefix_rpid, debugtrigger=debugtrigger)
                 print_simulation_details(print_info, nodewd, tseval=tseval, evalmode=evalmode)
             step += 1
-
-
-def clean_up_bufferwd(degubtrigger, bufferwd):
-    # clean up buffer_struc
-    if not degubtrigger and exists(bufferwd):
-        shutil.rmtree(bufferwd, ignore_errors=True)
+    del_dir(not debugtrigger, storage.setting.searching_setting.general.bufferwd)

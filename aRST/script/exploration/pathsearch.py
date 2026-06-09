@@ -1,4 +1,4 @@
-from aRST.script.toolbox import create_folder, write_xyz, read_coord, read_bo, read_atcharge, get_topo
+from aRST.script.toolbox import create_folder, write_xyz, read_coord, read_bo, read_atcharge, get_topo,add_noisy_to_coord
 from aRST.script.callsys import CallxTB
 import aRST.script.initialization as storage
 from os.path import join
@@ -163,7 +163,8 @@ class SinglePathSearch:
         generalsetting = storage.setting.searching_setting.general
 
         create_folder(self.comdir)
-        write_xyz(self.coordinate_init, self.ele_l_init, "coord_mb")
+        coordinate_noisy = add_noisy_to_coord(self.coordinate_init, scale=1e-4)
+        write_xyz(coordinate_noisy, self.ele_l_init, "coord_mb")
         # constrained opt in gfn2
         status = CallxTB(self.comdir,
                          custom_settings={"charge": self.charge, "uhf": self.u,

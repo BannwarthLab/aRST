@@ -420,12 +420,13 @@ class CallxTB:
         cmd_string += f"--alpb {self.cmd.get_value('alpb')} "
         rc = self.xtbsubprocess(cmd_string)
 
-        # fallback: retry without ALPB if failed
-        if rc != 0 and self.cmd.get_value('alpb') is not None:
-            cmd_string_gas = f"{self.cmd_string_base}--opt "
-            cmd_string_gas += f"{self.cmd.get_value('optlevel')} " if self.cmd.get_value('optlevel') else ""
-            rc = self.xtbsubprocess(cmd_string_gas)
+        # fallback: retry with high etemp
+        if rc != 0:
+            oldetmp = self.cmd.get_value('etemp')
+            cmd_string_highetemp = f"{self.cmd_string_base}--opt ".replace(f"--etemp {oldetmp}", "--etemp 4000")
+            rc = self.xtbsubprocess(cmd_string_highetemp)
             if rc == 0:
+                os.rename(f"{self.wd}/xtbopt.xyz",f"{self.wd}/coord.xyz")
                 rc = self.xtbsubprocess(cmd_string)
         return rc
 

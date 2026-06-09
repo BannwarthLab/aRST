@@ -8,8 +8,9 @@ from aRST.script.do_scan import get_endxyz_from_mb, build_push_l
 from aRST.script.exploration.pathsearch import SinglePathSearch
 import aRST.script.initialization as storage
 from aRST.script.head import print_react_l
-from aRST.script.toolbox import create_folder,write_xyz
+from aRST.script.toolbox import create_folder,write_xyz,get_topo_covaradii
 from aRST.script.callsys import CallMolBar
+from aRST.script.exploration.structure import check_target_bond_change
 import copy
 
 
@@ -117,6 +118,7 @@ def interxtbscan(reactants0, entry, reactionpath, count=0):
         }
     }
     unreacted = sorted((x for x in reactants0 if x != struc1 and x != struc2), key=int, reverse=True)
+    aligned_mb = CallMolBar(coordinate_merge, ele_merged).get_mb()
 
     rc = 1
     for u in uhf_l:
@@ -128,7 +130,8 @@ def interxtbscan(reactants0, entry, reactionpath, count=0):
                         "at_l": at_l, "simuhf": u,
                         "scanwd": f"{reactionpath}_{count}",
                         "coordinate": coordinate_merge,
-                        "ele_l": ele_merged
+                        "ele_l": ele_merged,
+                        "mb": aligned_mb
                         }  # reactants info
         results, status = SinglePathSearch(coordinate_merge,
                                            ele_merged,
@@ -174,9 +177,14 @@ def intermbff(reactants0, entry, reactionpath, count=0):
         atom_connection.append({"atoms": [at1, at2], "value": value})
 
     unreacted = sorted((x for x in reactants0 if x != struc1 and x != struc2), key=int, reverse=True)
-    # mbxyz0, ele_l0 = get_endxyz_from_mb(atom_connection, coordinate_merge, ele_merged, set_angles=False)
+    # test mb set_angles=True can connecting fragments
     mbxyz, mbele_l = get_endxyz_from_mb(atom_connection, coordinate_merge, ele_merged, set_angles=True)
-    # mbxyz, mbele_l = get_endxyz_from_mb(atom_connection, mbxyz0, ele_l0, set_angles=True)
+    tmp_topo_l =  get_topo_covaradii(mbxyz, mbele_l)
+    maped_atl = [[item[0], item[1]] for item in push_l]
+    target_change = check_target_bond_change(maped_atl, tmp_topo_l, "interA")
+    if not target_change:
+        mbxyz0, ele_l0 = get_endxyz_from_mb(atom_connection, coordinate_merge, ele_merged, set_angles=False)
+        mbxyz, mbele_l = get_endxyz_from_mb(atom_connection, mbxyz0, ele_l0, set_angles=True)
     rc = 1
     for u in uhf_l:
         # print(f"Simulating interA path {reactionpath}_{count}: R={reactants0}, atl={at_l}, uhf_sim={u} ...", end="")

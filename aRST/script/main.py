@@ -92,7 +92,7 @@ def main():
         try:
             # prepare the input reactant
             reactants_ini = init.register_init_input_reactants(init.setting, init.allstruc)
-            ReactionSearch(reactants_ini)
+            ReactionSearch(reactants_ini,debugtrigger=args.debug)
 
         except Exception as e:
             print(f"Error in main(): {e}", flush=True)
@@ -111,8 +111,8 @@ def main():
         print(f"***** Job finished in {int(total_seconds // 3600)} hour "
               f"{int((total_seconds % 3600) // 60)} mins {total_seconds % 60:.2f} sec *****", flush=True)
         # clean up
-        from aRST.script.exploration.reactionsearch import clean_up_bufferwd
-        clean_up_bufferwd(args.debug, init.setting.searching_setting.general.bufferwd)
+        # from aRST.script.exploration.reactionsearch import clean_up_bufferwd
+        # clean_up_bufferwd(args.debug, init.setting.searching_setting.general.bufferwd)
         # plot_rxnnetwork()
 
 

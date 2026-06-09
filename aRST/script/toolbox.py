@@ -79,7 +79,7 @@ def read_coord(coordpath):
     ele_l = coord.iloc[:, 0].to_numpy()
     return coordinate, ele_l
 
-def add_noisy_to_coord(coordinate,scale=1e-3):
+def add_noisy_to_coord(coordinate,scale=1e-4):
     # prevernt opt error results by perfert symmetry
     coordinate += np.random.normal(scale=scale, size=coordinate.shape)
     return coordinate

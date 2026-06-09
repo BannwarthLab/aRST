@@ -26,7 +26,7 @@ class ReactionNetwork:
                     cls._instance.rxn_idx_to_scanwd = {} # only record first scanwd
 
                     cls._instance.searchpath_index = {}  # key: (sorted_Rids, atl), val=rxnid
-                    cls._instance.rxn_index = {}  # key: (sorted_R_items,sorted_unreact_items, sorted_P_items), val=rxnid
+                    cls._instance.rxn_record = {}  # key: (sorted_R_items,sorted_unreact_items, sorted_P_items), val=scanwd
                     # cls._instance.therdy_allowed_nodes = set() # record all therdy allowed nodeid
                     # cls._instance.therdy_allowed_struc = set() # record all therdy allowed generated strucres
         return cls._instance
@@ -41,6 +41,7 @@ class ReactionNetwork:
             rxnid = info.get("rxnid")
             if rxnid is None:
                 rxnid = self._next_index
+                info["rxnid"] = rxnid
                 self._next_index += 1
             self.scanwd_to_rxn_idx[scanwd] = rxnid
             if self.rxn_idx_to_scanwd.get(rxnid) is None:
@@ -48,7 +49,7 @@ class ReactionNetwork:
 
         self.graph.add_node(scanwd, info=info)
 
-        return
+        return info
 
 
 
