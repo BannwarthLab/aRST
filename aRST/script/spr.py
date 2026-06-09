@@ -20,6 +20,8 @@ def find_identical_at_from_afo(HOAO_a, HOAO_b, LUAO_a, LUAO_b, tol=0.01):
         for idx in HOAO_a.index:
             if idx in used_indices:
                 continue
+            if pd.isna(HOAO_a.loc[idx, struc]):
+                continue
 
             # Get reference values
             ref_values = {
