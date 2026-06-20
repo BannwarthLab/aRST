@@ -119,8 +119,10 @@ def register_init_input_reactants(setting,allstruc,getfeatures=True):
         ns = setting.geom[key].number  # repeat adding time
 
         currentstruc = Singlestruc(coordinate,ele_l,c,m,mb)
-
-        sid_exist, refsid = currentstruc.structure_exist()
+        if id==0:
+            sid_exist = False
+        else:
+            sid_exist, refsid = currentstruc.structure_exist()
         if not sid_exist:
             sid,s = allstruc.placeholde_new_sid()
             if setting.read.general.jumprefine:

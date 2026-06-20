@@ -59,6 +59,11 @@ def main():
     )
 
     args = parser.parse_args()
+
+    if args.in_file is None and args.view is None:
+        parser.print_help()
+        return
+
     if args.unbuffered:
         sys.stdout = open(sys.stdout.fileno(), mode="w", buffering=1)
         sys.stderr = open(sys.stderr.fileno(), mode="w", buffering=1)

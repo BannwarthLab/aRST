@@ -431,14 +431,14 @@ class CallxTB:
         return rc
 
     def afo(self):
-        cmd_string = f"{self.cmd_string_base}--ml_feature "
+        cmd_string = f"{self.cmd_string_base}--ml_feature --alpb {self.cmd.get_value('alpb')} "
         p = subprocess.Popen(cmd_string, stdout=open(f'{self.wd}/xtb.out', 'w'), stderr=subprocess.PIPE, shell=True)
         p.wait()
         rc = p.returncode
         return rc
 
     def molden(self):
-        cmd_string = f"{self.cmd_string_base}--molden "
+        cmd_string = f"{self.cmd_string_base}--molden --alpb {self.cmd.get_value('alpb')} "
         p = subprocess.Popen(cmd_string, stdout=open(f'{self.wd}/xtb.out', 'w'), stderr=subprocess.PIPE, shell=True)
         p.wait()
         rc = p.returncode
@@ -707,6 +707,7 @@ class CallsTDA:
 
     def callml(self, sty):
         cmd = f"{os.environ['STDA_BIN']} -f {self.coordfn} -ml_feature -sty {str(sty)}"
+        print(cmd)
         p = subprocess.Popen(cmd, stdout=open(join(self.wd, f'stda.out'), 'w'), stderr=subprocess.PIPE, shell=True)
         p.wait()
         rc = p.returncode

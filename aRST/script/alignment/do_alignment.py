@@ -40,7 +40,7 @@ def aligning_two_structures(reactants, atl=None):
                 pairs = item["atl"][:cut]
                 item["atl"] = pairs
             entry = react_l[0]
-            atl = entry["atl"]
+            at_combi_list = entry["atl"]
 
     align_wd = join(storage.setting.searching_setting.general.wd, f"alignment")
     create_folder(align_wd)
@@ -60,12 +60,12 @@ def aligning_two_structures(reactants, atl=None):
 
 
     # generate reactiv complex
-    aligningcoord1, ele_l_merge = alignment(coordinate1, ele_l1, coordinate2, ele_l2, atl,
+    aligningcoord1, ele_l_merge = alignment(coordinate1, ele_l1, coordinate2, ele_l2, at_combi_list,
                                             extra_setting={"maxovlap": False,
                                                            "aligning_distance": storage.setting.searching_setting.inter.aligning_distance},
                                             writingP=True)
     write_xyz(aligningcoord1, ele_l_merge, f"coord_default")
-    alignedcoord2, ele_l_merge = alignment(coordinate1, ele_l1, coordinate2, ele_l2, atl,
+    alignedcoord2, ele_l_merge = alignment(coordinate1, ele_l1, coordinate2, ele_l2, at_combi_list,
                                            extra_setting={"maxovlap": True,
                                                           "aligning_distance": storage.setting.searching_setting.inter.aligning_distance})
     write_xyz(alignedcoord2, ele_l_merge, f"coord_maxovelap")

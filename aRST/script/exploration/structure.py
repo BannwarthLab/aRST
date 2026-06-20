@@ -553,6 +553,9 @@ class StrucGraph:
         self.graph = self.build_graph()
 
     def build_graph(self):
+        from aRST.script.geom import r0
+        radii = np.array([r0[e] for e in self.ele_l], dtype=float)
+
         G = nx.Graph()
 
         # add node
@@ -564,16 +567,22 @@ class StrucGraph:
             )
 
         # add bonds/topology as edges
-        # with topology: self.topo_l is func(get_topo_covaradii); otherwise acc. mbo>0.5
+        ## only a mbo is >=0.3 and interatomic dist <=1.5 * covaradii is a bond
         for item in self.topo_l:
             at1, at2 = item["atoms"]
-
             mbo = item.get("mbo")
+            dist = item.get("value")
 
-            if mbo is not None and mbo < 0.5:
+            if mbo is None:
                 continue
 
-            attrs = {"distance": item["value"]}
+            if mbo < 0.3:
+                continue
+            cov_radii_scale = 1.5 *(radii[at1-1]+ radii[at2-1])
+            if dist>cov_radii_scale:
+                continue
+
+            attrs = {"distance": dist}
 
             if mbo is not None:
                 attrs["mbo"] = mbo

@@ -166,14 +166,14 @@ class SinglePathSearch:
         coordinate_noisy = add_noisy_to_coord(self.coordinate_init, scale=1e-4)
         write_xyz(coordinate_noisy, self.ele_l_init, "coord_mb")
         # constrained opt in gfn2
+        newbond = [{"atoms":(item[0],item[1]),"value":item[-1]} for item in push_l]
         status = CallxTB(self.comdir,
                          custom_settings={"charge": self.charge, "uhf": self.u,
                                           "k": storage.setting.xtb_setting.k,
                                           "coordfn": "coord_mb",
                                           "etemp": storage.setting.xtb_setting.scan_etemp
                                           }).constrained_opt(
-            newbond=atom_connection[-len(push_l):])
-
+            newbond=newbond)
         results = None
         if status == 0:
             endxyz, ele_l_end = read_coord(join(self.comdir, "xtbopt.xyz"))

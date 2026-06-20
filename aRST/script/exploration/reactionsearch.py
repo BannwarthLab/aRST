@@ -274,25 +274,29 @@ class PathEval:
         reactants_items = [storage.allstruc.sid_to_strucitems[_] for _ in self.reactants]
         unreactants_items = [storage.allstruc.sid_to_strucitems[_] for _ in self.unreacted]
 
-        # check if scan-end supraMol already exist in record
-        ref_scanwd = self.rxn_exists_base_on_SupraMol()
-        if ref_scanwd is not None:
-            # get exist P info
-            products = rxnnetwork.get_reaction_info(ref_scanwd)["products"]
-            if any(x in self.badP for x in products):
-                rxnnetwork.add_newnode(self.rxninfo, giverxnid=False)
-                return self.rxninfo
-            product_items = [storage.allstruc.sid_to_strucitems[_] for _ in products]
-            self.rxninfo["products"] = products
-
-            search_rxn_key = rxnnetwork.normal_rxn_key_from_items(reactants_items, unreactants_items, product_items)
-            ref_scanwd = rxnnetwork.rxn_record.get(search_rxn_key)
-            # get exist refid with known (sorted_R_items,sorted_unreact_items, sorted_P_items)
-            if ref_scanwd is not None:
-                self.update_info_with_ref_scanwd(ref_scanwd)
-                self.rxninfo["note"] = "rxn exists"
-                self.rxninfo = rxnnetwork.add_newnode(self.rxninfo)
-                return self.rxninfo
+        # # # check if scan-end supraMol already exist in record
+        # ref_scanwd = self.rxn_exists_base_on_SupraMol()
+        # if ref_scanwd is not None:
+        #     ref_info = rxnnetwork.get_reaction_info(ref_scanwd)
+        #     # get exist P info
+        #     products = ref_info["products"]
+        #     if any(x in self.badP for x in products):
+        #         self.rxninfo["products"] = products (last bad doesnt have to be this badP)
+        #         self.rxninfo["note"] = ref_info["note"]
+        #         rxnnetwork.add_newnode(self.rxninfo)
+        #
+        #         return self.rxninfo
+        #     product_items = [storage.allstruc.sid_to_strucitems[_] for _ in products]
+        #     self.rxninfo["products"] = products
+        #
+        #     search_rxn_key = rxnnetwork.normal_rxn_key_from_items(reactants_items, unreactants_items, product_items)
+        #     ref_scanwd = rxnnetwork.rxn_record.get(search_rxn_key)
+        #     # get exist refid with known (sorted_R_items,sorted_unreact_items, sorted_P_items)
+        #     if ref_scanwd is not None:
+        #         self.update_info_with_ref_scanwd(ref_scanwd)
+        #         self.rxninfo["note"] = "rxn exists"
+        #         self.rxninfo = rxnnetwork.add_newnode(self.rxninfo)
+        #         return self.rxninfo
 
         # Separate endxyz and process(opt+features) each indepented fragment
         products_info = self.Splitting_supraMol(debugmode=self.debugmode)
@@ -307,8 +311,6 @@ class PathEval:
             self.rxninfo["note"] = "rxn exists"
             self.rxninfo = rxnnetwork.add_newnode(self.rxninfo)
             return self.rxninfo
-        # add search key to record
-        rxnnetwork.rxn_record[search_rxn_key] = self.rxninfo["scanwd"]
 
         ## check if R=P
         bond_change = False if Counter(reactants_items) == Counter(product_items) else True
@@ -316,9 +318,11 @@ class PathEval:
         if not bond_change:
             self.update_rxnif_as_RequalP()
             self.rxninfo = rxnnetwork.add_newnode(self.rxninfo)
+            # add search key to record
+            rxnnetwork.rxn_record[search_rxn_key] = self.rxninfo["scanwd"]
             return self.rxninfo
 
-        ## check if desired at_l bond changed
+        ## check if desired at_l bond changed (not record search key)
         target_change = self.check_target_topo_change(products_info, )
         self.rxninfo["target_change"] = target_change
         if not target_change:
@@ -326,6 +330,9 @@ class PathEval:
             self.rxninfo["note"] = "unexpect bond-change"
             self.rxninfo = rxnnetwork.add_newnode(self.rxninfo)
             return self.rxninfo
+
+        # add search key to record
+        rxnnetwork.rxn_record[search_rxn_key] = self.rxninfo["scanwd"]
 
         ## new rxn
         E_p = [Pfeatures["Esp_gas"] for Pfeatures in products_info]

@@ -66,6 +66,8 @@ class ReactivityPreparer:
 
             if str.lower(storage.setting.searching_setting.reactivity.afo_method) == "gfn2":
                 afowd, status = getAFO(strucid=sid).get_from_xtb(afosubwd)
+            elif str.lower(storage.setting.searching_setting.reactivity.afo_method) == "gxtb":
+                afowd, status = getAFO(strucid=sid).get_from_gxtb_molden(afosubwd)
             elif str.lower(storage.setting.searching_setting.reactivity.afo_method) == "terachem":
                 afowd, status = getAFO(strucid=sid).get_from_tc(afosubwd)
             else:
@@ -162,8 +164,8 @@ class getAFO:
         return afowd, rc
 
     def get_from_gxtb_molden(self, subfolder=None):
-        afowd = create_folder(join(self.strucwd, self.struc, "xtb", "afo")) \
-            if not subfolder else create_folder(join(self.strucwd, self.struc, subfolder, "xtb", "afo"))
+        afowd = create_folder(join(self.strucwd, self.struc, "gxtb", "afo")) \
+            if not subfolder else create_folder(join(self.strucwd, self.struc, subfolder, "gxtb", "afo"))
         rc = 0
         if not exists(join(afowd, "ml_feature.csv")):
             write_xyz(self.coordinate, self.ele_l, "coord", c=self.c, m=self.m)

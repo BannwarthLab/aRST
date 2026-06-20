@@ -177,20 +177,22 @@ def intermbff(reactants0, entry, reactionpath, count=0):
         atom_connection.append({"atoms": [at1, at2], "value": value})
 
     unreacted = sorted((x for x in reactants0 if x != struc1 and x != struc2), key=int, reverse=True)
-    # test mb set_angles=True can connecting fragments
-    mbxyz, mbele_l = get_endxyz_from_mb(atom_connection, coordinate_merge, ele_merged, set_angles=True)
-    tmp_topo_l =  get_topo_covaradii(mbxyz, mbele_l)
-    maped_atl = [[item[0], item[1]] for item in push_l]
-    target_change = check_target_bond_change(maped_atl, tmp_topo_l, "interA")
-    if not target_change:
-        mbxyz0, ele_l0 = get_endxyz_from_mb(atom_connection, coordinate_merge, ele_merged, set_angles=False)
-        mbxyz, mbele_l = get_endxyz_from_mb(atom_connection, mbxyz0, ele_l0, set_angles=True)
+    # # test mb set_angles=True can connecting fragments
+    # mbxyz, mbele_l = get_endxyz_from_mb(atom_connection, coordinate_merge, ele_merged, set_angles=True)
+    # tmp_topo_l =  get_topo_covaradii(mbxyz, mbele_l)
+    # maped_atl = [[item[0], item[1]] for item in push_l]
+    # target_change = check_target_bond_change(maped_atl, tmp_topo_l, "interA")
+    # if not target_change:
+    mbxyz0, ele_l0 = get_endxyz_from_mb(atom_connection, coordinate_merge, ele_merged, set_angles=False)
+    atom_connection = get_topo_covaradii(mbxyz0,ele_l0)
+    mbxyz, mbele_l = get_endxyz_from_mb(atom_connection, mbxyz0, ele_l0, set_angles=True)
     rc = 1
     for u in uhf_l:
         # print(f"Simulating interA path {reactionpath}_{count}: R={reactants0}, atl={at_l}, uhf_sim={u} ...", end="")
         scan_wd = join(scanwd, f"{reactionpath}_{count}")
         create_folder(scan_wd)
         write_xyz(coordinate_merge, ele_merged, "coord")
+        # write_xyz(mbxyz0, ele_l0, "a")
         reactantinfo = {"reactants": [struc1, struc2],
                         "unreacted": unreacted,
                         "at_l": at_l, "simuhf": u,

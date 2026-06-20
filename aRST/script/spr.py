@@ -20,7 +20,9 @@ def find_identical_at_from_afo(HOAO_a, HOAO_b, LUAO_a, LUAO_b, tol=0.01):
         for idx in HOAO_a.index:
             if idx in used_indices:
                 continue
-            if pd.isna(HOAO_a.loc[idx, struc]):
+            val = HOAO_a.loc[idx, struc]
+
+            if pd.isna(val).any() if hasattr(pd.isna(val), "any") else pd.isna(val):
                 continue
 
             # Get reference values
@@ -63,36 +65,13 @@ def find_identical_at_from_afo(HOAO_a, HOAO_b, LUAO_a, LUAO_b, tol=0.01):
     return out
 
 
-def merge_react_l(react_l, identical_atom_d, gap_tol=0.01):
-    def _one_to_one_pairs(deg_a, deg_b, same_structure):
-        deg_a = sorted(deg_a)
-        deg_b = sorted(deg_b)
+def merge_react_l(react_l, identical_atom_d,intermode, gap_tol=0.01):
+    """
+    react_l: N*N*4
+    best: N*N
+    out: degenerated
 
-        if not same_structure:
-            # Different structures: atom indices are separate namespaces.
-            # Pair equivalent atoms one-to-one.
-            return [
-                (a, b)
-                for a, b in zip(deg_a, deg_b)
-            ]
-
-        # Same structure: atom indices are in the same namespace.
-        if set(deg_a) == set(deg_b):
-            # Same equivalent group, avoid self-pairs.
-            atoms = sorted(set(deg_a))
-            pairs = []
-            for i in range(0, len(atoms) - 1, 2):
-                a, b = atoms[i], atoms[i + 1]
-                pairs.append((max(a, b), min(a, b)))
-            return pairs
-
-        # Different equivalent groups inside same structure.
-        pairs = []
-        for a, b in zip(deg_a, deg_b):
-            if a == b:
-                continue
-            pairs.append((max(a, b), min(a, b)))
-        return pairs
+    """
     def _degenerate_group(struc, atom):
         for grp in identical_atom_d.get(struc, []):
             atoms = grp.get("atom", [])
@@ -110,14 +89,25 @@ def merge_react_l(react_l, identical_atom_d, gap_tol=0.01):
         deg_a = _degenerate_group(s1, a0)
         deg_b = _degenerate_group(s2, b0)
         same_structure = (s1 == s2)
-        all_pairs = _one_to_one_pairs(deg_a, deg_b, same_structure)
+        all_pairs = []
+        for a, b in product(deg_a, deg_b):
+            if same_structure and not intermode and a == b:
+                continue
+            all_pairs.append((a, b))
+            if same_structure:
+                all_pairs.append((b, a))
 
         for a, b in all_pairs:
             key = (s1, s2, a, b)
             if key not in best or item["gap"] < best[key]["gap"]:
+                if same_structure:
+                    format_pair = [[max(a,b),min(a,b)]]
+                else:
+                    format_pair = [[a, b]]
+
                 best[key] = {
                     "reactants": [s1, s2],
-                    "atl": [[a, b]],
+                    "atl": format_pair,
                     "gap": item["gap"],
                     "HOAO": item.get("HOAO"),
                     "LUAO": item.get("LUAO"),
@@ -131,40 +121,10 @@ def merge_react_l(react_l, identical_atom_d, gap_tol=0.01):
 
     grouped = {}
     for entry in out:
-        grouped.setdefault(_struc_key(entry), []).append(entry)
+        if entry not in grouped.get(_struc_key(entry), []):
+            grouped.setdefault(_struc_key(entry), []).append(entry)
 
-    merged = []
 
-    def _can_add_pair(bucket, new_atl):
-        s1, s2 = bucket["reactants"]
-        same_structure = (s1 == s2)
-
-        if same_structure:
-            used_atoms = set()
-            for a, b in bucket["atl"]:
-                used_atoms.add(a)
-                used_atoms.add(b)
-
-            for a, b in new_atl:
-                if a in used_atoms or b in used_atoms:
-                    return False
-                used_atoms.add(a)
-                used_atoms.add(b)
-        else:
-            used_left = set()
-            used_right = set()
-
-            for a, b in bucket["atl"]:
-                used_left.add(a)
-                used_right.add(b)
-
-            for a, b in new_atl:
-                if a in used_left or b in used_right:
-                    return False
-                used_left.add(a)
-                used_right.add(b)
-
-        return True
 
     def _dedupe_atl(atl):
         seen = set()
@@ -178,34 +138,53 @@ def merge_react_l(react_l, identical_atom_d, gap_tol=0.01):
 
     merged = []
 
-    for _, recs in grouped.items():
-        recs.sort(key=lambda r: r["gap"])
+    for _, entries in grouped.items():
+        entries.sort(key=lambda r: r["gap"])
         buckets = []
-        for r in recs:
 
-
-            placed = False
-
+        for entry in entries:
             for bucket in buckets:
-                # gap is close enough AND atoms are not already used
-                if (
-                        abs(r["gap"] - bucket["gap"]) <= gap_tol
-                        and _can_add_pair(bucket, r["atl"])
-                ):
-                    bucket["atl"].extend(r["atl"])
-                    placed = True
+                if abs(entry["gap"] - bucket["gap"]) <= gap_tol:
+                    bucket["atl"].extend(entry["atl"])
                     break
-
-            # If gap is close but atoms conflict, start a new bucket
-            if not placed:
-                new_bucket = {**r}
-                new_bucket["atl"] = list(r["atl"])
-                buckets.append(new_bucket)
+            else:
+                buckets.append({
+                    **entry,
+                    "atl": entry["atl"][:],
+                })
 
         for bucket in buckets:
             bucket["atl"] = _dedupe_atl(bucket["atl"])
             merged.append(bucket)
-    out = merged
+
+    out = []
+    # sanity atl (each atom appear once)
+    for entry in merged:
+        old_atl = entry["atl"]
+        s1, s2 = entry["reactants"]
+        same_structure = (s1 == s2)
+        used_1 = set()
+        used_2 = set()
+
+        new_atl = []
+        for atl in old_atl:
+            a,b = atl
+            if same_structure:
+                if a in used_1 or b in used_1:
+                    continue
+                else:
+                    used_1.add(a)
+                    used_1.add(b)
+                    new_atl.append([a,b])
+            else:
+                if a in used_1 or b in used_2:
+                    continue
+                else:
+                    used_1.add(a)
+                    used_2.add(b)
+                    new_atl.append([a,b])
+        entry["atl"] = new_atl
+        out.append(entry)
     return out
 
 
@@ -410,7 +389,7 @@ class SPR:
                     exclude_pairs=exclude_pairs
                 )
             )
-        final_react = sorted(merge_react_l(final_react, identical_atom_d, gap_tol=equivalent_afogap_tol),
+        final_react = sorted(merge_react_l(final_react, identical_atom_d,intermode=True, gap_tol=equivalent_afogap_tol),
                              key=lambda x: x['gap'])
         return final_react
 
@@ -434,10 +413,10 @@ class SPR:
                     exclude_pairs=exclude_pairs
                 )
             )
-
-        tmp_react = sorted(merge_react_l(final_react, identical_atom_d, gap_tol=equivalent_afogap_tol),
+        tmp_react = sorted(merge_react_l(final_react, identical_atom_d,intermode=False, gap_tol=equivalent_afogap_tol),
                            key=lambda x: x['gap'])
-        # del all connected bond & change to reactants in len(1)
+        # del all connected bond & same atom pair
+        # & change to reactants in len(1)
         allbonds = SDP(self.reactants, exclude_elements=exclude_elements, exclude_pairs=exclude_pairs).allbonds
         final_react = []
         for item in tmp_react:
