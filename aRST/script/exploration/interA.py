@@ -22,11 +22,6 @@ def get_interA_react_l(reactants0, writefile=True):
         exclude_elements=generalsetting.exclude_elements,
         exclude_pairs=generalsetting.exclude_pairs if generalsetting.cycle == 1 else None
     )
-    cut = 2 if intersetting.concerted_pair else 1
-    for item in react_l:
-        pairs = item["atl"][:cut]
-        item["atl"] = pairs
-
     if writefile:
         # print top 10 react_l
         print_react_l(reactants0, react_l)
@@ -34,6 +29,12 @@ def get_interA_react_l(reactants0, writefile=True):
         with open(join(generalsetting.wd, "react_l"), "w") as f:
             for item in react_l:
                 f.write(json.dumps(item) + "\n")
+
+    cut = 2 if intersetting.concerted_pair else 1
+    for item in react_l:
+        pairs = item["atl"][:cut]
+        item["atl"] = pairs
+
 
     atom_pairs = intersetting.atom_pair
     if atom_pairs:
@@ -205,8 +206,8 @@ def intermbff(reactants0, entry, reactionpath, count=0):
                                            mbele_l,
                                            u, charge, scan_wd,
                                            nat_coord1,
-                                           [struc1, struc2]).run_xtbopt_for_mbff_search(atom_connection, push_l,
-                                                                                        "interA", reactantinfo, totnel)
+                                           [struc1, struc2]).run_xtbopt_for_mbff_search(
+            push_l=push_l,rxn_type="interA",reactantinfo=reactantinfo,nel=totnel)
 
         if status == 0:
             rc = 0

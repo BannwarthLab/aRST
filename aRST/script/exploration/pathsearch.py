@@ -157,7 +157,7 @@ class SinglePathSearch:
         return results,status
 
     @checkpoint_mbff_search(dirname="checkpoint/explore")
-    def run_xtbopt_for_mbff_search(self, atom_connection, push_l, rxn_type, reactantinfo, nel):
+    def run_xtbopt_for_mbff_search(self, push_l, rxn_type, reactantinfo, nel):
 
         searchingsetting = storage.setting.searching_setting
         generalsetting = storage.setting.searching_setting.general

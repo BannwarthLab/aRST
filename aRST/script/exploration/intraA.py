@@ -21,17 +21,19 @@ def get_intraA_react_l(reactants0, writefile=True):
         exclude_elements=generalsetting.exclude_elements,
         exclude_pairs=generalsetting.exclude_pairs if generalsetting.cycle == 1 else None
     )
-    cut = 2 if intrasetting.concerted_pair else 1
-    for item in react_l:
-        pairs = item["atl"][:cut]
-        item["atl"] = pairs
-
     if writefile:
         print_react_l(reactants0, react_l)
         # write full react_l in file
         with open(join(generalsetting.wd, "react_l"), "w") as f:
             for item in react_l:
                 f.write(json.dumps(item) + "\n")
+
+    cut = 2 if intrasetting.concerted_pair else 1
+    for item in react_l:
+        pairs = item["atl"][:cut]
+        item["atl"] = pairs
+
+
 
     atom_pairs = intrasetting.atom_pair
     if atom_pairs:
@@ -163,8 +165,8 @@ def intrambff(reactants0, entry, reactionpath, count=0):
         results, status = SinglePathSearch(mbxyz,
                                            mbele_l,
                                            u, charge, scan_wd,
-                                           reactants=[struc]).run_xtbopt_for_mbff_search(atom_connection, push_l,
-                                                                                         "intraA", reactantinfo, nel)
+                                           reactants=[struc]).run_xtbopt_for_mbff_search(
+            push_l=push_l, rxn_type="intraA", reactantinfo=reactantinfo, nel=nel)
         if status == 0:
             rc = 0
         if results:

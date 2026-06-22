@@ -707,7 +707,6 @@ class CallsTDA:
 
     def callml(self, sty):
         cmd = f"{os.environ['STDA_BIN']} -f {self.coordfn} -ml_feature -sty {str(sty)}"
-        print(cmd)
         p = subprocess.Popen(cmd, stdout=open(join(self.wd, f'stda.out'), 'w'), stderr=subprocess.PIPE, shell=True)
         p.wait()
         rc = p.returncode

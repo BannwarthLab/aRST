@@ -8,7 +8,7 @@ import aRST.script.initialization as storage
 from aRST.script.head import print_react_l
 from aRST.script.geom import Coord
 from aRST.script.exploration.structure import StrucGraph
-from aRST.script.toolbox import create_folder,write_xyz
+from aRST.script.toolbox import create_folder, write_xyz
 import copy
 
 
@@ -19,17 +19,18 @@ def get_intraD_react_l(reactants0, gaplim=5, writefile=True):
                   exclude_elements=general_setting.exclude_elements,
                   exclude_pairs=general_setting.exclude_pairs if general_setting.cycle == 1 else None
                   ).build_react_l(tol=1e-5)
-    cut = 2 if disso_setting.concerted_pair else 1
-    for item in react_l:
-        pairs = item["atl"][:cut]
-        item["atl"] = pairs
-
     if writefile:
         print_react_l(reactants0, react_l)
         # write full react_l in file
         with open(join(general_setting.wd, "react_l"), "w") as f:
             for item in react_l:
                 f.write(json.dumps(item) + "\n")
+
+    cut = 2 if disso_setting.concerted_pair else 1
+    for item in react_l:
+        pairs = item["atl"][:cut]
+        item["atl"] = pairs
+
     atom_pairs = disso_setting.atom_pair
     if atom_pairs:
         # overwrite react_l with user's input
@@ -121,7 +122,7 @@ def determine_pulling_distance(entry):
                 cradii_sum * float(mul_dis)
             ])
 
-        return push_l
+    return push_l
 
 
 def dissoxtbscan(reactants0, entry, reactionpath, count=0):
@@ -164,7 +165,7 @@ def dissoxtbscan(reactants0, entry, reactionpath, count=0):
                         "scanwd": f"{reactionpath}_{count}",
                         "coordinate": coordinate,
                         "ele_l": ele_l,
-                        "mb": s.general.mb
+                        "mb": s_general.mb
                         }  # reactants info
 
         results, status = SinglePathSearch(coordinate,
@@ -227,13 +228,13 @@ def dissombff(reactants0, entry, reactionpath, count=0):
                         "scanwd": f"{reactionpath}_{count}",
                         "coordinate": coordinate,
                         "ele_l": ele_l,
-                        "mb":s.general.mb
+                        "mb": s_general.mb
                         }  # reactants info
         results, status = SinglePathSearch(mbxyz,
                                            mbele_l,
                                            u, charge, scan_wd,
-                                           reactants=[struc]).run_xtbopt_for_mbff_search(atom_connection, push_l,
-                                                                                         "dissoD", reactantinfo, nel)
+                                           reactants=[struc]).run_xtbopt_for_mbff_search(
+            push_l=push_l, rxn_type="dissoD", reactantinfo=reactantinfo, nel=nel)
 
         if status == 0:
             rc = 0
