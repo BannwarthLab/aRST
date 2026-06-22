@@ -62,7 +62,8 @@ def checkpoint_mbff_search(dirname="checkpoint/explore"):
         os.makedirs(check_dir)
     def deco(func):
         @wraps(func)
-        def wrapper(self, atom_connection, push_l, rxn_type, reactantinfo, nel):
+
+        def wrapper(self, push_l, rxn_type, reactantinfo, nel):
             scanwd = reactantinfo.get("scanwd")
             pkl_file = join(check_dir,f"{scanwd}.pkl")
             old_results = load_pkl(pkl_file)
@@ -71,7 +72,7 @@ def checkpoint_mbff_search(dirname="checkpoint/explore"):
                 return old_results
             result = func(
                 self,
-                atom_connection, push_l, rxn_type, reactantinfo, nel
+                push_l, rxn_type, reactantinfo, nel
             )
             if result is not None:
                 save_pkl_atomic(result, pkl_file)
