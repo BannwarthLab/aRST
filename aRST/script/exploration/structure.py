@@ -858,9 +858,10 @@ def map_fragments_topo_l_back_to_Supramol(products_info):
             global_b = global_atomidx[local_b - 1]
 
             new_item = dict(item)
-            new_item["atoms"] = sorted([global_a, global_b])
+            if new_item["mbo"]>0.3:
+                new_item["atoms"] = sorted([global_a, global_b])
 
-            map_topo_l.append(new_item)
+                map_topo_l.append(new_item)
     return map_topo_l
 
 

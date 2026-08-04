@@ -65,13 +65,14 @@ def find_identical_at_from_afo(HOAO_a, HOAO_b, LUAO_a, LUAO_b, tol=0.01):
     return out
 
 
-def merge_react_l(react_l, identical_atom_d,intermode, gap_tol=0.01):
+def merge_react_l(react_l, identical_atom_d, intermode, gap_tol=0.01):
     """
     react_l: N*N*4
     best: N*N
     out: degenerated
 
     """
+
     def _degenerate_group(struc, atom):
         for grp in identical_atom_d.get(struc, []):
             atoms = grp.get("atom", [])
@@ -101,7 +102,7 @@ def merge_react_l(react_l, identical_atom_d,intermode, gap_tol=0.01):
             key = (s1, s2, a, b)
             if key not in best or item["gap"] < best[key]["gap"]:
                 if same_structure:
-                    format_pair = [[max(a,b),min(a,b)]]
+                    format_pair = [[max(a, b), min(a, b)]]
                 else:
                     format_pair = [[a, b]]
 
@@ -123,8 +124,6 @@ def merge_react_l(react_l, identical_atom_d,intermode, gap_tol=0.01):
     for entry in out:
         if entry not in grouped.get(_struc_key(entry), []):
             grouped.setdefault(_struc_key(entry), []).append(entry)
-
-
 
     def _dedupe_atl(atl):
         seen = set()
@@ -168,21 +167,21 @@ def merge_react_l(react_l, identical_atom_d,intermode, gap_tol=0.01):
 
         new_atl = []
         for atl in old_atl:
-            a,b = atl
+            a, b = atl
             if same_structure:
                 if a in used_1 or b in used_1:
                     continue
                 else:
                     used_1.add(a)
                     used_1.add(b)
-                    new_atl.append([a,b])
+                    new_atl.append([a, b])
             else:
                 if a in used_1 or b in used_2:
                     continue
                 else:
                     used_1.add(a)
                     used_2.add(b)
-                    new_atl.append([a,b])
+                    new_atl.append([a, b])
         entry["atl"] = new_atl
         out.append(entry)
     return out
@@ -389,8 +388,9 @@ class SPR:
                     exclude_pairs=exclude_pairs
                 )
             )
-        final_react = sorted(merge_react_l(final_react, identical_atom_d,intermode=True, gap_tol=equivalent_afogap_tol),
-                             key=lambda x: x['gap'])
+        final_react = sorted(
+            merge_react_l(final_react, identical_atom_d, intermode=True, gap_tol=equivalent_afogap_tol),
+            key=lambda x: x['gap'])
         return final_react
 
     def intra(self, equivalent_afogap_tol=0.01, exclude_elements=None, exclude_pairs=None):
@@ -413,7 +413,7 @@ class SPR:
                     exclude_pairs=exclude_pairs
                 )
             )
-        tmp_react = sorted(merge_react_l(final_react, identical_atom_d,intermode=False, gap_tol=equivalent_afogap_tol),
+        tmp_react = sorted(merge_react_l(final_react, identical_atom_d, intermode=False, gap_tol=equivalent_afogap_tol),
                            key=lambda x: x['gap'])
         # del all connected bond & same atom pair
         # & change to reactants in len(1)
@@ -438,17 +438,25 @@ class SDP:
     def __init__(self, reactants,
                  bo_l=None,
                  ele_ls=None,
+                 topo_dict=None,
                  exclude_elements=None, exclude_pairs=None
                  ):
         self.reactants = reactants
         self.allbonds = []
         self.dfs = []
+        self.topo_dict = []
         if bo_l is not None:
             self.dfs = bo_l
             self.ele_ls = ele_ls
+            self.topo_dict = topo_dict
+
         else:
             self.dfs = [storage.allstruc.get(_).reactivity.bo for _ in self.reactants]
             self.ele_ls = [storage.allstruc.get(_).general.ele_l for _ in self.reactants]
+            self.topo_dict = {
+                struc: storage.allstruc.get(struc).general.atomic_connection
+                for struc in self.reactants
+            }
         exclude_elements = [] if exclude_elements is None else exclude_elements
         exclude_pairs = [] if exclude_pairs is None else exclude_pairs
         from aRST.script.element import element
@@ -479,7 +487,7 @@ class SDP:
             ele_l = self.ele_ls[i]
             z_l = np.array([element[x] for x in ele_l], dtype=np.int16)
 
-            topolist = storage.allstruc.get(struc).general.atomic_connection
+            topolist = self.topo_dict.get(struc)
             bodf = self.dfs[i]
 
             if topolist is not None:

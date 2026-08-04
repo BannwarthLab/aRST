@@ -103,8 +103,7 @@ def determine_pulling_distance(entry):
 
             # fallback if bonded OR no atomic path
             mul_dis = 5
-        else:
-            mul_dis = 5
+
 
         for pair in at_l[:2]:
             at1, at2 = map(int, pair)

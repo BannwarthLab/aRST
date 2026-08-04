@@ -188,7 +188,7 @@ class DissoSearchingSetting(MyBaseModel):
     concerted_pair: bool = False
     atom_pair: List[Tuple[int, int]] = Field(default_factory=list)
 
-    pulling_distance: Union[int, Literal["auto"]] = "auto"
+    pulling_distance: Union[int,float, Literal["auto"]] = "auto"
     pulling_distance_add: Optional[float] = None
 
     depotonation: bool = False
@@ -236,6 +236,36 @@ class ORCASetting(MyBaseModel):
     ncpu: int = 1
     maxcore: int=1000
 
+class MPSetting(MyBaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ntasks: int = Field(default_factory=lambda: int(os.environ.get("SLURM_NTASKS", "1")))
+    cpus_per_task: int = Field(default_factory=lambda: int(os.environ.get("SLURM_CPUS_PER_TASK", "1")))
+    total_cpus: int | None = None
+    orca_nprocs: int | None = None
+    xtb_threads: int | None = None
+
+    @model_validator(mode="after")
+    def fill_from_env(self):
+        if self.total_cpus is None:
+            if "SLURM_CPUS_ON_NODE" in os.environ:
+                self.total_cpus = int(os.environ["SLURM_CPUS_ON_NODE"])
+            elif "SLURM_JOB_CPUS_PER_NODE" in os.environ:
+                self.total_cpus = int(os.environ["SLURM_JOB_CPUS_PER_NODE"].split("(")[0])
+            else:
+                self.total_cpus = os.cpu_count() or 1
+
+        if self.orca_nprocs is None:
+            self.orca_nprocs = self.ntasks if "SLURM_NTASKS" in os.environ else self.total_cpus
+
+        if self.xtb_threads is None:
+            self.xtb_threads = self.total_cpus
+
+        return self
+
+
+
+
 
 class InputModel(MyBaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -254,6 +284,9 @@ class InputModel(MyBaseModel):
 
     # orca setting
     orca_setting: ORCASetting = ORCASetting()
+
+    # paralle setting
+    mp_setting: MPSetting=MPSetting()
 
     # check if geom name is coorect
     @field_validator("geom")

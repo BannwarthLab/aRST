@@ -20,7 +20,7 @@ def remove_file(old_path, new_path):
 
 class CallORCA:
     @classmethod
-    def default_settings(cls, orcasetting):
+    def default_settings(cls, orcasetting,mpsetting):
         """Dynamically generates default settings based on the `setting` class."""
         return {
             "functional": orcasetting.functional,
@@ -31,22 +31,25 @@ class CallORCA:
             "caltyp": "SP",
             "caltyp2": "RKS",  # This can be updated dynamically if needed
             "cpcm": orcasetting.cpcm,  # only use cpcm when opt
-            "ncpu": orcasetting.ncpu,
+            "ncpu": mpsetting.orca_nprocs,
             "maxcore": orcasetting.maxcore,
         }
 
     def __init__(self, wd, command_d=None, custom_settings=None):
+
         self.wd = wd
         if command_d is not None:
             self.cmd = mydict(command_d)
         else:
             import aRST.script.initialization as storage
-            command_d = self.default_settings(storage.setting.orca_setting)
+            command_d = self.default_settings(storage.setting.orca_setting,storage.setting.mp_setting)
             if custom_settings is not None:
                 command_d.update(custom_settings)
 
             command_d["caltyp2"] = "RKS" if command_d["m"] == 1 else "UKS"
             self.cmd = mydict(command_d)
+        env = os.environ.copy()
+        env["OMP_NUM_THREADS"] = "1"
         self.ncpu = self.cmd.get("ncpu", 1)
 
     def orcasubprocess(self, cmd_string, writeenergy=True, removegbw=True):
@@ -353,7 +356,7 @@ class CallCrest:
 
 class CallxTB:
     @classmethod
-    def default_settings(cls, xtbsetting):
+    def default_settings(cls, xtbsetting,mpsetting):
         """Dynamically generates default settings based on the `setting` class."""
         return {"method": xtbsetting.method,
                 "coordfn": "coord",
@@ -362,24 +365,29 @@ class CallxTB:
                 "uhf": 0,
                 "alpb": xtbsetting.alpb,
                 "etemp": xtbsetting.struc_etemp,
+                "nthreads":mpsetting.xtb_threads
                 }
 
     def __init__(self, wd, command_d=None, custom_settings=None, mlversion=False):
         self.wd = wd
         if command_d is not None:
+            command_d.update(custom_settings)
             self.cmd = mydict(command_d)
+
         else:
             import aRST.script.initialization as storage
-            command_d = self.default_settings(storage.setting.xtb_setting)
+            command_d = self.default_settings(storage.setting.xtb_setting,storage.setting.mp_setting)
             if custom_settings is not None:
                 command_d.update(custom_settings)
 
             self.cmd = mydict(command_d)
+        env = os.environ.copy()
+        env["OMP_NUM_THREADS"] =str(self.cmd["nthreads"])
         base = f"{self.cmd.get_value('coordfn')}.xyz --{self.cmd.get_value('method')}  -c {self.cmd.get_value('charge')} --uhf {self.cmd.get_value('uhf')} --etemp {self.cmd.get_value('etemp')}"
         if not mlversion:
-            self.cmd_string_base = f"{os.environ['XTB_BIN']} {base} "
+            self.cmd_string_base = f"{os.environ['XTB_BIN']} {base}  -P {env['OMP_NUM_THREADS']} "
         else:
-            self.cmd_string_base = f"{os.environ['XTBML_BIN']} {base} "
+            self.cmd_string_base = f"{os.environ['XTBML_BIN']} {base} -P {env['OMP_NUM_THREADS']} "
 
     def xtbsubprocess(self, cmd_string, writeenergy=False):
         out_path = f'{self.wd}/xtb.out'
@@ -748,7 +756,7 @@ class CallMolBar:
 
 class CallgXTB:
     @classmethod
-    def default_settings(cls, xtbsetting):
+    def default_settings(cls, xtbsetting,mpsetting):
         # use gfn2 setting to obtain .charg and .uhf
         """Dynamically generates default settings based on the `setting` class."""
         return {"method": xtbsetting.method,
@@ -758,6 +766,7 @@ class CallgXTB:
                 "uhf": 0,
                 "alpb": xtbsetting.alpb,
                 "etemp": xtbsetting.struc_etemp,
+                "nthreads": mpsetting.xtb_threads
                 }
 
     def __init__(self, wd, command_d=None, custom_settings=None):
@@ -766,11 +775,13 @@ class CallgXTB:
             self.cmd = mydict(command_d)
         else:
             import aRST.script.initialization as storage
-            command_d = self.default_settings(storage.setting.xtb_setting)
+            command_d = self.default_settings(storage.setting.xtb_setting,storage.setting.mp_setting)
             if custom_settings is not None:
                 command_d.update(custom_settings)
 
             self.cmd = mydict(command_d)
+        env = os.environ.copy()
+        env["OMP_NUM_THREADS"] = str(self.cmd["nthreads"])
 
     def gxtbsubprocess(self, cmd_string):
         out_path = f'{self.wd}/gxtb.out'
