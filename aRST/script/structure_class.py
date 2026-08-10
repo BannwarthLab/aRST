@@ -24,6 +24,7 @@ class EnergyStrucInfo(BaseModel):
     G:Optional[float] = None
     Gtrv:Optional[float] = None
     Gsolv_corr:Optional[float] = None
+    ZPE:Optional[float] = None
 
 class StrucInfo(BaseModel):
     general: GeneralStrucInfo = GeneralStrucInfo()

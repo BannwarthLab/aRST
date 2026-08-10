@@ -12,6 +12,7 @@ from aRST.script import structure_class
 import networkx as nx
 from aRST.script.element import element
 import shutil
+from itertools import combinations
 
 
 class Singlestruc:
@@ -30,7 +31,7 @@ class Singlestruc:
         strucitems_to_sid = storage.allstruc.strucitems_to_sid
         mb_cut = " | ".join(self.mb.split(" | ")[:storage.setting.searching_setting.general.mbcut_length])
         sid = strucitems_to_sid.get((mb_cut, self.c, self.m))
-        return sid is not None,sid
+        return sid is not None, sid
 
     def _prepare_workdir_and_write_coord(self, comdir):
         if not exists(comdir):
@@ -60,7 +61,7 @@ class Singlestruc:
         else:
             raise ValueError(f"Unknown engine for opt: {engine}")
         # update the mb
-        if rc==0:
+        if rc == 0:
             mb = CallMolBar(coordinate_out, self.ele_l).get_mb()
             if self.mb != mb:
                 # print(f'Warning: Molbar code of struc in {comdir} changed after opt')
@@ -75,10 +76,12 @@ class Singlestruc:
             "m": self.m,
         })
         Gtrv = np.inf
+        ZPE = np.inf
         rc = proc.call_trv()
         if rc == 0:
             Gtrv = proc.get_Gtrv_from_out()
-        return Gtrv, rc
+            ZPE = proc.get_ZPE_from_out()
+        return Gtrv, ZPE, rc
 
     def _run_solv_corr(self, comdir):
         self._prepare_workdir_and_write_coord(comdir)
@@ -172,9 +175,9 @@ class Singlestruc:
                 # do gfn2 opt
                 comdir = join(rootfolder, "xtb")
                 # coordinate_in, coordinate_out, comdir, engine="xtb"
-                res = self._run_opt(coordinate_in,comdir, engine="xtb")
+                res = self._run_opt(coordinate_in, comdir, engine="xtb")
                 rc_opt = res[2]
-                if rc_opt==0:
+                if rc_opt == 0:
                     coordinate_out = res[0]
                     if dftopt:
                         # further DFT opt
@@ -182,8 +185,8 @@ class Singlestruc:
                         comdir = join(rootfolder, "orca_opt")
                         res = self._run_opt(coordinate_in, comdir, engine="orca")
                         rc_opt = res[2]
-                        coordinate_out = res[0] if rc_opt==0 else coordinate_in
-                    if rc_opt==0:
+                        coordinate_out = res[0] if rc_opt == 0 else coordinate_in
+                    if rc_opt == 0:
                         self.coordinate = coordinate_out
 
         ## sp at gas phase
@@ -198,12 +201,13 @@ class Singlestruc:
 
         ## hess and solv calc when eval mode is free gibbs energy
         Gtrv = np.inf
+        ZPE = np.inf
         Gsolv_corr = np.inf
         rc_trv, rc_solv = 0, 0
         if storage.setting.searching_setting.general.evalmode == "g":
             ### hess calc
             comdir = join(rootfolder, "orca_hess")
-            Gtrv, rc_trv = self._run_trv(comdir)
+            Gtrv, ZPE, rc_trv = self._run_trv(comdir)
 
             ### solv
             comdir = join(rootfolder, "solv_corr")
@@ -228,6 +232,7 @@ class Singlestruc:
             "atomic_connection": constrain_l,
             "Esp_gas": Esp_gas,
             "Gtrv": Gtrv,
+            "ZPE": ZPE,
             "Gsolv_corr": Gsolv_corr,
             "G": np.inf if any(np.isinf(x) for x in [Esp_gas, Gtrv, Gsolv_corr]) else Gtrv - Gsolv_corr + Esp_gas,
             "strucwd": rootfolder
@@ -269,9 +274,11 @@ class Singlestruc:
             Esp_gas = CallgXTB(join(rootfolder, "gxtb")).get_Esp_from_out()
 
         Gtrv = np.inf
+        ZPE=np.inf
         Gsolv_corr = np.inf
         if storage.setting.searching_setting.general.evalmode == "g":
             Gtrv = CallORCA(join(rootfolder, "orca_hess")).get_Gtrv_from_out()
+            ZPE = CallORCA(join(rootfolder, "orca_hess")).get_ZPE_from_out()
             Gsolv_corr = CallxTB(join(rootfolder, "solv_corr")).get_Gsolv_corr_from_out()
 
         bo = read_bo(join(rootfolder, "xtb", "wbo"))
@@ -289,6 +296,7 @@ class Singlestruc:
             "atomic_connection": constrain_l,
             "Esp_gas": Esp_gas,
             "Gtrv": Gtrv,
+            "ZPE": ZPE,
             "Gsolv_corr": Gsolv_corr,
             "G": np.inf if any(np.isinf(x) for x in [Esp_gas, Gtrv, Gsolv_corr]) else Gtrv - Gsolv_corr + Esp_gas,
             "strucwd": rootfolder
@@ -454,6 +462,7 @@ class TSstructure_NEBTS(TS_setting):
             self.features = {
                 "Esp_gas": 0,
                 "Gtrv": 0,
+                "ZPE":0,
                 "Gsolv_corr": 0,
                 "G": 0,
                 "barrierless": True
@@ -472,6 +481,7 @@ class TSstructure_NEBTS(TS_setting):
                 "Esp_gas": np.inf,
                 "G": np.inf,
                 "Gtrv": np.inf,
+                "ZPE": np.inf,
                 "Gsolv_corr": np.inf,
                 "barrierless": False
             }
@@ -544,85 +554,255 @@ class TSstructure_ffits(TS_setting):
 
 
 class StrucGraph:
-
-    def __init__(self, coordinate, ele_l, topo_l):
+    def __init__(self, coordinate, ele_l, topo_l, ftp_analyse=False, terminal_pair=None):
+        """
+        Importent: all topo related index starts from 1
+        """
 
         self.coordinate = coordinate
         self.ele_l = ele_l
         self.topo_l = topo_l
         self.graph = self.build_graph()
 
-    def build_graph(self):
-        from aRST.script.geom import r0
-        radii = np.array([r0[e] for e in self.ele_l], dtype=float)
+        # build up a wbo dict
+        self.wbo_dict = {
+            (max(u, v), min(u, v)): data["mbo"]
+            for u, v, data in self.graph.edges(data=True)
+            if "mbo" in data
+        }
 
-        G = nx.Graph()
+        if ftp_analyse:
+            self.rings = [set(ring) for ring in nx.cycle_basis(self.graph)]
+            self.terminal_nodes = self.get_terminal_nodes()
+            self.all_backbones = self.get_backbones(terminal_pair)
+            self.backbone_dict = self.get_backbone_dict()
+
+    def build_graph(self):
+        graph = nx.Graph()
 
         # add node
-        for i, (ele, coord) in enumerate(zip(self.ele_l, self.coordinate), start=1):  # bc topo_l are index starts 1
-            G.add_node(
-                i,
-                element=ele,
-                coord=np.array(coord, dtype=float)
-            )
+        for iat, ele in enumerate(self.ele_l,start=1):
+            graph.add_node(iat, element=ele)
 
-        # add bonds/topology as edges
-        ## only a mbo is >=0.3 and interatomic dist <=1.5 * covaradii is a bond
+        # add edge (topo_l already filter out bo<0.3)
         for item in self.topo_l:
-            at1, at2 = item["atoms"]
+            at1, at2 = item["atoms"]  # 1-based
+            dist = item["value"]
+            attrs = {"dist": dist}
             mbo = item.get("mbo")
-            dist = item.get("value")
-
-            if mbo is None:
-                continue
-
-            if mbo < 0.3:
-                continue
-            cov_radii_scale = 1.5 *(radii[at1-1]+ radii[at2-1])
-            if dist>cov_radii_scale:
-                continue
-
-            attrs = {"distance": dist}
-
             if mbo is not None:
                 attrs["mbo"] = mbo
+            graph.add_edge(at1, at2, **attrs)
+        return graph
 
-            G.add_edge(at1, at2, **attrs)
-        return G
+    def is_terminal_node(self, node):
+        connected_node = list(self.graph.neighbors(node))[0]
+        neighbors_of_connected_node = list(self.graph.neighbors(connected_node))
+        ele_neighbors_of_connected_node = [self.graph.nodes[_]['element'] for _ in neighbors_of_connected_node]
+        if sum(elem != "H" for elem in ele_neighbors_of_connected_node) <= 1:
+            return True
+        else:
+            return False
 
-    def count_fragments(self):
-        return nx.number_connected_components(self.graph)
+    def get_terminal_nodes(self):
+        out_nodes = []
+        all_degree1_nodes = [_ for _ in self.graph.nodes if self.graph.degree[_] == 1]
+        for node in all_degree1_nodes:
+            if self.is_terminal_node(node):
+                connected_node = list(self.graph.neighbors(node))[0]
+                if connected_node not in out_nodes:
+                    out_nodes.append(connected_node)
+        return out_nodes
 
-    def get_fragments(self):
-        return list(nx.connected_components(self.graph))
+    def get_backbones(self, t2t_pairs=None):
+        # get all terminal-terminal path, only takes the longest path of the given terminal nodes
+        t2t_paths = []
+        if t2t_pairs is None:
+            terminal_nodes = self.get_terminal_nodes()
+            t2t_pairs = list(combinations(terminal_nodes, 2))
+        for (ter_i, ter_j) in t2t_pairs:
+            path = max(nx.all_simple_paths(self.graph, source=ter_i, target=ter_j), key=len)
+            t2t_paths.append(path)
+        # get the longest path among all t2t paths
+        max_len = max(len(path) for path in t2t_paths)
+        backbones_long = [
+            path for path in t2t_paths
+            if len(path) == max_len
+        ]
 
-    def bond_exist(self, at_l):
-        target = set(at_l)
-        exists = any(set(item["atoms"]) == target for item in self.topo_l)
-        return exists
-
-    def get_atomic_path_of_2atoms(self, at1, at2):
-        try:
-            # shortest path based on atomic distance
-            atomicpath = nx.shortest_path(
-                self.graph,
-                source=at1,
-                target=at2,
-                weight="distance"
+        # now get the force tranmission path (the shortest t2t path of backbones)
+        backbones_short = []
+        seen = set()
+        for backbone in backbones_long:
+            ter_i = backbone[0]
+            ter_j = backbone[-1]
+            t2t_short_all = list(
+                nx.all_shortest_paths(self.graph, source=max(ter_i, ter_j), target=min(ter_i, ter_j))
             )
 
-            # total distance along the path
-            path_length = nx.shortest_path_length(
-                self.graph,
-                source=at1,
-                target=at2,
-                weight="distance"
-            )
+            for path in t2t_short_all:
+                key = tuple(sorted(path))
 
-            return atomicpath, path_length
+                if key not in seen:
+                    seen.add(key)
+                    backbones_short.append(path)
+        max_len = max(len(path) for path in backbones_short)
+        backbones_short = [
+            path for path in backbones_short
+            if len(path) == max_len
+        ]
+        return backbones_short
 
-        except (nx.NetworkXNoPath, nx.NodeNotFound):
-            return None, None
+    def ring_is_not_equal_path(self, ring):
+        for path in self.all_backbones:
+            ring -= set(path)
+        if ring:
+            return True
+        else:
+            return False
+
+    def get_backbone_dict(self):
+        backbone_dict = {}
+        for backbone in self.all_backbones:
+            backbone_set = set(backbone)
+            backbone_bonds = {
+                tuple(sorted((backbone[i], backbone[i + 1]), reverse=True))
+                for i in range(len(backbone) - 1)
+            }
+            backbone_bo = [self.wbo_dict[_] for _ in backbone_bonds]
+            attached_rings = []
+            for ring in self.rings:
+                # ring nodes that overlap with backbone
+                ring_backbone_nodes = ring & backbone_set
+
+                # ring nodes outside backbone
+                ring_outside_nodes = ring - backbone_set
+
+                if not ring_backbone_nodes or not ring_outside_nodes:
+                    continue
+
+                if not self.ring_is_not_equal_path(ring.copy()):
+                    continue
+                attached_rings.append(ring)
+            backbone_dict[tuple(backbone)] = {"backbone_bo": backbone_bo, "attached_rings": attached_rings}
+        return backbone_dict
+
+    def _add_toeval(self, atom1, atom2, toeval=[], seen={}):
+        at1, at2 = max(atom1, atom2), min(atom1, atom2)
+        key = (at1, at2)
+        if key not in seen:
+            seen.add(key)
+            attrs = self.graph.edges[at1, at2]
+            dist = attrs["dist"]
+            bo = attrs["mbo"]
+            toeval.append((at1, at2, bo,dist))
+        return toeval, seen
+
+    def get_assess_bond_set(self):
+        toeval = []  # backbone + attached bonds
+        seen = set()
+        seen_backbone = set()
+
+        for backbone in self.all_backbones:
+            # print([_+1 for _ in backbone])
+
+            backbone_set = set(backbone)
+            if backbone_set.issubset(seen_backbone):
+                continue
+            seen_backbone |= backbone_set
+
+            # add backbone
+            for a, b in zip(backbone[:-1], backbone[1:]):
+                toeval, seen = self._add_toeval(a, b, toeval, seen)
+
+            # get all attched ring in this backbone
+            all_attched_rings = self.backbone_dict[tuple(backbone)]["attached_rings"]
+            if not all_attched_rings:
+                continue
+
+            # add ring that attched to backbone that len(overlap)=2 and bo>1
+            for ring in all_attched_rings:
+                align_path = ring & backbone_set
+                if len(align_path) == 2:
+                    a, b = align_path
+                    key = (max(a, b), min(a, b))
+                    if key not in self.wbo_dict:
+                        continue
+                    bo = self.wbo_dict[key]
+                    if bo > 1.2:
+                        ring_outside_nodes = ring - backbone_set
+                        edges = self.graph.edges(ring)
+                        attched_atom_to_a = [_ for _ in ring_outside_nodes if (a, _) in edges or (_, a) in edges][0]
+                        toeval, seen = self._add_toeval(a, attched_atom_to_a, toeval, seen)
+
+                        attched_atom_to_b = [_ for _ in ring_outside_nodes if (b, _) in edges or (_, b) in edges][0]
+                        toeval, seen = self._add_toeval(b, attched_atom_to_b, toeval, seen)
+
+        # add attached bond that connect to 2 eq backbone
+        seen_att = set()
+        for bb_a, bb_b in combinations(self.all_backbones, 2):
+            bb_a_set = set(bb_a)
+            bb_b_set = set(bb_b)
+            if len(bb_a_set) != len(bb_b_set):
+                continue
+            if bb_a_set == bb_b_set:
+                continue
+            if bb_a[0] != bb_b[0] or bb_a[-1] != bb_b[-1]:
+                continue
+
+            diff_part = bb_a_set ^ bb_b_set
+
+            for bb in [bb_a, bb_b]:
+                for ring in self.backbone_dict[tuple(bb)]["attached_rings"]:
+                    ring_set = set(ring)
+                    ring_outside_bb = ring_set - set(bb)
+                    key = (
+                        tuple(sorted(diff_part)),
+                        tuple(sorted(diff_part)),
+                    )
+                    if key in seen_att:
+                        continue
+                    seen_att.add(key)
+                    for u, v in self.graph.edges(ring_outside_bb):
+                        if (u in ring_outside_bb and v in diff_part) or (v in ring_outside_bb and u in diff_part):
+                            toeval, seen = self._add_toeval(u, v, toeval, seen)
+
+        toeval_sorted = sorted(toeval, key=lambda x: x[2])
+        return toeval_sorted
+
+    # def count_fragments(self):
+    #     return nx.number_connected_components(self.graph)
+    #
+    # def get_fragments(self):
+    #     return list(nx.connected_components(self.graph))
+
+    # def bond_exist(self, at_l):
+    #     target = set(at_l)
+    #     exists = any(set(item["atoms"]) == target for item in self.topo_l)
+    #     return exists
+
+    # def get_atomic_path_of_2atoms(self, at1, at2):
+    #     try:
+    #         # shortest path based on atomic distance
+    #         atomicpath = nx.shortest_path(
+    #             self.graph,
+    #             source=at1,
+    #             target=at2,
+    #             weight="distance"
+    #         )
+    #
+    #         # total distance along the path
+    #         path_length = nx.shortest_path_length(
+    #             self.graph,
+    #             source=at1,
+    #             target=at2,
+    #             weight="distance"
+    #         )
+    #
+    #         return atomicpath, path_length
+    #
+    #     except (nx.NetworkXNoPath, nx.NodeNotFound):
+    #         return None, None
 
 
 class Allstruc:
@@ -657,6 +837,7 @@ class Allstruc:
         s.energy.G = features["G"]
         s.energy.Gsolv_corr = features["Gsolv_corr"]
         s.energy.Gtrv = features["Gtrv"]
+        s.energy.ZPE=features["ZPE"]
         mb = features["mb"]
         c = features["charge"]
         m = features["multiplicity"]
@@ -858,7 +1039,7 @@ def map_fragments_topo_l_back_to_Supramol(products_info):
             global_b = global_atomidx[local_b - 1]
 
             new_item = dict(item)
-            if new_item["mbo"]>0.3:
+            if new_item["mbo"] > 0.3:
                 new_item["atoms"] = sorted([global_a, global_b])
 
                 map_topo_l.append(new_item)

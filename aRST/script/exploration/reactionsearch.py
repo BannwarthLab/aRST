@@ -520,6 +520,7 @@ class PathEval:
                     "atomic_connection": constrain_l,
                     "Esp_gas": Esp_gas,
                     "Gtrv":Gtrv,
+                    "ZPE":ZPE,
                     "Gsolv_corr":Gsolv_corr,
                     "G": np.inf if any(np.isinf(x) for x in [Esp_gas, Gtrv,Gsolv_corr]) else Gtrv - Gsolv_corr + Esp_gas,
                     "strucwd":rootfolder (abswd)

@@ -114,9 +114,9 @@ class GeneralSearchingSetting(MyBaseModel):
     cycle: int = 1
     sp_method: Literal["dft", "gxtb"] = "dft"
     elim: int = 300
-    tslim: int=100
-    tseval:bool = False
-    evalmode:Literal["e", "g"] = "e"
+    tslim: int = 100
+    tseval: bool = False
+    evalmode: Literal["e", "g"] = "e"
     equivalent_afogap_tol: float = 0.01
     spr_mode: Literal[0, 1, 2] = 0
     scan_mode: Literal[0, 1] = 0
@@ -124,7 +124,7 @@ class GeneralSearchingSetting(MyBaseModel):
     md: bool = False
     md_setting: Optional[MDSetting] = None
     mb_level: Literal[0, 1] = 0
-    mbcut_length:Optional[int] = None
+    mbcut_length: Optional[int] = None
 
     # optional inputs
     exclude_elements: List[int] = Field(default_factory=list)
@@ -161,6 +161,7 @@ class GeneralSearchingSetting(MyBaseModel):
             self.mbcut_length = 5 if self.mb_level == "loose" else 7
         return self
 
+
 class InterSearchingSetting(MyBaseModel):
     model_config = ConfigDict(extra="forbid")
     number: Union[int, Literal["all"]] = 0
@@ -188,11 +189,16 @@ class DissoSearchingSetting(MyBaseModel):
     concerted_pair: bool = False
     atom_pair: List[Tuple[int, int]] = Field(default_factory=list)
 
-    pulling_distance: Union[int,float, Literal["auto"]] = "auto"
+    pulling_distance: Union[int, float, Literal["auto"]] = "auto"
     pulling_distance_add: Optional[float] = None
 
     depotonation: bool = False
     potonation: bool = False
+
+    # mechanical setting
+    terminal_pair:  List[Tuple[int, int]] = Field(default_factory=list)
+    stretch_scale:Optional[float] = 1.5
+    use_d0: bool = False
 
     @model_validator(mode="after")
     def check_exclusive(self):
@@ -215,6 +221,13 @@ class SearchingSetting(MyBaseModel):
     intra: IntraSearchingSetting = IntraSearchingSetting()
     disso: DissoSearchingSetting = DissoSearchingSetting()
 
+    @model_validator(mode="after")
+    def set_evalmode_for_d0(self):
+        if self.disso.use_d0:
+            self.general.evalmode = "g"
+
+        return self
+
 
 class XTBSetting(MyBaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -234,7 +247,8 @@ class ORCASetting(MyBaseModel):
     dftopt: bool = False
     cpcm: str = "ch2cl2"
     ncpu: int = 1
-    maxcore: int=1000
+    maxcore: int = 1000
+
 
 class MPSetting(MyBaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -264,9 +278,6 @@ class MPSetting(MyBaseModel):
         return self
 
 
-
-
-
 class InputModel(MyBaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -286,7 +297,7 @@ class InputModel(MyBaseModel):
     orca_setting: ORCASetting = ORCASetting()
 
     # paralle setting
-    mp_setting: MPSetting=MPSetting()
+    mp_setting: MPSetting = MPSetting()
 
     # check if geom name is coorect
     @field_validator("geom")

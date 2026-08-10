@@ -1,3 +1,5 @@
+import os
+
 from aRST.script.toolbox import create_folder, write_xyz, read_coord, read_bo, read_atcharge, get_topo,add_noisy_to_coord
 from aRST.script.callsys import CallxTB
 import aRST.script.initialization as storage
@@ -82,7 +84,7 @@ class SinglePathSearch:
         return constrain_setting
 
     @checkpoint_scan_search(dirname="checkpoint/explore")
-    def run_one_scan_search(self, constrain_setting, rxn_type, reactantinfo, nel):
+    def run_one_scan_search(self, constrain_setting, rxn_type, reactantinfo, nel,checkpoint=True):
         searchingsetting = storage.setting.searching_setting
         generalsetting = storage.setting.searching_setting.general
         if searchingsetting.inter.loose_bond or searchingsetting.intra.loose_bond:
@@ -157,7 +159,7 @@ class SinglePathSearch:
         return results,status
 
     @checkpoint_mbff_search(dirname="checkpoint/explore")
-    def run_xtbopt_for_mbff_search(self, push_l, rxn_type, reactantinfo, nel):
+    def run_xtbopt_for_mbff_search(self, push_l, rxn_type, reactantinfo, nel,checkpoint=True):
 
         searchingsetting = storage.setting.searching_setting
         generalsetting = storage.setting.searching_setting.general

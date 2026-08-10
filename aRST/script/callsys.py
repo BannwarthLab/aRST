@@ -150,6 +150,18 @@ class CallORCA:
                     return G_trv
         return G_trv
 
+    def get_ZPE_from_out(self, out="orca.out"):
+        ZPE= np.inf
+        if exists(join(self.wd, out)):
+            with open(join(self.wd, out), "r") as file:
+                lines = file.readlines()
+            for ln in reversed(lines):
+                if "Zero point energy" in ln:
+                    parts = ln.split()
+                    ZPE = float(parts[parts.index("Eh") - 1])
+                    return ZPE
+        return ZPE
+
     def get_m(self, file="orca.inp"):
         m = None
         if exists(join(self.wd, file)):

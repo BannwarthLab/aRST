@@ -87,23 +87,43 @@ def determine_pulling_distance(entry):
         mul_dis = disso_setting.pulling_distance
 
         if mul_dis == "auto" and len(at_l) == 1:
+            import networkx as nx
             strucgraph = StrucGraph(coordinate, ele_l, s_general.atomic_connection)
-
             at1, at2 = map(int, at_l[0])  # 0-based
             at1_, at2_ = at1 + 1, at2 + 1  # 1-based for graph
-
             dis_current = np.round(instance.get_ats_distance(at1, at2), 3)
+            # check if atl is bonded
+            bonded = strucgraph.graph.has_edge(at1_, at2_)
+            if bonded:
+                # check molecule graph if there is attached ring around this at_l,
+                # if so, strech to the tot length of ring+1
+                # get attached rings
+                ring = min(
+                    (ring for ring in nx.cycle_basis(strucgraph.graph)
+                     if {at1_, at2_}.issubset(ring)),
+                    key=len,
+                )
 
-            if not strucgraph.bond_exist([at1_, at2_]):
-                atomic_path, atomic_length = strucgraph.get_atomic_path_of_2atoms(at1_, at2_)
+                ring_length = sum(
+                    strucgraph.graph[u][v]["dist"]
+                    for u, v in zip(ring, ring[1:] + ring[:1])
+                )
+                dis_target = ring_length - dis_current + 1
+            else:
+                # find the FTP between atl and streche to the tot length of FTP+1
+                all_bbs = StrucGraph(coordinate, ele_l, s_general.atomic_connection,
+                                terminal_pair=[[at1_, at2_]]).all_backbones
+                bb = min(all_bbs,key=len)
+                bb_length = sum(
+                    strucgraph.graph[u][v]["dist"]
+                    for u, v in zip(bb, bb[1:])
+                )
+                dis_target = bb_length- dis_current + 1
+            push_l.append([at1_, at2_, dis_current, dis_target])
+            return push_l
 
-                if atomic_length is not None:
-                    push_l.append([at1_, at2_, dis_current, atomic_length])
-                    return push_l
-
-            # fallback if bonded OR no atomic path
-            mul_dis = 5
-
+        # fallback to default setting
+        mul_dis = 5
 
         for pair in at_l[:2]:
             at1, at2 = map(int, pair)
@@ -124,7 +144,7 @@ def determine_pulling_distance(entry):
     return push_l
 
 
-def dissoxtbscan(reactants0, entry, reactionpath, count=0):
+def dissoxtbscan(reactants0, entry, reactionpath, count=0, forcescanwd=None,checkpoint=True):
     scanwd = storage.setting.searching_setting.general.scanwd
     output_d = {}
     uhf_l = check_scan_uhf_D(entry)
@@ -157,7 +177,8 @@ def dissoxtbscan(reactants0, entry, reactionpath, count=0):
     rc = 1
     for u in uhf_l:
         # print(f"Simulating disso path {reactionpath}_{count}: R={reactants0}, atl={at_l}, uhf_sim={u} ...", end="")
-        scan_wd = join(scanwd, f"{reactionpath}_{count}")
+        scan_wd = join(scanwd, f"{reactionpath}_{count}") if not forcescanwd \
+            else join(scanwd, f"{reactionpath}_{count}", forcescanwd)
         reactantinfo = {"reactants": [struc],
                         "unreacted": unreacted,
                         "at_l": at_l, "simuhf": u,
@@ -172,7 +193,7 @@ def dissoxtbscan(reactants0, entry, reactionpath, count=0):
                                            u, charge, scan_wd,
                                            reactants=[struc]).run_one_scan_search(constrain_setting, "dissoD",
                                                                                   reactantinfo,
-                                                                                  nel)
+                                                                                  nel,checkpoint=checkpoint)
         if status == 0:
             rc = 0
         if results:
@@ -184,7 +205,8 @@ def dissoxtbscan(reactants0, entry, reactionpath, count=0):
     return output_d, count, rc
 
 
-def dissombff(reactants0, entry, reactionpath, count=0):
+def dissombff(reactants0, entry, reactionpath, count=0, forcescanwd=None,checkpoint=True):
+
     scanwd = storage.setting.searching_setting.general.scanwd
     output_d = {}
     uhf_l = check_scan_uhf_D(entry)
@@ -218,7 +240,8 @@ def dissombff(reactants0, entry, reactionpath, count=0):
     rc = 1
     for u in uhf_l:
         # print(f"Simulating disso path {reactionpath}_{count}: R={reactants0}, atl={at_l}, uhf_sim={u} ...", end="")
-        scan_wd = join(scanwd, f"{reactionpath}_{count}")
+        scan_wd = join(scanwd, f"{reactionpath}_{count}") if not forcescanwd \
+            else join(scanwd, f"{reactionpath}_{count}", forcescanwd)
         create_folder(scan_wd)
         write_xyz(coordinate, ele_l, "coord")
         reactantinfo = {"reactants": [struc],
@@ -233,7 +256,7 @@ def dissombff(reactants0, entry, reactionpath, count=0):
                                            mbele_l,
                                            u, charge, scan_wd,
                                            reactants=[struc]).run_xtbopt_for_mbff_search(
-            push_l=push_l, rxn_type="dissoD", reactantinfo=reactantinfo, nel=nel)
+            push_l=push_l, rxn_type="dissoD", reactantinfo=reactantinfo, nel=nel,checkpoint=checkpoint)
 
         if status == 0:
             rc = 0

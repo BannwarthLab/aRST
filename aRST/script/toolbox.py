@@ -86,46 +86,30 @@ def add_noisy_to_coord(coordinate,scale=1e-4):
 
 
 def get_topo(coordinate, ele_l, bo):
-    # check if single atom:
-    if len(ele_l) == 1 or bo is None:
-        return []
-    from aRST.script.geom import Coord
-    # index starts from 1
     topo_l = []
-    instance = Coord(coordinate, ele_l)
-    for index in range(bo.shape[0]):  # index starts from 1
-        at1, at2, mbo = bo.iloc[index, :3]
-        at1 = int(at1)
-        at2 = int(at2)
-        dist = instance.get_ats_distance(at1 - 1, at2 - 1)
-        topo_l.append({"atoms": [at1, at2], "value": dist, "mbo": float(mbo)})
+    for at1, at2, mbo in bo.iloc[:, :3].itertuples(index=False, name=None):
+        if mbo > 0.3:
+            at1 = int(at1)
+            at2 = int(at2)
+            dist = np.linalg.norm(coordinate[at1 - 1] - coordinate[at2 - 1])
+            topo_l.append({"atoms": [at1, at2], "value": dist, "mbo": float(mbo)})
     return topo_l
 
-def get_topo_covaradii(coordinate, ele_l, scale=1.2):
+
+
+def get_topo_covaradii(coordinate, ele_l,scale=1.2):
     from aRST.script.geom import r0
-
-    coord = np.asarray(coordinate, dtype=float)
-    radii = np.array([r0[e] for e in ele_l], dtype=float)
-
-    n = len(ele_l)
+    from itertools import combinations
     topo_l = []
-
-    for i in range(n - 1):
-        diff = coord[i + 1:] - coord[i]
-        dist = np.sqrt(np.einsum("ij,ij->i", diff, diff))
-        cutoff = scale * (radii[i] + radii[i + 1:])
-
-        bonded = np.where(dist <= cutoff)[0]
-        for k in bonded:
-            j = i + 1 + k
-            topo_l.append({
-                "atoms": [i + 1, j + 1],
-                "value": float(dist[k])
-            })
-
+    radii_l = np.array([r0[e] for e in ele_l], dtype=float)
+    pairs = list(combinations(range(1, len(ele_l) + 1), 2))
+    for at1, at2 in pairs:
+        dist = np.linalg.norm(coordinate[at1 - 1] - coordinate[at2 - 1])
+        dist_cov = radii_l[at1 - 1] + radii_l[at2 - 1]
+        bonded = dist <= scale * dist_cov
+        if bonded:
+            topo_l.append({"atoms": [at1, at2], "value": dist})
     return topo_l
-
-
 
 def calc_rxn_energy(product_vals, reactant_vals):
     HARTREE_TO_KCAL = 627.503

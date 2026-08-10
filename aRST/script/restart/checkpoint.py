@@ -31,7 +31,15 @@ def checkpoint_scan_search(dirname="checkpoint/explore"):
         os.makedirs(check_dir)
     def deco(func):
         @wraps(func)
-        def wrapper(self, constrain_setting, rxn_type, reactantinfo, nel):
+        def wrapper(self, constrain_setting, rxn_type, reactantinfo, nel,checkpoint=True):
+            if not checkpoint:
+                return func(
+                self,
+                constrain_setting,
+                rxn_type,
+                reactantinfo,
+                nel,checkpoint=False
+            )
             scanwd = reactantinfo.get("scanwd")
             pkl_file = join(check_dir,f"{scanwd}.pkl")
             old_results = load_pkl(pkl_file)
@@ -43,7 +51,7 @@ def checkpoint_scan_search(dirname="checkpoint/explore"):
                 constrain_setting,
                 rxn_type,
                 reactantinfo,
-                nel,
+                nel
             )
             if result is not None:
                 save_pkl_atomic(result, pkl_file)
@@ -63,7 +71,12 @@ def checkpoint_mbff_search(dirname="checkpoint/explore"):
     def deco(func):
         @wraps(func)
 
-        def wrapper(self, push_l, rxn_type, reactantinfo, nel):
+        def wrapper(self, push_l, rxn_type, reactantinfo, nel,checkpoint=True):
+            if not checkpoint:
+                return func(
+                self,
+                push_l, rxn_type, reactantinfo, nel
+            )
             scanwd = reactantinfo.get("scanwd")
             pkl_file = join(check_dir,f"{scanwd}.pkl")
             old_results = load_pkl(pkl_file)

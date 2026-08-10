@@ -447,6 +447,7 @@ def print_population_summary(
 
 
 def print_react_l(reactants: Any, react_l: List[Dict[str, Any]]) -> None:
+
     totw = TOTAL_WIDTH
     border_width = 80
     col1 = 10  # Ranking
@@ -500,3 +501,61 @@ def print_react_l(reactants: Any, react_l: List[Dict[str, Any]]) -> None:
     print(side + "-" * border_width)
     print(side + "The full AFO gap list is written to the file react_l.")
     print()
+
+
+
+def print_mechano_res(results_item):
+    if not results_item:
+        return
+
+    totw = TOTAL_WIDTH
+    border_width = 80
+
+    side_padding = max((totw - border_width) // 2, 0)
+    side = " " * side_padding
+
+    title = "Mechano Assessment"
+    print(side + "-" * border_width)
+    print(title.center(totw))
+
+    # Fixed column widths (sum = border_width)
+    w_idx = 4
+    w_atl = 12
+    w_mbo = 8
+    w_uhf = 6
+    w_de = 14
+    w_fmax = 12
+    w_k = 8
+    w_a = 16
+
+    print(side + "-" * border_width)
+    print(
+        side +
+        f"{'#':^{w_idx}}"
+        f"{'atl':^{w_atl}}"
+        f"{'mbo':^{w_mbo}}"
+        f"{'uhf':^{w_uhf}}"
+        f"{'deltaE[eh]':^{w_de}}"
+        f"{'Fmax[nN]':^{w_fmax}}"
+        f"{'k':^{w_k}}"
+        f"{'a[1/bohr]':^{w_a}}"
+    )
+    print(side + "-" * border_width)
+
+    for i, (_, row) in enumerate(results_item):
+        print(
+            side +
+            f"{i:^{w_idx}}"
+            f"{str(row['atl']):^{w_atl}}"
+            f"{row['mbo']:^{w_mbo}.4f}"
+            f"{row['uhf']:^{w_uhf}}"
+            f"{row['deltaE[eh]']:^{w_de}.4f}"
+            f"{row['Fmax[nN]']:^{w_fmax}.4f}"
+            f"{row['k']:^{w_k}.4f}"
+            f"{row['a[1/bohr]']:^{w_a}.4f}"
+        )
+
+    print(side + "-" * border_width)
+    print()
+
+
