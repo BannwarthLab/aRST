@@ -147,9 +147,13 @@ def FmaxAnalyse(reactants_ini, ff, debugtrigger=False):
     rupture_bonds_all = obj.get_assess_bond_set()
     # write
     with open(join(general_setting.wd, "rupture_sites_ranking"), "w") as f:
-        for item in rupture_bonds_all:
+        for atom1, atom2, mbo, dist in rupture_bonds_all:
+            item = {
+                "atl": [[atom1-1, atom2-1]],
+                "mbo": mbo,
+                "dist":dist
+            }
             f.write(json.dumps(item) + "\n")
-
     rupture_bonds = rupture_bonds_all[:ncandidates]
 
     # get_streched geom
