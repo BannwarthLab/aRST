@@ -3,11 +3,13 @@
 This page contains detailed information about the installation of aRST.
 
 ## Prepare
-- [Python](https://www.python.org/) 3.8
+### Essential
+- [Python](https://www.python.org/) 3.11
 - [xtb](https://github.com/grimme-lab/xtb) 6.7.0 or later
-- [ORCA](https://www.faccts.de/orca/) 6.0.0 or later or [g-xtb](https://github.com/grimme-lab/g-xtb)
+- [ORCA](https://www.faccts.de/orca/) 6.0.0 or later or [g-xtb](https://github.com/grimme-lab/g-xtb) 2.0.0 or **below** for single-point calculations
+- Modified sTDA (see below)
+### Optional (when calling DFT-AFO features)
 - [Multiwfn](http://sobereva.com/multiwfn/download.html) 3.8.noGUI
-- Modified sTDA (see below) 
 
 ## Step 1: Pull the source code
 Clone the repository from Git:

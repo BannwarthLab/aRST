@@ -39,6 +39,7 @@ nav:
       - Intermolecular Reaction Search: examples/interA.md
       - Inramolecular Association Search: examples/intraA.md
       - Dissociation Search: examples/disso.md
+      - Mechanochemical Analysis: examples/mechano.md
 
 markdown_extensions:
   - admonition

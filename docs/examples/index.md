@@ -11,3 +11,7 @@
 ## Dissociation Search
 - [Pulling the target bond](disso.md#standard-step-search-by-pulling-the-target-bond)
 - [Pulling arbitary atom pair](disso.md#step-search-by-pulling-arbitary-atom-pair)
+
+## Mechanochemical Analysis
+- [Standard analyse](mechano.md#standard-analyse)
+
