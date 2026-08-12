@@ -203,7 +203,7 @@ def FmaxAnalyse(reactants_ini, ff, debugtrigger=False):
         delta_E_eh = E_1 - E_0
         parameter = ff.loc[mask, "parameter"].iloc[0]
         k = 0.5 * (parameter ** 2)
-        r0 = ff.loc[mask, "reference_value"].iloc[0]
+        # r0 = ff.loc[mask, "reference_value"].iloc[0]
         a = np.sqrt(k / (2 * delta_E_eh))  # unit: 1/bohr
         Fmax = a * delta_E_eh / 2
         Fmax_nN = Fmax * 82.387  # EH_PER_BOHR_TO_NN = 82.387
@@ -220,6 +220,10 @@ def FmaxAnalyse(reactants_ini, ff, debugtrigger=False):
             "a[1/bohr]": np.round(a, 6),
         }
         out.append((result, row))
+    # write the output file
+    with open(join(general_setting.wd, "rupture_analyse.json"), "w") as f:
+        for item in out:
+            f.write(json.dumps(item) + "\n")
     return out
 
 
