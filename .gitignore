@@ -26,3 +26,8 @@ vis/
 aRST/script/.env
 
 aRST/script/visual/generate_plot.py
+arstenv/
+site/
+test/
+logo/
+wrong/
