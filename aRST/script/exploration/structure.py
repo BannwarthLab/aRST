@@ -623,6 +623,9 @@ class StrucGraph:
         for (ter_i, ter_j) in t2t_pairs:
             path = max(nx.all_simple_paths(self.graph, source=ter_i, target=ter_j), key=len)
             t2t_paths.append(path)
+        if not t2t_paths:
+            return []
+
         # get the longest path among all t2t paths
         max_len = max(len(path) for path in t2t_paths)
         backbones_long = [

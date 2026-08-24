@@ -15,11 +15,6 @@ import shutil
 import json
 import copy
 
-
-# class MechanophoreTreatment:
-#     def __init__(self,structure)
-
-
 def get_streched_geom(struc, entry, count=0):
     output_d = {}
 
@@ -84,6 +79,13 @@ def get_streched_geom(struc, entry, count=0):
 
 
 def follow_up_process(entry):
+    """
+    entry: lst value of output_d
+    [0]: reactant info
+    [1]: product info
+    [2]: reaction info
+    [3]: streched product info (constrained opt one)
+    """
     # check number of fragments
     product_info = entry[1]
     pcoordinate = product_info["coordinate"]
@@ -95,10 +97,52 @@ def follow_up_process(entry):
     reactant_info = entry[0]
     scanwd = reactant_info["scanwd"]
     at_l = reactant_info["at_l"]
+    struc = reactant_info["reactants"][0]
 
-    nfragments = nx.number_connected_components(StrucGraph(pcoordinate, pele_l, ptopo_l).graph)
-    if nfragments > 1:
-        print(f"Warning: Rupture of bond {at_l}, uhf={puhf} lead to multipule fragments!")
+    # check if only break the target bond
+
+    topo_r = {
+        tuple(item["atoms"])
+        for item in storage.allstruc.get(struc).general.atomic_connection
+    }
+
+    topo_p = {
+        tuple(item["atoms"])
+        for item in ptopo_l
+    }
+
+    breaking_bonds = topo_r - topo_p
+
+    target_bond = tuple(at_l[0])
+
+    if len(breaking_bonds) > 1:
+        print(
+            f"Warning: Rupture of bond {at_l}, uhf={puhf} "
+            "leads to multiple bond breaking!"
+        )
+        product_info["topo_change_allowed"] = False
+
+    elif len(breaking_bonds) == 0:
+
+        # print(
+        #     f"Warning: Rupture of bond {at_l}, uhf={puhf} "
+        #     "leads to zero bond breaking!"
+        # )
+        # print(topo_r)
+        # print(topo_p)
+
+
+        # not produce error since wbo of taget bond can still exist.
+        product_info["topo_change_allowed"] = True
+
+    elif next(iter(breaking_bonds)) != target_bond:
+        print(
+            f"Warning: Rupture of bond {at_l}, uhf={puhf} "
+            f"leads to unexpected bond breaking: {breaking_bonds}!"
+        )
+        product_info["topo_change_allowed"] = False
+    else:
+        product_info["topo_change_allowed"] = True
 
     # now get the E_sp of constrained geom
     comdir = join(storage.setting.searching_setting.general.scanwd, scanwd,"rupture_force")
@@ -138,6 +182,10 @@ def FmaxAnalyse(reactants_ini, ff, debugtrigger=False):
     else:
         obj = StrucGraph(coordinate, ele_l, topo_l, ftp_analyse=True, terminal_pair=None)
 
+    if not obj.all_backbones:
+        raise ValueError("No available FTPs can be identified automatically, plz define the terminal pair in INPUT")
+
+
     print("Following force tranmission paths are considered:")
     for bb in obj.all_backbones:
         print([_ - 1 for _ in bb])
@@ -172,6 +220,8 @@ def FmaxAnalyse(reactants_ini, ff, debugtrigger=False):
     # for the same at_l, only keep the streched res with lower E_sp
     results_filtered = {}
     for scan_name, result in processed_candidate_results.items():
+        if not result[1].get("topo_change_allowed", False):
+            continue
         at_l_hash = tuple(tuple(x) for x in result[0]["at_l"])
         esp = result[3]["Esp_gas"]
         if (
@@ -222,8 +272,8 @@ def FmaxAnalyse(reactants_ini, ff, debugtrigger=False):
         out.append((result, row))
     # write the output file
     with open(join(general_setting.wd, "rupture_analyse.json"), "w") as f:
-        for item in out:
-            f.write(json.dumps(item) + "\n")
+        for result, row in out:
+            f.write(json.dumps(row) + "\n")
     return out
 
 
@@ -233,7 +283,10 @@ def RuptureProductsAnalyse(out,debugtrigger=False):
     forcescanwd = "rupture_product"
     output_D = {}
     for item in out:
+        # only explore the reaction path for those the "topo_change_allowed" is true
         results = item[0]
+        if not results[1]["topo_change_allowed"]:
+            continue
         row = item[1]
         # make entry for explore func
         entry = {"reactants": [0], "atl": [row['atl']], "mbo": row['mbo']}

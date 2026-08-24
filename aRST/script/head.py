@@ -270,6 +270,9 @@ def print_simulation_details(info_l: List[Dict[str, Any]], node_name: str, evalm
 
     def safe_float(val):
         return float(val) if isinstance(val, (int, float)) else val
+    if not info_l:
+        print(side + "-" * DEFAULT_BORDER_WIDTH)
+        return
     for i, item in enumerate(info_l):
         reactants = item.get("reactants")
         products = item.get("products")

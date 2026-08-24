@@ -85,34 +85,40 @@ def determine_pulling_distance(entry):
 
     else:
         mul_dis = disso_setting.pulling_distance
+        import networkx as nx
+        strucgraph = StrucGraph(coordinate, ele_l, s_general.atomic_connection)
 
         if mul_dis == "auto" and len(at_l) == 1:
-            import networkx as nx
-            strucgraph = StrucGraph(coordinate, ele_l, s_general.atomic_connection)
             at1, at2 = map(int, at_l[0])  # 0-based
             at1_, at2_ = at1 + 1, at2 + 1  # 1-based for graph
             dis_current = np.round(instance.get_ats_distance(at1, at2), 3)
             # check if atl is bonded
             bonded = strucgraph.graph.has_edge(at1_, at2_)
             if bonded:
-                # check molecule graph if there is attached ring around this at_l,
-                # if so, strech to the tot length of ring+1
-                # get attached rings
                 ring = min(
-                    (ring for ring in nx.cycle_basis(strucgraph.graph)
-                     if {at1_, at2_}.issubset(ring)),
+                    (
+                        ring for ring in nx.cycle_basis(strucgraph.graph)
+                        if {at1_, at2_}.issubset(ring)
+                    ),
                     key=len,
+                    default=None,
                 )
 
-                ring_length = sum(
-                    strucgraph.graph[u][v]["dist"]
-                    for u, v in zip(ring, ring[1:] + ring[:1])
-                )
-                dis_target = ring_length - dis_current + 1
+                if ring is not None:
+                    ring_length = sum(
+                        strucgraph.graph[u][v]["dist"]
+                        for u, v in zip(ring, ring[1:] + ring[:1])
+                    )
+                    dis_target = ring_length - dis_current + 1
+                else:
+                    dis_target = float(
+                        instance.rcov_l[at1] + instance.rcov_l[at2]
+                    ) * 5
+
             else:
                 # find the FTP between atl and streche to the tot length of FTP+1
                 all_bbs = StrucGraph(coordinate, ele_l, s_general.atomic_connection,
-                                terminal_pair=[[at1_, at2_]]).all_backbones
+                                terminal_pair=[(at1_, at2_)]).all_backbones
                 bb = min(all_bbs,key=len)
                 bb_length = sum(
                     strucgraph.graph[u][v]["dist"]
