@@ -1,35 +1,30 @@
 stages:
   - deploy
 
-# Every version is built into its own subfolder of public/:
-#   docs        -> public/2.3.0   (latest)
-#   docs-2.2.0  -> public/2.2.0
-# To add an old version, freeze its branch and add it to OLD_VERSIONS below.
+# The site is assembled in public/:
+#   docs branch (mkdocs build)  -> public/2.3.0   (latest)
+#   archive/<version>/ (frozen, prebuilt HTML, copied as-is) -> public/<version>
+# To archive a version: build it with `mkdocs build --site-dir archive/<version>`
+# and commit the folder; it is picked up automatically.
 pages:
   stage: deploy
   image: python:3.9
 
   variables:
     LATEST: "2.3.0"
-    OLD_VERSIONS: "2.2.0"   # space separated; each needs a branch docs-<version>
 
   script:
     - pip install mkdocs mkdocs-material
     - mkdocs build --site-dir public/$LATEST
-    - |
-      for v in $OLD_VERSIONS; do
-        git fetch origin docs-$v
-        mkdir -p /tmp/src-$v
-        git archive FETCH_HEAD | tar -x -C /tmp/src-$v
-        (cd /tmp/src-$v && mkdocs build --site-dir $CI_PROJECT_DIR/public/$v)
-      done
+    - cp -r archive/* public/
     # versions.json drives the Material version dropdown
     - |
       python - <<PY
       import json, os
       latest = os.environ["LATEST"]
       versions = [{"version": latest, "title": f"{latest} (latest)", "aliases": ["latest"]}]
-      versions += [{"version": v, "title": v, "aliases": []} for v in os.environ["OLD_VERSIONS"].split()]
+      old = sorted(os.listdir("archive"), key=lambda v: tuple(map(int, v.split("."))), reverse=True)
+      versions += [{"version": v, "title": v, "aliases": []} for v in old]
       json.dump(versions, open("public/versions.json", "w"), indent=2)
       PY
     # root URL redirects to the latest version

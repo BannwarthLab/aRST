@@ -1,0 +1,1189 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://bannwarthlab.pages.rwth-aachen.de/aRST/examples/disso/">
+      
+      
+        <link rel="prev" href="../intraA/">
+      
+      
+        <link rel="next" href="../mechano/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../stylesheets/logo_favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>Dissociation Search - aRST Docs</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#standard-step-search-by-pulling-the-target-bond" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="aRST Docs" class="md-header__button md-logo" aria-label="aRST Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            aRST Docs
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Dissociation Search
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Dark mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m17.75 4.09-2.53 1.94.91 3.06-2.63-1.81-2.63 1.81.91-3.06-2.53-1.94L12.44 4l1.06-3 1.06 3zm3.5 6.91-1.64 1.25.59 1.98-1.7-1.17-1.7 1.17.59-1.98L15.75 11l2.06-.05L18.5 9l.69 1.95zm-2.28 4.95c.83-.08 1.72 1.1 1.19 1.85-.32.45-.66.87-1.08 1.27C15.17 23 8.84 23 4.94 19.07c-3.91-3.9-3.91-10.24 0-14.14.4-.4.82-.76 1.27-1.08.75-.53 1.93.36 1.85 1.19-.27 2.86.69 5.83 2.89 8.02a9.96 9.96 0 0 0 8.02 2.89m-1.64 2.02a12.08 12.08 0 0 1-7.8-3.47c-2.17-2.19-3.33-5-3.49-7.82-2.81 3.14-2.7 7.96.31 10.98 3.02 3.01 7.84 3.12 10.98.31"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://git.rwth-aachen.de/bannwarthlab/aRST" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    bannwarthlab/aRST
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="aRST Docs" class="md-nav__button md-logo" aria-label="aRST Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    aRST Docs
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://git.rwth-aachen.de/bannwarthlab/aRST" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    bannwarthlab/aRST
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../documentation/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Documentation
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Documentation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../documentation/option/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Option Documentation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../documentation/inputfile/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inputfile Documentation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples and Guides
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Examples and Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../interA/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Intermolecular Reaction Search
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../intraA/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inramolecular Association Search
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dissociation Search
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dissociation Search
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#standard-step-search-by-pulling-the-target-bond" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Standard step search by pulling the target bond
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-search-by-pulling-arbitary-atom-pair" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step search by pulling arbitary atom pair
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mechano/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Mechanochemical Analysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#standard-step-search-by-pulling-the-target-bond" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Standard step search by pulling the target bond
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-search-by-pulling-arbitary-atom-pair" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step search by pulling arbitary atom pair
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="dissociation-search">Dissociation Search<a class="headerlink" href="#dissociation-search" title="Permanent link">&para;</a></h1>
+<p>Search for dissociation step using the given reactant structure with <em>aRST version 2.2.0</em>.</p>
+<p><strong>Contents</strong></p>
+<div class="toc">
+<ul>
+<li><a href="#standard-step-search-by-pulling-the-target-bond">Standard step search by pulling the target bond</a></li>
+<li><a href="#step-search-by-pulling-arbitary-atom-pair">Step search by pulling arbitary atom pair</a></li>
+</ul>
+</div>
+<hr />
+<p>In the following, a run searching dissociation step is demonstrated using a dissociation of mechanophre obtained from Klein's paper as an example.</p>
+<p><img alt="mechano" class="center-img" src="../mechano.png" width="80%" />
+<span class="caption-center">Input structure where bond in which the bonds between 0–3 and 1–2 are expected to break under load. </span></p>
+<h2 id="standard-step-search-by-pulling-the-target-bond">Standard step search by pulling the target bond<a class="headerlink" href="#standard-step-search-by-pulling-the-target-bond" title="Permanent link">&para;</a></h2>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:4"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><input id="__tabbed_1_3" name="__tabbed_1" type="radio" /><input id="__tabbed_1_4" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">command</label><label for="__tabbed_1_2">input.toml (FF algorithm)</label><label for="__tabbed_1_3">coord.xyz</label><label for="__tabbed_1_4">output (FF)</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<p><div class="highlight"><pre><span></span><code>aRST input.toml --explore
+</code></pre></div>
+This command must be executed from the command line. 
+You can save the terminal output by appending <code>&gt; record.log 2&gt;&amp;1</code> to the end of the command. 
+The resulting log file will look similar to the example shown in the <code>output</code> tab above. 
+In addition, the file <code>struc.json</code> records detailed electronic information for all structures encountered during the search, while file <code>reaction.json</code> records detailed reaction information.</p>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><span class="k">[geom.reactant1]</span>
+<span class="n">name</span><span class="o">=</span><span class="s2">&quot;coord.xyz&quot;</span>
+<span class="n">charge</span><span class="o">=</span><span class="mi">0</span>
+<span class="n">multiplicity</span><span class="o">=</span><span class="mi">1</span>
+
+
+<span class="k">[read.general]</span>
+<span class="n">gfn2opt</span><span class="o">=</span><span class="kc">true</span>
+
+<span class="k">[searching_setting.general]</span>
+<span class="n">sp_method</span><span class="o">=</span><span class="s2">&quot;gxtb&quot;</span>
+<span class="n">scan_mode</span><span class="o">=</span><span class="mi">1</span>
+
+<span class="k">[searching_setting.reactivity]</span>
+<span class="n">afo_method</span><span class="o">=</span><span class="s2">&quot;gfn2&quot;</span><span class="w"> </span><span class="c1"># this also generate Mayer Bond Order at GFN2 lvl</span>
+
+<span class="k">[searching_setting.disso]</span>
+<span class="n">number</span><span class="o">=</span><span class="mi">1</span>
+<span class="n">pulling_distance</span><span class="o">=</span><span class="mi">3</span><span class="w"> </span><span class="c1"># if use FF schema, make sure not pulling too hard</span>
+
+<span class="k">[xtb_setting]</span>
+<span class="n">method</span><span class="o">=</span><span class="s2">&quot;gfn2&quot;</span>
+<span class="n">alpb</span><span class="o">=</span><span class="s2">&quot;h2o&quot;</span>
+<span class="n">scan_etemp</span><span class="o">=</span><span class="mi">1000</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code>42
+
+C            0.71336679055130        2.74927096042828        0.25390074951186
+C           -0.08590349577708        3.47942482607318        1.34744356983089
+C           -1.21148888854859        3.75554529200446        0.34003544420016
+C           -0.56947107456761        2.75915213806723       -0.63615926850370
+C           -1.16871524466250        1.37709498195290       -0.68715783114352
+C            1.21307350356688        1.37100240786473        0.58521635866779
+O            0.64627634766208        0.58165433482152        1.30985205133255
+O            2.35973892722611        1.11287021984146       -0.03400549681914
+C            2.94577707466685       -0.17727024740274        0.14374309949247
+C            4.46381243417022       -0.02997710630091        0.03402664523776
+O            5.11789686522682       -1.23207628482230        0.42790218715291
+C            5.14992402619172       -2.24857558757484       -0.44163049158589
+O            4.65780414866224       -2.18519129900658       -1.54678912755181
+C            5.85367389174617       -3.43562359684221        0.13296562848443
+O           -0.77542068090053        0.51618605039409       -1.44847658780233
+O           -2.12936983515539        1.18604602364258        0.20430210283700
+C           -2.68044021537309       -0.12109242286953        0.32447133567556
+C           -3.69376728127370       -0.40002750329269       -0.79142170435303
+O           -4.22615694453843       -1.71442791302004       -0.67400642268523
+C           -5.19454089664950       -1.92348437270486        0.22606471297665
+O           -5.63590778505413       -1.04582936389982        0.93444917958271
+C           -5.63783353460315       -3.35102033369573        0.23089873399198
+H            1.52445569680687        3.32584570902274       -0.18581875897585
+H           -0.38746573193068        2.79374774563299        2.13620017476910
+H            0.40513959147520        4.34655886962783        1.77734405202023
+H           -2.21491834815664        3.50388678804419        0.66733025094134
+H           -1.19209403975871        4.76922973167571       -0.04891248572598
+H           -0.39672389139331        3.09081086895999       -1.65931250554691
+H            2.66424517231215       -0.57075192061290        1.12673417551829
+H            2.56334502275746       -0.84602592135369       -0.63424968042684
+H            4.73602865561753        0.22084479312048       -0.99523788117206
+H            4.82015124273879        0.73626050879929        0.72296120607718
+H            6.40262455686041       -3.94910625073812       -0.65020399125930
+H            6.50976161037727       -3.12337748749388        0.93793361539194
+H            5.10419861010202       -4.11867505397812        0.52763512696609
+H           -1.87400721955706       -0.86086010029257        0.28813521295342
+H           -3.17263363187679       -0.13800440762539        1.29824893030460
+H           -4.50560457448527        0.33309305292276       -0.73932436196691
+H           -3.20310704103071       -0.36805287721278       -1.76555708943521
+H           -5.26557440131396       -3.85716210485092       -0.65277817223667
+H           -5.24079688229542       -3.83210058827756        1.12218682842673
+H           -6.72181252981880       -3.39343255902339        0.28208048484486
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<p><div class="highlight"><pre><span></span><code> ==========================================================================================
+ |                                                                                        |
+ |                                                                                        |
+ |                      automated Reaction Search Tool (aRST) V2.2.0                      |
+ |                                                                                        |
+ |                                                                                        |
+ ==========================================================================================
+ # Author:             Y. Chen, C. Bannwarth
+ # Institute:          Institute of Physical Chemistry
+ #                     RWTH Aachen University
+ # Version date:       03.2026
+ # Job running at:     27-02-2026 20:34:12
+ ==========================================================================================
+
+Checking input TOML...done.
+
+Checking envirment...done.
+
+Refining structure information of input [0] ...
+done.
+
+              ┌──────────────────────────────────────────────────────────────┐
+              │                     Theory Level Setting                     │
+              ├──────────────────────────────────────────────────────────────┤
+              ├──────────────────────────────────────────────────────────────┤
+              │                    Geometry Optimization                     │
+              ├──────────────────────────────────────────────────────────────┤
+              │ Method            : gfn2                                     │
+              │ Opt Level         : normal                                   │
+              │ Solvation         : ALPB(h2o)                                │
+              │ Etemp             : 300 K                                    │
+              │ Re-opt input      : gfn2                                     │
+              ├──────────────────────────────────────────────────────────────┤
+              │                     Reactivity Features                      │
+              ├──────────────────────────────────────────────────────────────┤
+              │ Method            : gfn2                                     │
+              │ Solvation         : ALPB(h2o)                                │
+              │ AFO Gap tolerance : 0.01 eV                                  │
+              ├──────────────────────────────────────────────────────────────┤
+              │                     Reaction Simulation                      │
+              ├──────────────────────────────────────────────────────────────┤
+              │ Method            : harmonic FF                              │
+              │ Etemp             : 1000 K                                   │
+              ├──────────────────────────────────────────────────────────────┤
+              │                     Single-Point Energy                      │
+              ├──────────────────────────────────────────────────────────────┤
+              │ Method            : gxtb                                     │
+              └──────────────────────────────────────────────────────────────┘
+
+Start doing reaction exploartions with given structues:  [0]
+begin cycle 0:
+
+
+                                      ****************                                          
+                                      * Dissociation *                                          
+                                      ****************                                          
+
+      --------------------------------------------------------------------------------
+                                   Reactivity Assessment                                        
+      Reactants: [0], tot.atom pairs: 12
+      Top 10 reactivity predictions:
+      --------------------------------------------------------------------------------
+       Ranking    Struc combi               Atom pair                   MBO      
+      --------------------------------------------------------------------------------
+          0            0                      [3,0]                    0.92      
+          1            0                      [8,7]                    0.93      
+          2            0                     [34,13]                   0.94      
+          3            0                     [16,15]                   0.94      
+          4            0                     [40,21]                   0.94      
+          5            0                     [18,17]                   0.95      
+          6            0                     [10,9]                    0.95      
+          7            0                     [27,3]                    0.95      
+          8            0                     [41,21]                   0.96      
+          9            0                     [22,0]                    0.96      
+      --------------------------------------------------------------------------------
+      The full AFO gap list is written to the file react_l.
+
+Paths for Ranking 0-0 will be simulated: 
+Simulating disso path 0_0: R=[0], atl=[[3, 0]], uhf_sim=0 ...done.
+Simulating disso path 0_1: R=[0], atl=[[3, 0]], uhf_sim=2 ...done.
+
+                             *********************************                                  
+                             * Exploration Summary of Node 0 *                                  
+                             *********************************                                  
+
+ ------------------------------------------------------------------------------------------
+   #   RXNID   Scan_wd      R       Atom Pair       P     ΔE (kcal/mol)         Note       
+ ------------------------------------------------------------------------------------------
+   0     1       0_0       [0]       [[3, 0]]     [1, 1]      21.29      New RXN                
+   1     2       0_1       [0]       [[3, 0]]     [1, 1]      21.23      RXN same to 1          
+ ------------------------------------------------------------------------------------------
+
+***** Job finished in 0 hour 0 mins 17.75 sec *****
+</code></pre></div>
+After running, each indexed reaction will be written to the <code>reaction.json</code> file, and each indexed structure will be written to the <code>struc.json</code> file.<br>
+If input geometry is closed-shell, for each seleted intramolecular atom pair, <em>aRST</em> simulates both the corresponding closed-shell and open-shell biradical products while generating product structure using <code>uhf=0</code> and <code>2</code> . Consequently, two trial reaction pathways are generated for each tested atom pair.</p>
+</div>
+</div>
+</div>
+<p>The execution of this command allows the intramolecular association reactivity of atom pairs to be ranked according to their Mayer bond order at the specified AFO feature level. The sorted ranking list will look something like the following table and will be written as JSON entries to the file <code>react_l</code>.</p>
+<div class="caption-left">
+MBO at the GFN2-xTB+ALPB(H2O) level
+</div>
+
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Atom pair combination</th>
+<th>MBO</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>[3, 0]</td>
+<td>0.920</td>
+</tr>
+<tr>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+</tr>
+<tr>
+<td>31</td>
+<td>[2, 1]</td>
+<td>1.004</td>
+</tr>
+<tr>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+</tr>
+</tbody>
+</table>
+<p>In this example, the global weakest bond (<strong>path 0</strong>) corresponds to one of the bonds that dissociates under load according to experimental results.<br>
+Using the harmonic force field (FF) reaction simulation scheme, aRST excludes this bond from the product topology. This leads to an idealized stretched geometry. After subsequent xTB optimization, the second target bond also dissociates.</p>
+<p>The simulation process is demonstrated below.</p>
+<p><img alt="mechano_defalut" class="center-img" src="../mechano_defalut.gif" width="97%" />
+<span class="caption-center">Reaction simulation of <strong>path 0</strong> by pulling Atom 0 and 3.</span></p>
+<h2 id="step-search-by-pulling-arbitary-atom-pair">Step search by pulling arbitary atom pair<a class="headerlink" href="#step-search-by-pulling-arbitary-atom-pair" title="Permanent link">&para;</a></h2>
+<p>Alterniative, aRST allows stretching a molecule by pulling an arbitrary pair of atoms.</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="2:2"><input checked="checked" id="__tabbed_2_1" name="__tabbed_2" type="radio" /><input id="__tabbed_2_2" name="__tabbed_2" type="radio" /><div class="tabbed-labels"><label for="__tabbed_2_1">input.toml (FF algorithm)</label><label for="__tabbed_2_2">output (FF)</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><span class="k">[geom.reactant1]</span>
+<span class="n">name</span><span class="o">=</span><span class="s2">&quot;coord.xyz&quot;</span>
+<span class="n">charge</span><span class="o">=</span><span class="mi">0</span>
+<span class="n">multiplicity</span><span class="o">=</span><span class="mi">1</span>
+
+
+<span class="k">[read.general]</span>
+<span class="n">gfn2opt</span><span class="o">=</span><span class="kc">true</span>
+
+<span class="k">[searching_setting.general]</span>
+<span class="n">sp_method</span><span class="o">=</span><span class="s2">&quot;gxtb&quot;</span>
+<span class="n">scan_mode</span><span class="o">=</span><span class="mi">1</span>
+
+<span class="k">[searching_setting.reactivity]</span>
+<span class="n">afo_method</span><span class="o">=</span><span class="s2">&quot;gfn2&quot;</span><span class="w"> </span>
+
+<span class="k">[searching_setting.disso]</span>
+<span class="n">number</span><span class="o">=</span><span class="mi">1</span>
+<span class="n">atom_pair</span><span class="o">=</span><span class="p">[[</span><span class="mi">13</span><span class="p">,</span><span class="mi">21</span><span class="p">]]</span><span class="w"> </span><span class="c1"># terminal atoms</span>
+<span class="n">pulling_distance_add</span><span class="o">=</span><span class="mi">10</span><span class="w"> </span><span class="c1"># if use FF schema, make sure not pulling too hard</span>
+
+<span class="k">[xtb_setting]</span>
+<span class="n">method</span><span class="o">=</span><span class="s2">&quot;gfn2&quot;</span>
+<span class="n">alpb</span><span class="o">=</span><span class="s2">&quot;h2o&quot;</span>
+<span class="n">scan_etemp</span><span class="o">=</span><span class="mi">1000</span>
+<span class="n">k</span><span class="o">=</span><span class="mi">5</span><span class="w"> </span><span class="c1"># important: set this value to a sufficiently high number</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code>     ==========================================================================================
+     |                                                                                        |
+     |                                                                                        |
+     |                      automated Reaction Search Tool (aRST) V2.2.0                      |
+     |                                                                                        |
+     |                                                                                        |
+     ==========================================================================================
+     # Author:             Y. Chen, C. Bannwarth
+     # Institute:          Institute of Physical Chemistry
+     #                     RWTH Aachen University
+     # Version date:       03.2026
+     # Job running at:     27-02-2026 22:53:32
+     ==========================================================================================
+
+Checking input TOML...done.
+
+Checking envirment:...done.
+
+Reading structure information of input [0] from folder struc/ ...
+done.
+
+              ┌──────────────────────────────────────────────────────────────┐
+              │                     Theory Level Setting                     │
+              ├──────────────────────────────────────────────────────────────┤
+              ├──────────────────────────────────────────────────────────────┤
+              │                    Geometry Optimization                     │
+              ├──────────────────────────────────────────────────────────────┤
+              │ Method            : gfn2                                     │
+              │ Opt Level         : normal                                   │
+              │ Solvation         : ALPB(h2o)                                │
+              │ Etemp             : 300 K                                    │
+              │ Re-opt input      : False                                    │
+              ├──────────────────────────────────────────────────────────────┤
+              │                     Reactivity Features                      │
+              ├──────────────────────────────────────────────────────────────┤
+              │ Method            : gfn2                                     │
+              │ Solvation         : ALPB(h2o)                                │
+              │ AFO Gap tolerance : 0.01 eV                                  │
+              ├──────────────────────────────────────────────────────────────┤
+              │                     Reaction Simulation                      │
+              ├──────────────────────────────────────────────────────────────┤
+              │ Method            : harmonic FF                              │
+              │ Etemp             : 1000 K                                   │
+              ├──────────────────────────────────────────────────────────────┤
+              │                     Single-Point Energy                      │
+              ├──────────────────────────────────────────────────────────────┤
+              │ Method            : gxtb                                     │
+              └──────────────────────────────────────────────────────────────┘
+
+Start doing reaction exploartions with given structues:  [0]
+begin cycle 0:
+
+
+                                      ****************                                          
+                                      * Dissociation *                                          
+                                      ****************                                          
+
+      --------------------------------------------------------------------------------
+                                   Reactivity Assessment                                        
+      Reactants: [0], tot.atom pairs: 42
+      Top 10 reactivity predictions:
+      --------------------------------------------------------------------------------
+       Ranking    Struc combi               Atom pair                   MBO      
+      --------------------------------------------------------------------------------
+          0            0                      [3,0]                    0.92      
+          1            0                      [8,7]                    0.93      
+          2            0                     [34,13]                   0.94      
+          3            0                     [16,15]                   0.94      
+          4            0                     [40,21]                   0.94      
+          5            0                     [18,17]                   0.95      
+          6            0                     [10,9]                    0.95      
+          7            0                     [27,3]                    0.95      
+          8            0                     [41,21]                   0.96      
+          9            0                     [22,0]                    0.96      
+      --------------------------------------------------------------------------------
+      The full AFO gap list is written to the file react_l.
+
+Paths for Ranking 0-0 will be simulated:
+Simulating disso path 0_0: R=[0], atl=[[13, 21]], uhf_sim=0 ...done.
+Simulating disso path 0_1: R=[0], atl=[[13, 21]], uhf_sim=2 ...done.
+
+                             *********************************                                  
+                             * Exploration Summary of Node 0 *                                  
+                             *********************************                                  
+
+ ------------------------------------------------------------------------------------------
+   #   RXNID   Scan_wd      R       Atom Pair       P     ΔE (kcal/mol)         Note       
+ ------------------------------------------------------------------------------------------
+   0     1       0_0       [0]      [[13, 21]]    [1, 1]      23.74      New RXN                
+   1     2       0_1       [0]      [[13, 21]]   [2, 3, 3, 4, 4]     80.89      New RXN                
+ ------------------------------------------------------------------------------------------
+
+***** Job finished in 0 hour 0 mins 14.49 sec *****
+</code></pre></div>
+</div>
+</div>
+</div>
+<p>In the given example, pulling the terminal atoms to an appropriate distance can also result in the dissociation of both target bonds.</p>
+<p><img alt="mechano_arbitary" class="center-img" src="../mechano_arbitary.gif" width="97%" />
+<span class="caption-center">Reaction simulation of <strong>path 0</strong> by pulling terminal carbon atoms.</span></p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tracking", "content.code.copy", "navigation.indexes"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>

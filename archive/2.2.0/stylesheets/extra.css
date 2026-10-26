@@ -1,0 +1,164 @@
+.md-header {
+    min-height: 85px;
+}
+
+.md-header__inner {
+    height: 85px;
+}
+
+.md-header__button.md-logo img {
+    height: 55px;
+}
+
+.md-header__title {
+    font-size: 1.3rem;
+}
+
+/* Remove extra spacing around header */
+.md-header__inner {
+    margin-left: 0;
+    padding-left: 1rem;
+}
+
+/* Make sure logo sits fully left */
+.md-header__button.md-logo {
+    margin-left: 0;
+    padding-left: 0;
+}
+
+/* Hide the right (secondary) sidebar */
+.md-sidebar--secondary {
+  display: none !important;
+}
+
+/* Remove the reserved space for the right sidebar */
+.md-container .md-main__inner {
+  grid-template-columns: 1fr !important;
+}
+
+/* Make content use full width */
+.md-content {
+  max-width: 100% !important;
+}
+
+/* Prevent wrapping in first two columns */
+.md-typeset table td:nth-child(1),
+.md-typeset table td:nth-child(2),
+.md-typeset table th:nth-child(1),
+.md-typeset table th:nth-child(2) {
+    white-space: nowrap;
+}
+
+/* Allow description column to wrap */
+.md-typeset table td:nth-child(3) {
+    white-space: normal;
+}
+
+:root {
+  --bluegrey: #0C2C55;
+}
+
+/* Primary color override */
+.md-header{
+  background-color: var(--bluegrey) !important;
+}
+
+/* Links & accents */
+.md-typeset a {
+  color: var(--bluegrey);
+}
+
+.md-button--primary {
+  background-color: var(--bluegrey);
+  border-color: var(--bluegrey);
+}
+
+/* change note style */
+/* Compact admonition: width fits content + rounded corners + custom colors */
+.md-typeset .admonition.compact,
+.md-typeset details.compact {
+  display: inline-block;       /* shrink to content */
+  width: fit-content;
+  max-width: 100%;             /* don't overflow on small screens */
+  padding: 0.6rem 0.9rem;
+  margin: 0.6rem 0;
+
+  border-radius: 14px;         /* round edges */
+  border: 1px solid #8a2be2;   /* your accent */
+  background: #f5edff;         /* your background */
+  box-shadow: none;
+}
+
+/* Title bar styling (optional) */
+.md-typeset .admonition.compact > .admonition-title,
+.md-typeset details.compact > summary {
+  border-radius: 12px;
+  background: transparent;     /* remove the big title bar look */
+  padding: 0;
+  margin: 0 0 0.25rem 0;
+  color: #4b136e;              /* title text color */
+}
+
+/* Remove the left colored bar that Material adds by default */
+.md-typeset .admonition.compact {
+  border-left: 1px solid #8a2be2;
+}
+
+/* bold title */
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3,
+.md-typeset h4,
+.md-typeset h5,
+.md-typeset h6 {
+  font-weight: 700;  /* bold */
+}
+
+.toc a {
+    font-size: 0.95rem;
+}
+
+.toc ul ul a {
+    font-size: 0.8rem;
+}
+
+/* center the figs */
+.center-img {
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+}
+/*tab*/
+.md-typeset .tabbed-content {
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 1rem;
+}
+/*.md-typeset .tabbed-content {*/
+/*    background-color: #f8f9fa;*/
+/*}*/
+.md-tabs__link {
+    font-weight: bold;
+}
+/*.md-typeset .tabbed-labels > label {*/
+/*    background-color: #f0f0f0;*/
+/*}*/
+.md-typeset .tabbed-labels > input:checked + label {
+    background-color: #1976d2;
+    color: white;
+}
+
+.caption-left {
+    display: block;
+    color: #6c757d;
+    font-size: 0.7rem;
+    margin-top: 0.4rem;
+    text-align: left !important;
+}
+.caption-center {
+    display: block;
+    text-align: center;
+    color: #6c757d;
+    font-size: 0.7rem;
+    margin-top: 0.4rem;
+}
