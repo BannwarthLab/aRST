@@ -1,13 +1,39 @@
 stages:
   - deploy
 
+# Every version is built into its own subfolder of public/:
+#   docs        -> public/2.3.0   (latest)
+#   docs-2.2.0  -> public/2.2.0
+# To add an old version, freeze its branch and add it to OLD_VERSIONS below.
 pages:
   stage: deploy
   image: python:3.9
 
+  variables:
+    LATEST: "2.3.0"
+    OLD_VERSIONS: "2.2.0"   # space separated; each needs a branch docs-<version>
+
   script:
     - pip install mkdocs mkdocs-material
-    - mkdocs build --site-dir public
+    - mkdocs build --site-dir public/$LATEST
+    - |
+      for v in $OLD_VERSIONS; do
+        git fetch origin docs-$v
+        mkdir -p /tmp/src-$v
+        git archive FETCH_HEAD | tar -x -C /tmp/src-$v
+        (cd /tmp/src-$v && mkdocs build --site-dir $CI_PROJECT_DIR/public/$v)
+      done
+    # versions.json drives the Material version dropdown
+    - |
+      python - <<PY
+      import json, os
+      latest = os.environ["LATEST"]
+      versions = [{"version": latest, "title": f"{latest} (latest)", "aliases": ["latest"]}]
+      versions += [{"version": v, "title": v, "aliases": []} for v in os.environ["OLD_VERSIONS"].split()]
+      json.dump(versions, open("public/versions.json", "w"), indent=2)
+      PY
+    # root URL redirects to the latest version
+    - echo "<!doctype html><meta http-equiv=\"refresh\" content=\"0; url=$LATEST/\"><link rel=\"canonical\" href=\"$LATEST/\">" > public/index.html
 
   artifacts:
     paths:

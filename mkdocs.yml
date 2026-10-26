@@ -59,7 +59,9 @@ extra_css:
   - stylesheets/extra.css
 extra_javascript:
   - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
-#extra:
+extra:
+  version:
+    provider: mike   # version dropdown, reads ../versions.json written by CI
 #  social:
 #    - icon: fontawesome/brands/gitlab
 #      link: https://gitlab.com/namespace/project
