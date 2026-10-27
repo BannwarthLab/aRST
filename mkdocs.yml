@@ -1,7 +1,7 @@
 site_name: aRST Docs
-site_url: https://bannwarthlab.pages.rwth-aachen.de/aRST/
-repo_url: https://git.rwth-aachen.de/bannwarthlab/aRST
-repo_name: bannwarthlab/aRST
+site_url: https://rwth-bannwarthlab.pages.git.nrw/arst/
+repo_url: https://gitlab.git.nrw/rwth-bannwarthlab/arst
+repo_name: rwth-bannwarthlab/arst
 
 theme:
   name: material
