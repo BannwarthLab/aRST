@@ -23,12 +23,12 @@ theme:
 
 # This defines the left sidebar structure.
 nav:
+  - Home: index.md
   - Installation: installation.md
   - Documentation:
       - Inputfile Documentation: documentation/inputfile.md
   # 2.2.0 pages, kept until they are rewritten for 2.3.0
   - Archive 2.2.0:
-      - Home: index.md
 #      - Overview: overview.md
       - Installation: archive-2.2.0/installation.md
       - Documentation:
