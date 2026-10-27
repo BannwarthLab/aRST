@@ -8,13 +8,18 @@ stages:
 # and commit the folder; it is picked up automatically.
 pages:
   stage: deploy
-  image: python:3.9
 
   variables:
     LATEST: "2.3.0"
 
+  # Runs on the shell runner (z1-docker is broken), so use a throwaway venv
+  before_script:
+    - python3 --version
+    - python3 -m venv .venv
+    - source .venv/bin/activate
+    - pip install --quiet mkdocs mkdocs-material
+
   script:
-    - pip install mkdocs mkdocs-material
     - mkdocs build --site-dir public/$LATEST
     - cp -r archive/* public/
     # versions.json drives the Material version dropdown
@@ -38,4 +43,4 @@ pages:
     - if: '$CI_COMMIT_BRANCH == "docs"'
 
   tags:
-    - docker
+    - shell
