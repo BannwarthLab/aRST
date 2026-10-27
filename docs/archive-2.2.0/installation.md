@@ -14,7 +14,7 @@ This page contains detailed information about the installation of aRST.
 ## Step 1: Pull the source code
 Clone the repository from Git:
 ```angular2html
-git clone https://git.rwth-aachen.de/bannwarthlab/aRST.git
+git clone https://gitlab.git.nrw/rwth-bannwarthlab/arst.git
 cd aRST
 ```
 

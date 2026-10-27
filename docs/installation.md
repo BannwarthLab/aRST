@@ -34,7 +34,7 @@ This page describes how to install *aRST* 2.3.0 and the external programs it cal
 
 Clone the repository from Git:
 ```bash
-git clone https://git.rwth-aachen.de/bannwarthlab/aRST.git
+git clone https://gitlab.git.nrw/rwth-bannwarthlab/arst.git
 python3.12 -m venv arstenv          # or python3.11
 source arstenv/bin/activate
 pip install --upgrade pip
