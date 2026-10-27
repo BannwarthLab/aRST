@@ -1,7 +1,8 @@
 # Input File Documentation
 
-This page contains a guide to *aRST version 2.2.0* input files <INPUTFILE> <br>
-Some keys may not be supported in older versions of *aRST*. For configuration details of earlier releases, please refer to the archived `README.md`.
+This page describes the `input.toml` file of *aRST version 2.3.0*.
+!!! danger "Incompatible input format"
+    The 2.3.0 input format is **not compatible** with 2.2.0: most sections were renamed. For the old format, see the [2.2.0 input file documentation](../archive-2.2.0/documentation/inputfile.md).
 
 **Contents**
 
@@ -9,210 +10,369 @@ Some keys may not be supported in older versions of *aRST*. For configuration de
 
 ---
 
-A general `input.toml` file is structured as follows:
+## General structure
+
+A minimal `input.toml` only needs the reactant(s):
 
 ```toml
-
-[geom.reactant1]
-name="coord1.xyz"
-charge=0                 
-multiplicity=2
-
-[read.general] 
-gfn2opt=true
-
+[reactants.reactant1]
+name = "coord1.xyz"
+charge = 0
+multiplicity = 1
 ```
 
-In TOML format:
+Every other section is optional and falls back to its defaults. In TOML format:
 
-- Square brackets `section.subsection` define a configuration block. The dot (`.`) denots that `subsection` belongs
-  to `section`.
-- Each entry inside a block is written as a key-value pair in the form `key=value`.
+- Square brackets `[section.subsection]` start a configuration block. The dot (`.`) means that `subsection` belongs to `section`.
+- Each entry inside a block is a key-value pair, `key = value`.
 
-!!! note
-    The input file should be placed in the **same folder** as the XYZ input geometry file(s).
+The input file has the following blocks:
+
+| Block | Content |
+|---|---|
+| [`[reactants.reactantX]`](#input-structures-reactantsreactantx) | input structures |
+| [`[read]`](#pre-processing-read) | pre-processing of the input structures |
+| [`[working_dir]`](#working-directories-working_dir) | run folder and output folders |
+| [`[reactivity]`](#reactivity-assessment-reactivity) | how reactive atom pairs are ranked |
+| [`[search]`](#reaction-search-search) | which reactions are explored |
+| [`[path_modeling]`](#path-modeling-path_modeling) | how product guesses are generated |
+| [`[refinement]`](#product-refinement-refinement) | optimisation of new structures |
+| [`[energy]`](#energy-evaluation-energy) | energies, thresholds and transition states |
+| [`[structures]`](#structure-comparison-structures) | how identical structures are recognised |
+| [`[calculators]`](#calculator-settings-calculators) | shared settings for *xtb*, *ORCA* and *TeraChem* |
+| [`[resources]`](#computational-resources-resources) | cores and memory |
 
 
----
-
-## Input geometry settings `[geom.reactantX]`
-
-`X` represents the reactant index (e.g., `reactant1`, `reactant2`).
-
-| Key            | Default value, *Type*    | Description                                  |
-|----------------|--------------------------|----------------------------------------------|
-| `name`         | `"basename1.xyz"`, *str* | Specify the XYZ file of input geometry X     |
-| `charge`       | `-`, *int*               | Specify the charge of input geometry X       |
-| `multiplicity` | `-`, *int*               | Specify the multiplicity of input geometry X |
-
----
-
-## Pre-processing of input geometry `[read.general]`
-
-| Key          | Default value, Type | Description                                                                                                                                                                                                                                                               |
-|--------------|---------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `dftopt`     | `false`, *bool*     | Specify whether to perform geometry optimization at the DFT level in *ORCA*. Detailed *ORCA* settings are defined in the `[orca_setting]` block                                                                                                                           |
-| `gfn2opt`    | `false`, *bool*     | Specify whether to perform geometry optimization at the GFN2-xTB level. Detailed *xtb* settings are defined in the `[xtb_setting]` block                                                                                                                                  |
-| `jumprefine` | `false`, *bool*     | Specify whether to skip all single-point/optimization pre-processing of inputfiles and read information from folder `struc`.<br/> If set to *true*, the reactant index must match the corresponding index in `struc` (e.g., read `reactant1` information from `struc/0`). |
-
-!!! note
-    *aRST*, by default, will not reoptimize the input geometries. 
+!!! note "Atom indices"
+    All atom indices in the input file are **0-based**: atom `0` is the first atom in the XYZ file.
 
 ---
 
-## Reactivity settings `[searching_setting.reactivity]`
+## Input structures `[reactants.reactantX]`
 
-`afo_method` defines how AFO features (and MBO features) are generated.<br>
-Allowed values: `"gfn2"`,`"stda"`,`"gxtb"` (`afo_method=gxtb` can currently only be used internally within the Bannwarth group)
+`X` is the reactant number (`reactant1`, `reactant2`, …, up to `reactant99`). At least one reactant is required.
 
-### Option 1: GFN2-xTB AFO `afo_method="gfn2"`
+| Key | Default value, *Type* | Description |
+|---|---|---|
+| `name` | –, *str* | XYZ file of the reactant, read from `working_dir.work_dir`. **Required.** |
+| `charge` | –, *int* | Charge. **Required.** |
+| `multiplicity` | –, *int* | Spin multiplicity (> 0). **Required.** |
+| `number` | `1`, *int* | How many copies of this reactant take part in the search, e.g. `number = 2` for a dimerisation of one molecule. |
 
-Use this option when you want to generate GFN2-xTB-based AFO and MBO features.<br>
-This enables these reactivity features to be generated from a Molden file produced via single-point calculations in *xtb*. Detailed *xtb* settings are specified in the `[xtb_setting]` block.
+---
 
-### Option 2: DFT/HF AFO `afo_method="stda"`
+## Pre-processing `[read]`
 
-Use this option when you want to generate DFT/HF-based AFO and MBO features.<br>
-This enables these reactivity features to be generated from a Molden file produced via *ORCA* or *TeraChem* single-point calculations.
-Specifically, *aRST* invokes *ORCA* or *TeraChem*, as specified by the user to generate a Molden file. It then calls *Multiwfn* to convert spherical basis functions into Cartesian form. The converted Molden file is then used by the
-modified *sTDA* procedure to generate AFO features.
+| Key | Default value, *Type* | Description |
+|---|---|---|
+| `opt` | `false`, *bool* | Optimise the input structures before the search, at the level set in [`[refinement]`](#product-refinement-refinement). By default the input geometries are used as they are. |
+
+---
+
+## Working directories `[working_dir]`
+
+| Key | Default value, *Type* | Description |
+|---|---|---|
+| `work_dir` | current directory, *str* | Run folder. The XYZ files are read from here and all output is written here. |
+
+---
+
+## Reactivity assessment `[reactivity]`
+
+Reactive atom pairs for association reactions are ranked by AFO gaps (and bonds by MBO), computed at the level selected here.
+
+| Key | Default value, *Type* | Description |
+|---|---|---|
+| `backend` | `"xtb"`, *str* | Program that computes the AFO/MBO features:<br>**`"xtb"`** = xTB molden file, method from `[calculators.xtb]`;<br>**`"orca"`** = DFT/HF molden file from *ORCA*, converted with *Multiwfn* and read by the modified *sTDA*. Defaults to BHandHLYP/vDZP;<br>**`"tc"`** = DFT/HF molden file from *TeraChem*, read by the modified *sTDA*. Defaults to BHandHLYP/vDZP. |
+| `overrides` | `{}`, *table* | Calculator settings that apply to this step only, see [Overrides](#overrides). |
+| `equivalent_afogap_tol` | `0.01`, *float* | Tolerance for treating two AFO gaps as equal (degenerate pairs), in *eV*. |
+| `spr_mode` | `0`, *int* | Which spin combinations of HOAO–LUAO are considered for an atom pair:<br>**0** = all ($\alpha$–$\alpha$, $\beta$–$\beta$, $\alpha$–$\beta$, $\beta$–$\alpha$);<br>**1** = same spin only ($\alpha$–$\alpha$, $\beta$–$\beta$);<br>**2** = opposite spin only ($\alpha$–$\beta$, $\beta$–$\alpha$).<br>No effect for closed-shell reactants. |
+| `exclude_elements` | `[]`, *[int, …]* | Atomic numbers of elements that never react, e.g. `[8]` excludes all reactions involving Oxygen element. |
+| `exclude_pairs` | `[]`, *[[int, int], …]* | Element pairs (atomic numbers) that never react with each other, e.g. `[[1, 8]]` excludes H–O pairs. |
+
+!!! important
+    For `backend = "orca"`, set `iloadasCart= 1` in the `settings.ini` file of *Multiwfn* (see [Installation](../installation.md)).
 
 **Example**
 
 ```toml
-[searching_setting.reactivity]
-afo_method="stda"
-MO_method="orca" # or "terachem"
+[reactivity]
+backend = "orca"
+
+[reactivity.overrides]
+functional = "PBE0"
+basis = "def2-SVP"
 ```
 
-[//]: # (todo)
-!!! important
-    modified *sTDA* can be found in xx.<br>
-    To enable the *Multiwfn*'s conversion fuction, you must set `iloadasCart= 1` in the `settings.ini` setting file of *Multiwfn*.
+---
 
-#### Option 2a: Generate molden file via ORCA `MO_method="orca"`
+## Reaction search `[search]`
 
-The level of theory for AFO features can be selected using the following keys:
+### General settings `[search]`
 
-| Key                   | Default value, Type  | Description                                                                                                                               |
-|-----------------------|----------------------|-------------------------------------------------------------------------------------------------------------------------------------------|
-| `afo_orca_functional` | `"BHandHLYP"`, *str* | Specify the DFT method for AFO feature generation. The *str* value will be passed to the *ORCA* input file.                               |
-| `afo_orca_basis`      | `"vdzp"`, *str*      | Specify the basis set for AFO feature generation. The *str* value will be passed to the *ORCA* input file.                                |
-| `afo_orca_cpcm`       | `"ch2cl2"`, *str*    | Specify the solvent used in the CPCM solvation model for AFO feature generation. The *str* value will be passed to the *ORCA* input file. |
+| Key | Default value, *Type* | Description |
+|---|---|---|
+| `cycle` | `1`, *int* | Number of elementary reaction steps searched in a row. In every cycle after the first, the products of the previous cycle are used as new reactants. |
+| `keep_every_cycle` | `3`, *int* | From cycle 2 on: how many reactions of the previous cycle are explored further, the ones with the lowest reaction energy first. |
 
-#### Option 2b: Generate molden file via TeraChem `MO_method="terachem"`
+A reaction type is only searched when its `count` is not `0` or `atom_pairs` is given. All three types are off by default.
 
-The level of theory for AFO features can be selected using the following keys:
+### Intermolecular association `[search.inter]`
 
-| Key                 | Default value, Type  | Description                                                                                                                                                    |
-|---------------------|----------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `afo_tc_functional` | `"BHandHLYP"`, *str* | Specify the DFT method for AFO feature generation. The *str* value will be passed to the *TeraChem* input file.                                                |
-| `afo_tc_basis`      | `"vdzp"`, *str*      | Specify the basis set for AFO feature generation. The *str* value will be passed to the *TeraChem* input file.                                                 |
-| `afo_tc_epsilon`    | `9.08`, *float*      | Specify the dielectric constant of solvents used in the PCM solvation model for AFO feature generation. The value will be passed to the *TeraChem* input file. |
+Needs at least two reactants.
+
+| Key | Default value, *Type* | Description |
+|---|---|---|
+| `count` | `0`, *int* or `"all"` | Number of atom pairs to simulate, ranked by the lowest AFO gap. `"all"` simulates every pair. |
+| `atom_pairs` | `[]`, *[[int, int], …]* | Atom pairs to simulate instead of the ranking. `[[0, 3]]` means atom 0 of `reactant1` and atom 3 of `reactant2` form a bond. |
+| `concerted_pair` | `false`, *bool* | Simulate concerted reactions: two bonds form at the same time. With `atom_pairs`, all given pairs are simulated together in one path. |
+| `aligning_distance` | `5.0`, *float* | Distance at which the two reactants are placed before the scan, as a multiple of the sum of the covalent radii of the reactive pair. |
+
+### Intramolecular association `[search.intra]`
+
+| Key | Default value, *Type* | Description |
+|---|---|---|
+| `count` | `0`, *int* or `"all"` | Number of atom pairs to simulate, ranked by the lowest AFO gap. `"all"` simulates every pair. |
+| `atom_pairs` | `[]`, *[[int, int], …]* | Atom pairs of `reactant1` that should form a bond, e.g. `[[0, 5]]`. |
+
+### Dissociation `[search.dissociation]`
+
+| Key | Default value, *Type* | Description |
+|---|---|---|
+| `count` | `0`, *int* or `"all"` | Number of bonds to break, ranked by the lowest MBO. `"all"` breaks every bond. |
+| `atom_pairs` | `[]`, *[[int, int], …]* | Bonds to break instead of the ranking, e.g. `[[8, 9]]`. In mechanochemical mode (`aRST -m`) these bonds are pulled **in addition** to the `count` top-ranked bonds. |
+
+#### Pulling distance `[search.dissociation.pulling]`
+
+Sets how far a bond is stretched. Choose one `mode`:
+
+| `mode` | Further keys | Target distance |
+|---|---|---|
+| `"auto"` *(default)* | – | Open-chain bond: 5 × the sum of the covalent radii. Ring bond: the length of the alternative (the shortest) molecular graph path around the ring + 1 Å. |
+| `"scale"` | `distance`, *float* (required) | `distance` × the sum of the covalent radii. |
+| `"increment"` | `distance`, *float* (required) | Current bond length + `distance`, in *Å*. |
+
+```toml
+[search.dissociation.pulling]
+mode = "scale"
+distance = 1.5
+```
+
+#### Mechanochemical analysis `[search.dissociation.mechanical_settings]`
+
+Only used by `aRST -m`. See [Mechanochemical Analysis](../examples/mechano.md) for the workflow.
+
+| Key | Default value, *Type* | Description |
+|---|---|---|
+| `pull_position` | `"weakest_bond"`, *str* | What is pulled:<br>**`"weakest_bond"`** = the top-ranked bonds of the mechanophore B-set;<br>**`"terminals"`** = the terminal atom pairs (force application points). |
+| `rank_by` | `"mbo"`, *str* | How B-set bonds are ranked, smallest first: **`"mbo"`** = Mayer bond order, **`"k"`** = FFiTS force constant, **`"dist"`** = bond length. |
+| `use_d0` | `true`, *bool* | Use D0 (including the ZPE change, needs `energy.mode = "g"`) instead of De for the rupture force. |
+| `terminal_pairs` | detected automatically, *[[int, int], …]* | Your own force application points. If not given, *aRST* finds the force-transmission paths itself. |
 
 ---
 
-## Reaction exploration
+## Path modeling `[path_modeling]`
 
-### General settings `[searching_setting.general]`
+Settings for generating the product guess of every reaction path.
 
-This block contains information on *how* elementary reaction-step searching is defined in *aRST*, including the number of reaction steps, number, the specification of the reactive atoms, the workflow for generating product guess structures, thermodynamic energy thresholds, and whether isomeric product structures are considered when accepting a new reaction.
+| Key | Default value, *Type* | Description |
+|---|---|---|
+| `scan_mode` | `"xtb"`, *str* | **`"xtb"`** = constrained xTB scan along the reactive atom pair;<br>**`"mbff"`** = *MolBar* harmonic force field, followed by a constrained xTB optimisation. |
+| `backend` | `"xtb"`, *str* | Only `"xtb"` is available. |
+| `overrides` | `{}`, *table* | Calculator settings for the scan, see [Overrides](#overrides). Scan-specific keys: `etemp` (default **4000** K), `force_constant` (default `1.0` Eh/bohr²), `steps` (default `20`), `opt_lvl` (default `"normal"`). |
+| `enable_md` | `false`, *bool* | Run a short xTB MD simulation on the end structure of the scan before it is relaxed. The lowest-energy frame is used. |
 
-| Key                     | Default value, Type                                 | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-|-------------------------|-----------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `wd`                    | `"."`, *str*                                        | Specify the working directory where the input files are located.                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `cycle`                 | `1`, *int*                                          | Specify the number of elementary steps to be automatically searched via *aRST*.                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `sp_method`             | `dft`, *str*                                        | Specify the theoretical method used for single-point energy calculations.<br/>**"dft"**=use DFT method in *ORCA* (detailed *ORCA* settings are defined in the `[orca_setting]` block);<br/>**"gxtb"**=use the g-xTB method.                                                                                                                                                                                                                                                                                                        |
-| `elim`                  | `300`, *int*                                        | Specify the allowed electronic energy difference threshold for accepting a new reaction step, unit in *kcal/mol*.                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `exclude_pairs`         | `[[Z1,Z2],[Z3,Z4],...]`, <em>[[int, int], ...]</em> | Specify the element pair that should be excluded from the reaction search, e.g., `[[1,8]]` to exclude reactions between *H* and *O* atoms.                                                                                                                                                                                                                                                                                                                                                                                         |
-| `exclude_elements`      | `[Z1,Z2,...]`, *[int,int,...]*                      | Specify the elements that should be excluded from the reaction search, e.g.,`["O"]` to exclude all reactions involes *O* atom.                                                                                                                                                                                                                                                                                                                                                                                                     |
-| `equivalent_afogap_tol` | `0.01`, *float*                                     | Specify the tolerance for identifying the denegerated AFO gaps, unit in *eV*.                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| `spr_mode`              | `0`, *int*                                          | When evaluating the reactivity of a given atom pair (e.g., A–B) based on AFO gaps, multiple HOAO–LUAO combinations may exist due to $\alpha$ and $\beta$ electrons This option specifies which spin combinations are considered:<br>**0**=all combinations ($\alpha$–$\alpha$, $\beta$–$\beta$, $\alpha$–$\beta$, $\beta$–$\alpha$);<br/>**1**=same-spin only ($\alpha$–$\alpha$, $\beta$–$\beta$);<br/>**2**=opposite-spin only ($\alpha$–$\beta$, $\beta$–$\alpha$).<br/>For closed-shell reactants, this setting has no effect. |
-| `scan_mode`             | `0`, *int*                                          | Specify which workflow is used to generate products:<br>**0**=Scanning algorithm: performs an xTB PES scan along the interatomic distance of the reactive atom pair (detailed *xtb* settings are defined in the `[xtb_setting]` block);<br/>**1**=Harmonic force field algorithm: generates products via harmonic FF optimization using the *MolBar* package                                                                                                                                                                       |
-| `sep_mode`              | `0`, *int*                                          | After the scan, multiple product fragments may exist within the precursor structure. This option specifies the order of separation and optimization of the supramolecule:<br>**0**=First separate the possible fragments, then fully relax each fragment geometry;<br/>**1**=First fully relax the supramolecule, then separate the possible fragments.                                                                                                                                                                            |
-| `md`                    | `false`, *bool*                                     | Specify wether to perform a short xTB-MD simulation on supramolecule (after scan). If `sep_mode=1` and `md=true`, the supramolecule is first fully relaxed, then subjected to MD, and finally separated into possible fragments. Detailed MD settings are defined in the `[searching_setting.md]` block.                                                                                                                                                                                                                           |
-| `mb_level`              | `0`, *int*                                          | *aRST* use MolBar identifier to distinguish structural uniqueness. This option specifies how a new structure is identified:<br/>**0**=full MolBar identifier; <br/>  **1**=topology spectrum only (encoding atomic connectivity).                                                                                                                                                                                                                                                                                                  |
+!!! note
+    The scan always uses its own electronic temperature (4000 K by default). An `etemp` in `[calculators.xtb]` does not change it; set it with `[path_modeling.overrides]` instead.
 
-### Molecular Dynamics Simulations `[searching_setting.md]`
+```toml
+[path_modeling]
+scan_mode = "xtb"
 
-This block contains the settings for performing MD simulations with xTB.
+[path_modeling.overrides]
+etemp = 4000
+steps = 30
+```
 
-| Key     | Default value, Type | Description                                                     |
-|---------|---------------------|-----------------------------------------------------------------|
-| `time`  | `10`, *int*         | Specify the total run time of MD simulation, unit in *ps*       |
-| `step`  | `1`, *int*          | Specify time step for propagation, unit in *fs*.                |
-| `temp`  | `300`, *int*        | Specify electronic temp, unit in *K*.                           |
-| `shake` | `1`, *int*          | Specify shake mode: **0**=off; **1**=X-H only, **2**=all bonds. |
-| `dump`  | `50`, *int*         | Specify the interval for trajectory printout, unit in *fs*.     |
+### Molecular dynamics `[path_modeling.md]`
 
-### Search settings for intermolecular reactions `[searching_setting.inter]`
+Used when `enable_md = true`. The values are passed to the `$md` block of *xtb*.
 
-This block specifies the selection of reactive atom pairs for intermolecular reactions and workflow used to aligning reactants.
-
-| Key                 | Default value, Type                       | Description                                                                                                                                                                                                                                                                                                                                                                                               |
-|---------------------|-------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `number`            | `-`, *int*                                | Specify how many atom pairs, ranked by the lowest AFO gaps, should be simulated for intermolecular association events in one cycle.<br/>If a number bigger than the available number of atom pairs is specified, all available atom pairs in the system will be simulated.                                                                                                                                |
-| `concerted_pair`    | `false`, *bool*                           | Specify whether the searched reactions are concerted. When set to `true`, only concerted intermolecular association reactions (i.e., reactive pairs include two equivalent atom pairs) will be simulated in one cycle.                                                                                                                                                                                    |
-| `atom_pair`         | `[[AT1,AT2]]`, <em>[[int, int], ...]</em> | Specify the atomic indices (starting from 0) of each reactant structure to be simulated for intermolecular association events. For example,`[[0,0]]` means that atom 0 of `coord1.xyz` and atom 0 of `coord2.xyz` will form a bond. <br/>When this option is used, `number` is overwritten by the number of provided atom pairs. If more than one pair is given, `concerted_pair` is set to `true`.       |
-| `aligning_distance` | `5`, *int*                                | Specify the alignment distance between the two reactant structures. The given value places the reactants along the z-axis, with their reactive centers positioned at (0,0,0) and (0,0,z). The separtaed distance is set as the sum of the covalent radii of the reactive atom pair.<br/>For concerted atom pairs, the reactive center is set as the midpoint of the two reactive atoms in each structure. |
-| `maxovlap`          | `false`, *bool*                           | Specify the alignment style of given reactant structures. By default, *aRST* aligns the reactants so that the principal axes of the two structures face opposite directions, minimizing steric hindrance at the reaction site. For reactions such as Diels–Alder, setting this option to `true` may help generate different stereoisomeric products.                                                      |
-
-### Search settings for intramolecular reactions `[searching_setting.intra]`
-
-This block specifies the selection of reactive atom pairs for intramolecular association.
-
-| Key              | Default value, Type                        | Description                                                                                                                                                                                                                                                                                                                                                               |
-|------------------|--------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `number`         | `-`, *int*                                 | Specify how many atom pairs, ranked by the lowest AFO gaps, should be simulated for intramolecular association events in one cycle.<br/>If a number bigger than the available number of atom pairs is specified, all available atom pairs in the system will be simulated.                                                                                                |
-| `concerted_pair` | `false`, *bool*                            | Specify the atomic indices (starting from 0) of reactant structure to be simulated for intramolecular association events. For example,`[[0,1]]` means that atom 0 and 1 of `coord1.xyz` will form a bond. <br/>When this option is used, `number` is overwritten by the number of provided atom pairs. If more than one pair is given, `concerted_pair` is set to `true`. |
-| `atom_pair`      | `[[AT1, AT2]]`, <em>[[int, int], ...]</em> | Specify the atomic indices (starting from 0) of the atom pair to be simulated for intramolecular association events. When this option is used,  `number` is overwritten by the number of provided atom pairs. If more than one pair is given, `concerted_pair` is set to `true`.                                                                                          |
-
-### Search settings for dissociations `[searching_setting.disso]`
-
-This block specifies the selection of reactive atom pairs for dissociations.
-
-| Key                                                             | Default value, Type                       | Description                                                                                                                                                                                                                                                                                                                                                                |
-|-----------------------------------------------------------------|-------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `number`                                                        | `-`, *int* or *str*                       | Specify how many bonded atom pairs, ranked by the lowest Mayer bond order (MBO > 0.3), should be simulated for dissociations in one cycle.<br/>If the string `"all"` is given, all available atom pairs in the system will be simulated.                                                                                                                                   |
-| `concerted_pair`                                                | `false`, *bool*                           | Specify whether the searched reactions are concerted. When set to `true`, only concerted dissociations (i.e., reactive pairs include two equivalent atom pairs) will be simulated in one cycle.                                                                                                                                                                            |
-| `atom_pair`                                                     | `[[AT1,AT2]]`, <em>[[int, int], ...]</em> | Specify the atomic indices (starting from 0) of the reactant structure to be simulated for dissociation events. For example,`[[0,1]]` means that the bond between atom 0 and 1 of `coord1.xyz` will break. <br/>When this option is used, `number` is overwritten by the number of provided atom pairs. If more than one pair is given, `concerted_pair` is set to `true`. |
-| `pulling_distance`                                              | `5`, *int* or *float*,or `"auto"`         | Specify the scaling factor for the pulling distance. The separated distance is set as a multiple of the sum of the covalent radii of the reactive atom pair.                                                                                                                                                                                                               |
-| `pulling_distance_add`                                          | `-`, *int* or *float*                     | Specify the separation distance as the current interatomic distance of the reactive atom pair plus the given value, unit in *Å*.                                                                                                                                                                                                                                           |
-| `depotonation`                                                  | `false`, *bool*                           | Specify whether to perform deprotonation using CREST before breaking the selected weakest bond. Note that deprotonation by CREST may reorder the atom indices.                                                                                                                                                                                                             |
-| `potonation`                                                    | `false`, *bool*                           | Specify whether to perform potonation using CREST before breaking the selected weakest bond. Note that potonation by CREST may reorder the atom indices.                                                                                                                                                                                                                   |
-| **The following keywords are supported only in `--fmax` mode:** |
-| `terminal_pair`                                                 | `[[AT1,AT2]]`, <em>[[int, int], ...]</em> | Specify the atomic indices (starting from 0) of the force application points in the reactant structure. <br/>If not specified, aRST will automatically predict potential force-transmission pathways.                                                                                                                                                                      |
-| `stretch_scale`                                                 | `1.5`, *int* or *float*                   | Specify the stretching factor for the bond to be ruptured. <br/>The factor should be chosen such that only the target bond is broken, while the remaining bonding topology is preserved.                                                                                                                                                                                   |
-| `use_d0`                                                        | `false`, *bool*                           | Specify whether consider ZPE contribuition in the dissociation energy                                                                                                                                                                                                                                                                                                      |
+| Key | Default value, *Type* | Description |
+|---|---|---|
+| `time` | `2.0`, *float* | Total simulation time, in *ps*. |
+| `step` | `0.5`, *float* | Time step, in *fs*. |
+| `temp` | `300.0`, *float* | Thermostat temperature, in *K*. |
+| `shake` | `0`, *int* | SHAKE constraints: **0** = off, **1** = X–H bonds only, **2** = all bonds. |
+| `dump` | `10`, *int* | Interval for writing trajectory frames, in *fs*. |
+| `overrides` | `{}`, *table* | Calculator settings for the MD, see [Overrides](#overrides). |
 
 ---
 
-## Computational methodology settings
+## Product refinement `[refinement]`
 
-### *xtb* settings `[xtb_setting]`
+New structures (and the input structures with `read.opt = true`) are optimised at this level.
 
-This block provides detailed settings for electronic structure calculations at the xTB level using *xtb*.
-
-| Key           | Default value, *Type* | Description                                                                                                                                                                                                 |
-|---------------|-----------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `method`      | `"gfn2"`, *str*       | Specify the xTB-based method. All valid string keywords accepted by *xtb* are supported.                                                                                                                    |
-| `optlevel`    | `"normal"`, *str*     | Specify optimizing level. All valid string keywords accepted by *xtb* are supported.                                                                                                                        |
-| `alpb`        | `"ch2cl2"`, *str*     | Specify the solvent used in the ALPB solvation model. All valid string keywords accepted by *xtb* are supported.                                                                                            |
-| `struc_etemp` | `300`, *int*          | Specify the electronic temperature used in equilibrium electronic structure calculations. Unit in *K*.                                                                                                      |
-| `scan_etemp`  | `1000`, *int*         | Specify the electronic temperature used in constrained geometry optimizations, such as when generating preliminary product structures using either scanning or harmonic force field algorithm. Unit in *K*. |
-| `k`           | `1`, *int*            | Specify force constant used in the scanning algorithm. Unit in *Eh/Bohr<sup>2</sup>*.                                                                                                                       |
-| `step`        | `20`, *int*           | Specify step number used in the scanning algorithm.                                                                                                                                                         |
-
-### *ORCA* settings `[orca_setting]`
-
-This block provides detailed settings for electronic structure calculations at the DFT or HF level using *ORCA*.
-
-| Key          | Default value, *Type* | Description                                                                                                                                                                                                          |
-|--------------|-----------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `functional` | `"r2scan-3c"`, *str*  | Specify the functional method. All valid string keywords accepted by *ORCA* are supported.                                                                                                                           |
-| `basis`      | `""`, *str*           | Specify the basis set. If a composite functional is used, this option can be left empty; otherwise, all valid string keywords accepted by *ORCA* are supported.                                                      |
-| `dftopt`     | `"false"`, *bool*     | Specify to perform geometry optimization for the newly generated product structure using the specified DFT method.                                                                                                   |
-| `cpcm`       | `"ch2cl2"`, *str*     | !!!CHECK CODE!!!Specify the solvent used in the CPCM solvation model. All valid string keywords accepted by *ORCA* are supported.                                                                                    |
-| `ncpu`       | `1`, *int*            | Specify the number of processors used to run a calculation in *ORCA*. For further setup instructions, refer to the [ORCA parallel tutorial](https://www.faccts.de/docs/orca/6.0/tutorials/first_steps/parallel.html) |
+| Key | Default value, *Type* | Description |
+|---|---|---|
+| `backend` | `"xtb"`, *str* | **`"xtb"`** = method from `[calculators.xtb]` (GFN2-xTB by default). If an optimisation fails, it is retried at 4000 K;<br>**`"orca"`** = *ORCA* optimisation, r2SCAN-3c by default. |
+| `overrides` | `{}`, *table* | Calculator settings for this step, see [Overrides](#overrides). |
 
 ---
+
+## Energy evaluation `[energy]`
+
+| Key | Default value, *Type* | Description |
+|---|---|---|
+| `sp_method` | `"gxtb"`, *str* | Single-point method for reaction energies: **`"gxtb"`** = g-xTB, **`"dft"`** = DFT. |
+| `sp_backend` | `"xtb"`, *str* | Program for the single points. Use `"xtb"` with `sp_method = "gxtb"` and `"orca"` with `sp_method = "dft"` (r2SCAN-3c by default). |
+| `overrides` | `{}`, *table* | Calculator settings for the single points, see [Overrides](#overrides). |
+| `mode` | `"e"`, *str* | Energy used to judge reactions:<br>**`"e"`** = electronic energy;<br>**`"g"`** = free energy: single-point energy + thermal correction (xTB frequencies through *ORCA*) + solvation correction (xTB, only if a solvent is set). |
+| `elim` | `300.0`, *float* | Highest accepted reaction energy, in *kcal/mol*. Reactions above it are recorded but not explored further. |
+| `tseval` | `false`, *bool* | Search a transition state for every accepted reaction. |
+| `ts_method` | `"nebts"`, *str* | Transition state method: **`"nebts"`** = NEB-TS, **`"ffits"`** = FFiTS. |
+| `tslim` | `50.0`, *float* | Highest accepted barrier, in *kcal/mol*. Only used with `tseval = true`. |
+
+```toml
+[energy]
+sp_method = "dft"
+sp_backend = "orca"
+mode = "g"
+
+[energy.overrides]
+functional = "wB97X-3c"
+```
+
+---
+
+## Structure comparison `[structures]`
+
+*aRST* uses the *MolBar* identifier to decide whether two structures are the same.
+
+| Key | Default value, *Type* | Description |
+|---|---|---|
+| `mbcut_length` | `7`, *int* | Number of leading *MolBar* fields that are compared. Smaller values compare less of the identifier, so more structures count as identical. |
+
+---
+
+## Calculator settings `[calculators]`
+
+These blocks hold the settings that are **shared by every step** that uses the program. Only keys you write here are passed on; everything else keeps the default of the step (see the table in [Overrides](#overrides)).
+
+### *xtb* `[calculators.xtb]`
+
+| Key | Default value, *Type* | Description |
+|---|---|---|
+| `method` | `"gfn2"`, *str* | xTB method: `"gfn0"`, `"gfn1"`, `"gfn2"`, `"gfnff"` (run with `XTB_BIN`) or `"gxtb"` (run with `GXTB_BIN`). |
+| `solvent` | `"ch2cl2"`, *str* | Implicit solvent. Any solvent name accepted by *xtb*. |
+| `solvent_model` | `"alpb"`, *str* | Solvation model. g-xTB always uses `"cosmo"`. |
+| `solvent_reference` | `"bar1M"`, *str* | Reference state for the solvation free energy (only used with `energy.mode = "g"`). |
+| `etemp` | `300`, *int* | Electronic temperature, in *K*. |
+
+The optimisation level (`opt_lvl`, default `"normal"`) is not a shared setting. Set it per step in `[refinement.overrides]` or `[path_modeling.overrides]`.
+
+### *ORCA* `[calculators.orca]`
+
+| Key | Default value, *Type* | Description |
+|---|---|---|
+| `functional` | `"BHandHLYP"` (reactivity),<br>`"r2scan-3c"` (refinement, energy), *str* | Functional, written to the *ORCA* input as given. |
+| `basis` | `"vdzp"` (reactivity),<br>`""` (refinement, energy), *str* | Basis set. Leave empty for composite methods such as r2SCAN-3c. |
+| `solvent` | `"ch2cl2"`, *str* | Implicit solvent. |
+| `solvent_model` | `"cpcm"`, *str* | Solvation model. |
+
+### *TeraChem* `[calculators.tc]`
+
+| Key | Default value, *Type* | Description |
+|---|---|---|
+| `functional` | `"BHandHLYP"`, *str* | Functional. |
+| `basis` | `"vdzp"`, *str* | Basis set. |
+| `epsilon` | `9.08`, *float* | Dielectric constant for the PCM solvation model. |
+
+### Overrides
+
+Each step uses one calculator. The settings of a step are built in this order, later ones win:
+
+1. the defaults of the step (table below),
+2. the keys you set in `[calculators.<program>]`,
+3. the keys in the step's `overrides` table.
+
+| Step | Block with `backend` / `overrides` | Programs | Step defaults |
+|---|---|---|---|
+| reactivity | `[reactivity]` | xtb, orca, tc | ORCA/TeraChem: BHandHLYP/vDZP |
+| scan | `[path_modeling]` | xtb | `etemp = 4000`, `force_constant = 1.0`, `steps = 20` |
+| MD | `[path_modeling.md]` | xtb | – |
+| refinement | `[refinement]` | xtb, orca | ORCA: r2SCAN-3c |
+| energy | `[energy]` (`sp_backend`) | xtb, orca | xtb: g-xTB with COSMO; ORCA: r2SCAN-3c |
+
+The `backend` cannot be changed inside `overrides`.
+
+**Example:** GFN2-xTB in water everywhere, but GFN1-xTB for the reactivity:
+
+```toml
+[calculators.xtb]
+method = "gfn2"
+solvent = "h2o"
+
+[reactivity.overrides]
+method = "gfn1"
+```
+
+---
+
+## Computational resources `[resources]`
+
+| Key | Default value, *Type* | Description |
+|---|---|---|
+| `cpu_budget` | SLURM or all cores, *int* | Total number of cores. Under SLURM: `--ntasks` × `--cpus-per-task` (a missing one counts as 1). Otherwise all cores available to the process. |
+| `xtb_threads` | `cpu_budget`, *int* | Threads per *xtb* run. Cannot exceed `cpu_budget`. |
+| `orca_nprocs` | `cpu_budget`, *int* | Processes per *ORCA* run. Cannot exceed `cpu_budget`. |
+| `orca_maxcore_mb` | `1000`, *int* | Memory per *ORCA* process, in *MB*. |
+
+---
+
+## Full example
+
+```toml
+[reactants.reactant1]
+name = "coord1.xyz"
+charge = 0
+multiplicity = 1
+
+[reactants.reactant2]
+name = "coord2.xyz"
+charge = 0
+multiplicity = 1
+
+[read]
+opt = true
+
+[search]
+cycle = 2
+keep_every_cycle = 3
+
+[search.inter]
+count = 5
+
+[search.dissociation]
+count = 3
+
+[path_modeling]
+scan_mode = "xtb"
+
+[path_modeling.overrides]
+etemp = 4000
+steps = 30
+
+[energy]
+sp_method = "gxtb"
+sp_backend = "xtb"
+mode = "e"
+elim = 50.0
+
+[calculators.xtb]
+method = "gfn2"
+solvent = "h2o"
+
+[resources]
+cpu_budget = 8
+```

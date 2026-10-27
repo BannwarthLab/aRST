@@ -23,23 +23,26 @@ theme:
 
 # This defines the left sidebar structure.
 nav:
-  - Home: index.md
-#  - Overview: overview.md
   - Installation: installation.md
   - Documentation:
-      - documentation/index.md
-      - Option Documentation: documentation/option.md
       - Inputfile Documentation: documentation/inputfile.md
+  # 2.2.0 pages, kept until they are rewritten for 2.3.0
+  - Archive 2.2.0:
+      - Home: index.md
+#      - Overview: overview.md
+      - Installation: archive-2.2.0/installation.md
+      - Documentation:
+          - archive-2.2.0/documentation/index.md
+          - Option Documentation: archive-2.2.0/documentation/option.md
+          - Inputfile Documentation: archive-2.2.0/documentation/inputfile.md
 #          - documentation/inputfile/index.md
 #          - Inputfile example: documentation/inputfile/input_example.md
-#  - Examples:
-#      - A:
-  - Examples and Guides:
-      - examples/index.md
-      - Intermolecular Reaction Search: examples/interA.md
-      - Inramolecular Association Search: examples/intraA.md
-      - Dissociation Search: examples/disso.md
-      - Mechanochemical Analysis: examples/mechano.md
+      - Examples and Guides:
+          - examples/index.md
+          - Intermolecular Reaction Search: examples/interA.md
+          - Inramolecular Association Search: examples/intraA.md
+          - Dissociation Search: examples/disso.md
+          - Mechanochemical Analysis: examples/mechano.md
 
 markdown_extensions:
   - admonition

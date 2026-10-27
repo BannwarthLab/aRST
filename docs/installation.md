@@ -1,36 +1,49 @@
 # Installation
 
-This page contains detailed information about the installation of aRST.
+This page describes how to install *aRST* 2.3.0 and the external programs it calls.
 
-## Prepare
-### Essential
-- [Python](https://www.python.org/) 3.11
-- [xtb](https://github.com/grimme-lab/xtb) 6.7.0 or later
-- [ORCA](https://www.faccts.de/orca/) 6.0.0 or later or [g-xtb](https://github.com/grimme-lab/g-xtb) 2.0.0 or **below** for single-point calculations
-- Modified sTDA (see below)
-### Optional (when calling DFT-AFO features)
-- [Multiwfn](http://sobereva.com/multiwfn/download.html) 3.8.noGUI
+**Contents**
 
-## Step 1: Pull the source code
+[TOC]
+
+---
+
+## Requirements
+
+### Python
+*aRST* 2.3.0 supports Python 3.9-3.12
+
+!!! warning "Python 3.13 is not supported yet"
+    *aRST* needs [molbar](https://gitlab.git.nrw/rwth-bannwarthlab/molbar) 1.1.x, that has no build for Python 3.13, yet version 1.2 changed its API.
+
+### External programs
+
+| Program | Need for |
+|---|---|
+| [xtb](https://github.com/grimme-lab/xtb) >=6.7.1 | GFN*n*-xTB optimisations and scans |
+| [g-xtb](https://github.com/grimme-lab/g-xtb) >=2.0.0, or [ORCA](https://www.faccts.de/orca/) >=6.0.0 | single-point calculations |
+| [Modified sTDA](https://gitlab.git.nrw/rwth-bannwarthlab/arst) | AFO features from molden files |
+| [FFiTS](https://gitlab.git.nrw/rwth-bannwarthlab/ffits) *(optional)* | force constants *k* for the mechanochemical analysis (`-m`) and force-field generation of TS guess |
+| [Multiwfn](http://sobereva.com/multiwfn/download.html) 3.8.noGUI *(optional)* | AFO features with the ORCA backend |
+| TeraChem *(optional)* | AFO features with the TeraChem backend |
+| [CREST](https://github.com/crest-lab/crest) *(optional)* | protonation / deprotonation tasks |
+
+---
+
+## Step 1: Pull the source code and install
+
 Clone the repository from Git:
-```angular2html
+```bash
 git clone https://git.rwth-aachen.de/bannwarthlab/aRST.git
+python3.12 -m venv arstenv          # or python3.11
+source arstenv/bin/activate
+pip install --upgrade pip
 cd aRST
+pip install -e .                    # installs aRST and the `aRST` command
 ```
+---
 
-## Step 2 (Recommended): Create a virtual environment
-```angular2html
-python -m venv venv
-source venv/bin/activate
-```
-
-## Step 3: Install the package
-```angular2html
-pip install -e .
-```
-You can check that the package is installed: `pip list | grep aRST`.
-
-## Step 4: Build modified sTDA
+## Step 2: Build modified sTDA
 *aRST* requires *sTDA* for reading Cartesian `MOLDEN` type file.
 A precompiled version of modified *sTDA* is provided in the repository root `stda-v1.0-intel-linux-x86_64.tar.gz`.
 Unpack the archive in your working directory:
@@ -39,40 +52,68 @@ tar -xzf stda-v1.0-intel-linux-x86_64.tar.gz
 ```
 This will extract the modified *sTDA* executable, which is required for AFO feature generation.
 
-## Step 5: Setting *Multiwfn*
+## Step 3: Set the binary paths
+
+The template `set_environment_variables.sh` is in the top-level `aRST/` folder.
+Replace every `path/to/...` placeholder in it with the real path on your machine:
+
+```bash
+# required
+export XTB_BIN="/path/to/xtb"              
+export GXTB_BIN="/path/to/gxtb"
+export STDA_BIN="/path/to/stda" 
+
+# If you need run DFT-level calculations using ORCA:
+export ORCA_BIN="/path/to/orca/orca"      
+export MWFN_BIN="/path/to/Multiwfn"      # reactivity.backend = "orca" 
+#
+# If you need run DFT-level calculations using TeraChem:
+export TC_BIN="/path/to/terachem"        # reactivity.backend = "tc" 
+
+# If you need to generate TS guess using FFiTS
+export FFITS_VENV="/path/to/ffits/ffitsenv"   # the separate FFiTS venv
+export FFITS_BIN="/path/to/ffits"        # alternative if you do not use a venv
+# FFiTS also calls xtb: keep xtb on PATH as well
+export PATH="$(dirname "$XTB_BIN"):$PATH"
+```
+
+---
+
+### Configure Multiwfn settings
+!!! Important "This setting only requied when you are generating AFO feature at DFT level."
 Since *sTDA* requires Cartesian basis functions but *ORCA* supports only spherical basis functions as output, the use of *Multiwfn* is necessary.
 To enable the conversion fuction in *Multiwfn*, you need to set `iloadasCart= 1` in its `settings.ini` setting file.
 
-## Step 6: Set up environment variables
-In the repository root, locate the file: `set_environment_variables.sh`.
-Edit this file and set the paths to the required external programs:
-```angular2html
-export XTB_BIN="/path/to/xtb"              # Semiempirical QM methods (GFNn-xTB)
-export STDA_BIN="/path/to/modified/stda"   # Modified sTDA executable
 
-# Single-point calculations
-export ORCA_BIN="/path/to/orca"            # ORCA
-export GXTB_BIN="/path/to/gxtb"            # g-xTB
+### FFiTS in its own virtual environment
+!!! Important "This setting only requied when you are generating TS guess using Force-field method or when you are running `-m` command in aRST"
+!!! danger "Do not install FFiTS into `arstenv`"
+    FFiTS pins its own versions of numpy and other Python packages, and these conflict with the
+    dependencies of *aRST* (`molbar` pins `networkx==3.1`, for example).
+    *aRST* never imports FFiTS: it only runs the `ffits` command as a subprocess,
+    so FFiTS can live in a **separate virtual environment**.
+```bash
+deactivate 2>/dev/null              # leave the aRST venv first
+git clone git@gitlab.git.nrw:rwth-bannwarthlab/ffits.git
+cd ffits
+python3.12 -m venv ffitsenv
+source ffitsenv/bin/activate
+make install-dev
+deactivate
 ```
-For parallel usage set the threads for OMP and the MKL linear algebra backend by
-```angular2html
-export OMP_NUM_THREADS=<ncores> MKL_NUM_THREADS=<ncores>
-```
-For larger systems please adjust the stack size accordingly, otherwise stack overflows will occur. 
-Use something along the lines of this:
-```angular2html
-ulimit -s unlimited
-export OMP_STACKSIZE=4G
-```
-After editing the file, activate the environment variables by
-```angular2html
+
+
+## Step 4: Check the installation
+
+```bash
 source set_environment_variables.sh
+source arstenv/bin/activate
+aRST -v                             # prints the banner and the configured binary paths
 ```
 
-## Step 7: Activate the aRST virtual environment
-After setting the environment variables, activate the aRST Python environment:
-```angular2html
-source venv/bin/activate
-```
+!!! tip "Running on a cluster"
+    `source` the environment script and activate `arstenv` inside the job script.
+    *aRST* takes its core count from `#SBATCH --ntasks` × `#SBATCH --cpus-per-task`
+    (a missing one counts as 1), or from `resources.cpu_budget` in the input file.
 
 **Enjoy working with aRST!**
