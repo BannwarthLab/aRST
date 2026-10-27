@@ -163,13 +163,15 @@
     margin-top: 0.4rem;
 }
 
-/* ---- Admonitions: note / important / danger ----
+/* ---- Admonitions: note / important / warning / danger ----
    Tinted card with an accent bar on the left, title in the accent colour */
 :root {
   --adm-note: #2563eb;
   --adm-note-bg: #eff5ff;
   --adm-important: #7c3aed;
   --adm-important-bg: #f5f0ff;
+  --adm-warning: #d97706;
+  --adm-warning-bg: #fffbeb;
   --adm-danger: #dc2626;
   --adm-danger-bg: #fef2f2;
   --md-admonition-icon--important: url('data:image/svg+xml;charset=utf-8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m23 12-2.44-2.78.34-3.68-3.61-.82-1.89-3.18L12 3 8.6 1.54 6.71 4.72l-3.61.81.34 3.68L1 12l2.44 2.78-.34 3.69 3.61.82 1.89 3.18L12 21l3.4 1.46 1.89-3.18 3.61-.82-.34-3.68L23 12m-10 5h-2v-2h2v2m0-4h-2V7h2v6z"/></svg>');
@@ -180,15 +182,18 @@
   --adm-note-bg: rgba(59, 130, 246, 0.12);
   --adm-important: #b794f6;
   --adm-important-bg: rgba(139, 92, 246, 0.14);
+  --adm-warning: #fbbf24;
+  --adm-warning-bg: rgba(245, 158, 11, 0.13);
   --adm-danger: #f87171;
   --adm-danger-bg: rgba(239, 68, 68, 0.13);
 }
 
 .md-typeset :is(.admonition, details).note      { --adm-c: var(--adm-note);      --adm-bg: var(--adm-note-bg); }
 .md-typeset :is(.admonition, details).important { --adm-c: var(--adm-important); --adm-bg: var(--adm-important-bg); }
+.md-typeset :is(.admonition, details).warning   { --adm-c: var(--adm-warning);   --adm-bg: var(--adm-warning-bg); }
 .md-typeset :is(.admonition, details).danger    { --adm-c: var(--adm-danger);    --adm-bg: var(--adm-danger-bg); }
 
-.md-typeset :is(.admonition, details):is(.note, .important, .danger) {
+.md-typeset :is(.admonition, details):is(.note, .important, .warning, .danger) {
   border: 1px solid color-mix(in srgb, var(--adm-c) 25%, transparent);
   border-left: 4px solid var(--adm-c);
   border-radius: 8px;
@@ -197,14 +202,14 @@
   font-size: 0.72rem;
 }
 
-.md-typeset :is(.admonition, details):is(.note, .important, .danger) > :is(.admonition-title, summary) {
+.md-typeset :is(.admonition, details):is(.note, .important, .warning, .danger) > :is(.admonition-title, summary) {
   background-color: transparent;
   border: none;
   color: var(--adm-c);
   font-weight: 700;
 }
 
-.md-typeset :is(.admonition, details):is(.note, .important, .danger) > :is(.admonition-title, summary)::before {
+.md-typeset :is(.admonition, details):is(.note, .important, .warning, .danger) > :is(.admonition-title, summary)::before {
   background-color: var(--adm-c);
 }
 
